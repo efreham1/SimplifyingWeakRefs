@@ -41,6 +41,20 @@
 #include "runtime/nonJavaThread.hpp"
 #include "utilities/globalDefinitions.hpp"
 
+#include <cstring>
+#include <limits>
+
+#include "cds/aotReferenceObjSupport.hpp"
+#include "cds/heapShared.hpp"
+#include "classfile/javaClasses.hpp"
+#include "classfile/symbolTable.hpp"
+#include "classfile/systemDictionary.hpp"
+#include "classfile/vmSymbols.hpp"
+#include "oops/oopHandle.inline.hpp"
+#include "runtime/fieldDescriptor.inline.hpp"
+#include "runtime/javaCalls.hpp"
+#include "utilities/hashTable.hpp"
+
 ReferencePolicy* ReferenceProcessor::_always_clear_soft_ref_policy = nullptr;
 ReferencePolicy* ReferenceProcessor::_default_soft_ref_policy      = nullptr;
 jlong            ReferenceProcessor::_soft_ref_timestamp_clock = 0;
@@ -222,6 +236,21 @@ ReferenceProcessorStats ReferenceProcessor::process_discovered_references(RefPro
   return stats;
 }
 
+void ReferenceProcessor::initialize_null_queue_handle() {
+  EXCEPTION_MARK;
+  TempNewSymbol class_name = SymbolTable::new_symbol("java/lang/ref/ReferenceQueue");
+  Klass* k = SystemDictionary::resolve_or_fail(class_name, true, CHECK);
+  InstanceKlass* ik = InstanceKlass::cast(k);
+  ik->initialize(CHECK);
+  fieldDescriptor fd;
+  bool found = ik->find_local_field(SymbolTable::new_symbol("NULL_QUEUE"),
+                                    vmSymbols::referencequeue_signature(), &fd);
+  assert(found && fd.is_static(), "ReferenceQueue.NULL_QUEUE missing");
+  oop null_q = ik->java_mirror()->obj_field(fd.offset());
+  _null_queue_handle = OopHandle(Universe::vm_global(), null_q);
+}
+  
+
 void BarrierEnqueueDiscoveredFieldClosure::enqueue(HeapWord* discovered_field_addr, oop value) {
   assert(Universe::heap()->is_in(discovered_field_addr), PTR_FORMAT " not in heap", p2i(discovered_field_addr));
   HeapAccess<AS_NO_KEEPALIVE>::oop_store(discovered_field_addr,
@@ -297,6 +326,11 @@ void DiscoveredListIterator::complete_enqueue() {
   }
 }
 
+bool DiscoveredListIterator::has_reference_queue() const {
+  oop ref_queue = _current_discovered->obj_field_access<AS_NO_KEEPALIVE>(java_lang_ref_Reference::queue_offset());
+  return ref_queue != _null_queue.resolve();
+}
+
 inline void log_preclean_ref(const DiscoveredListIterator& iter, const char* reason) {
   if (log_develop_is_enabled(Trace, gc, ref)) {
     ResourceMark rm;
@@ -329,7 +363,7 @@ size_t ReferenceProcessor::process_discovered_list_work(DiscoveredList&    refs_
                                                         OopClosure*        keep_alive,
                                                         EnqueueDiscoveredFieldClosure* enqueue,
                                                         bool               do_enqueue_and_clear) {
-  DiscoveredListIterator iter(refs_list, keep_alive, is_alive, enqueue);
+  DiscoveredListIterator iter(refs_list, keep_alive, is_alive, enqueue, _null_queue_handle);
   while (iter.has_next()) {
     iter.load_ptrs(DEBUG_ONLY(discovery_is_concurrent() /* allow_null_referent */));
     if (iter.referent() == nullptr) {
@@ -352,6 +386,12 @@ size_t ReferenceProcessor::process_discovered_list_work(DiscoveredList&    refs_
     } else {
       if (do_enqueue_and_clear) {
         iter.clear_referent();
+        if (!iter.has_reference_queue()) {
+          iter.remove();
+          iter.move_to_next();
+          log_enqueued_ref(iter, "cleared and dropped (no ReferenceQueue)");
+          continue;
+        }
         iter.enqueue();
         log_enqueued_ref(iter, "cleared");
       }
@@ -373,7 +413,7 @@ size_t ReferenceProcessor::process_discovered_list_work(DiscoveredList&    refs_
 size_t ReferenceProcessor::process_final_keep_alive_work(DiscoveredList& refs_list,
                                                          OopClosure*     keep_alive,
                                                          EnqueueDiscoveredFieldClosure* enqueue) {
-  DiscoveredListIterator iter(refs_list, keep_alive, nullptr, enqueue);
+  DiscoveredListIterator iter(refs_list, keep_alive, nullptr, enqueue, _null_queue_handle);
   while (iter.has_next()) {
     iter.load_ptrs(DEBUG_ONLY(false /* allow_null_referent */));
     // keep the referent and followers around
@@ -1079,7 +1119,7 @@ bool ReferenceProcessor::preclean_discovered_reflist(DiscoveredList&    refs_lis
                                                      BoolObjectClosure* is_alive,
                                                      EnqueueDiscoveredFieldClosure* enqueue,
                                                      YieldClosure*      yield) {
-  DiscoveredListIterator iter(refs_list, nullptr /* keep_alive */, is_alive, enqueue);
+  DiscoveredListIterator iter(refs_list, nullptr /* keep_alive */, is_alive, enqueue, _null_queue_handle);
   while (iter.has_next()) {
     if (yield->should_return_fine_grain()) {
       return true;
