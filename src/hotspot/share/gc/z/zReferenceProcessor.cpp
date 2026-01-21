@@ -38,6 +38,12 @@
 #include "runtime/atomicAccess.hpp"
 #include "runtime/mutexLocker.hpp"
 #include "runtime/os.hpp"
+#include "utilities/ticks.hpp"
+
+#include "classfile/symbolTable.hpp"
+#include "classfile/systemDictionary.hpp"
+#include "oops/oopHandle.inline.hpp"
+#include "runtime/fieldDescriptor.inline.hpp"
 
 static const ZStatSubPhase ZSubPhaseConcurrentReferencesProcess("Concurrent References Process", ZGenerationId::old);
 static const ZStatSubPhase ZSubPhaseConcurrentReferencesEnqueue("Concurrent References Enqueue", ZGenerationId::old);
@@ -294,8 +300,16 @@ void ZReferenceProcessor::process_worker_discovered_list(zaddress discovered_lis
     const ReferenceType type = reference_type(reference);
     const zaddress next = reference_discovered(reference);
     reference_set_discovered(reference, zaddress::null);
-
+    bool should_be_dropped = type == REF_WEAK && !has_reference_queue(reference);
     if (try_make_inactive(reference, type)) {
+      if (should_be_dropped) {
+        // WeakReference with null ReferenceQueue can be dropped
+        log_trace(gc, ref)("Dropped Reference: " PTR_FORMAT " (%s) - null ReferenceQueue",
+                           untype(reference), reference_type_name(type));
+        reference = next;
+        SuspendibleThreadSet::yield();
+        continue;
+      }
       // Keep reference
       log_trace(gc, ref)("Enqueued Reference: " PTR_FORMAT " (%s)", untype(reference), reference_type_name(type));
 
@@ -447,6 +461,8 @@ void ZReferenceProcessor::process_references() {
     log_info(gc, ref)("Clearing All SoftReferences");
   }
 
+  initialize_null_queue_handle();
+
   // Process discovered lists
   ZReferenceProcessorTask task(this);
   _workers->run(&task);
@@ -515,4 +531,24 @@ void ZReferenceProcessor::enqueue_references() {
   // Reset internal pending list
   _pending_list.set(zaddress::null);
   _pending_list_tail = zaddress::null;
+}
+
+inline bool ZReferenceProcessor::has_reference_queue(zaddress reference) {
+  oop ref_queue = to_oop(reference)->obj_field_access<AS_NO_KEEPALIVE>(java_lang_ref_Reference::queue_offset());
+  bool result = ref_queue != _null_queue_handle.resolve();
+  return result;
+}
+
+void ZReferenceProcessor::initialize_null_queue_handle() {
+  EXCEPTION_MARK;
+  TempNewSymbol class_name = SymbolTable::new_symbol("java/lang/ref/ReferenceQueue");
+  Klass* k = SystemDictionary::resolve_or_fail(class_name, true, CHECK);
+  InstanceKlass* ik = InstanceKlass::cast(k);
+  ik->initialize(CHECK);
+  fieldDescriptor fd;
+  bool found = ik->find_local_field(SymbolTable::new_symbol("NULL_QUEUE"),
+                                    vmSymbols::referencequeue_signature(), &fd);
+  assert(found && fd.is_static(), "ReferenceQueue.NULL_QUEUE missing");
+  oop null_q = ik->java_mirror()->obj_field(fd.offset());
+  _null_queue_handle = OopHandle(Universe::vm_global(), null_q);
 }

@@ -48,6 +48,7 @@ private:
   ZPerWorker<zaddress> _discovered_list;
   ZContended<zaddress> _pending_list;
   zaddress             _pending_list_tail;
+  OopHandle            _null_queue_handle;
 
   bool is_inactive(zaddress reference, oop referent, ReferenceType type) const;
   bool is_strongly_live(oop referent) const;
@@ -65,6 +66,10 @@ private:
   void collect_statistics();
 
   zaddress swap_pending_list(zaddress pending_list);
+
+  inline bool has_reference_queue(zaddress reference);
+
+  void initialize_null_queue_handle();
 
 public:
   ZReferenceProcessor(ZWorkers* workers);

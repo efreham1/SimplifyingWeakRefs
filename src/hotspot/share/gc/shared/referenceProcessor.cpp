@@ -41,19 +41,10 @@
 #include "runtime/nonJavaThread.hpp"
 #include "utilities/globalDefinitions.hpp"
 
-#include <cstring>
-#include <limits>
-
-#include "cds/aotReferenceObjSupport.hpp"
-#include "cds/heapShared.hpp"
-#include "classfile/javaClasses.hpp"
 #include "classfile/symbolTable.hpp"
 #include "classfile/systemDictionary.hpp"
-#include "classfile/vmSymbols.hpp"
 #include "oops/oopHandle.inline.hpp"
 #include "runtime/fieldDescriptor.inline.hpp"
-#include "runtime/javaCalls.hpp"
-#include "utilities/hashTable.hpp"
 
 ReferencePolicy* ReferenceProcessor::_always_clear_soft_ref_policy = nullptr;
 ReferencePolicy* ReferenceProcessor::_default_soft_ref_policy      = nullptr;
