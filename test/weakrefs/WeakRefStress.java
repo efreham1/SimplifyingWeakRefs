@@ -95,7 +95,7 @@ public final class WeakRefStress {
             totalAllocatedBytes += size;
             strongRefs.add(obj);
             if (usingWeakRefs) {
-                int numRefs = 2 + random.nextInt(3);
+                int numRefs = 10 + random.nextInt(3);
                 for (int i = 0; i < numRefs; i++) {
                     WeakReference<BigObject> weakRef = new WeakReference<>(obj);
                     weakRefs.add(weakRef);
@@ -109,7 +109,7 @@ public final class WeakRefStress {
             totalAllocatedBytes += size;
 
             if (usingWeakRefs) {
-                int numRefs = 2 + random.nextInt(3);
+                int numRefs = 10 + random.nextInt(3);
                 for (int i = 0; i < numRefs; i++) {
                     WeakReference<BigObject> weakRef = new WeakReference<>(obj);
                     weakRefs.add(weakRef);
@@ -137,6 +137,10 @@ public final class WeakRefStress {
                 double allocatedGb = totalAllocatedBytes / (1024.0 * 1024 * 1024);
                 System.out.printf("step=%d allocated=%.2fGB alive_weak=%d strong=%d%n",
                         iteration, allocatedGb, aliveWeak, strongRefs.size());
+            }
+
+            if (iteration % 1_000_000 == 0) {
+                System.gc();
             }
         }
         compactWeakRefs(weakRefs);
