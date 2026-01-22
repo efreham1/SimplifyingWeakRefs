@@ -33,6 +33,7 @@
 #include "gc/z/zTask.hpp"
 #include "gc/z/zTracer.inline.hpp"
 #include "gc/z/zValue.inline.hpp"
+#include "memory/allocation.hpp"
 #include "memory/universe.hpp"
 #include "oops/access.inline.hpp"
 #include "runtime/atomicAccess.hpp"
@@ -122,9 +123,14 @@ ZReferenceProcessor::ZReferenceProcessor(ZWorkers* workers)
     _encountered_count(),
     _discovered_count(),
     _enqueued_count(),
-    _discovered_list(zaddress::null),
+    _discovered_list(),
     _pending_list(zaddress::null),
-    _pending_list_tail(zaddress::null) {}
+    _pending_list_tail(zaddress::null) {
+  ZPerWorkerIterator<GrowableArray<zaddress>*> iter(&_discovered_list);
+  for (GrowableArray<zaddress>** list; iter.next(&list);) {
+    *list = new (mtGC) GrowableArray<zaddress>();
+  }
+}
 
 void ZReferenceProcessor::set_soft_reference_policy(bool clear_all_soft_references) {
   static AlwaysClearPolicy always_clear_policy;
@@ -259,9 +265,9 @@ void ZReferenceProcessor::discover(zaddress reference, ReferenceType type) {
   // Add reference to discovered list
   assert(ZHeap::heap()->is_old(reference), "Must be old");
   assert(is_null(reference_discovered(reference)), "Already discovered");
-  zaddress* const list = _discovered_list.addr();
-  reference_set_discovered(reference, *list);
-  *list = reference;
+  GrowableArray<zaddress>* const list = _discovered_list.get();
+  assert(list != nullptr, "Discovered list not initialized");
+  list->append(reference);
 }
 
 bool ZReferenceProcessor::discover_reference(oop reference_obj, ReferenceType type) {
@@ -288,13 +294,14 @@ bool ZReferenceProcessor::discover_reference(oop reference_obj, ReferenceType ty
   return true;
 }
 
-void ZReferenceProcessor::process_worker_discovered_list(zaddress discovered_list) {
+void ZReferenceProcessor::process_worker_discovered_list(GrowableArray<zaddress>* discovered_list) {
   zaddress keep_head = zaddress::null;
   zaddress keep_tail = zaddress::null;
 
   // Iterate over the discovered list and unlink them as we go, potentially
   // appending them to the keep list
-  for (zaddress reference = discovered_list; !is_null(reference); ) {
+  for (int i = 0; i < discovered_list->length(); i++) {
+    zaddress reference = discovered_list->at(i);
     assert(ZHeap::heap()->is_old(reference), "Must be old");
 
     const ReferenceType type = reference_type(reference);
@@ -326,6 +333,8 @@ void ZReferenceProcessor::process_worker_discovered_list(zaddress discovered_lis
     SuspendibleThreadSet::yield();
   }
 
+  discovered_list->clear();
+
   // Prepend discovered references to internal pending list
 
   // Anything kept on the list?
@@ -347,22 +356,26 @@ void ZReferenceProcessor::process_worker_discovered_list(zaddress discovered_lis
 void ZReferenceProcessor::work() {
   SuspendibleThreadSetJoiner sts_joiner;
 
-  ZPerWorkerIterator<zaddress> iter(&_discovered_list);
-  for (zaddress* start; iter.next(&start);) {
-    const zaddress discovered_list = AtomicAccess::xchg(start, zaddress::null);
+  ZPerWorkerIterator<GrowableArray<zaddress>*> iter(&_discovered_list);
+  for (GrowableArray<zaddress>** start; iter.next(&start);) {
+    GrowableArray<zaddress>* discovered_list = AtomicAccess::xchg(start, (GrowableArray<zaddress>*)nullptr);
 
-    if (discovered_list != zaddress::null) {
+    if (discovered_list != nullptr && discovered_list->length() > 0) {
       // Process discovered references
       process_worker_discovered_list(discovered_list);
     }
+
+    // Restore list pointer for future discoveries
+    AtomicAccess::store(start, discovered_list);
   }
 }
 
 void ZReferenceProcessor::verify_empty() const {
 #ifdef ASSERT
-  ZPerWorkerConstIterator<zaddress> iter(&_discovered_list);
-  for (const zaddress* list; iter.next(&list);) {
-    assert(is_null(*list), "Discovered list not empty");
+  ZPerWorkerConstIterator<GrowableArray<zaddress>*> iter(&_discovered_list);
+  for (GrowableArray<zaddress>* const* list; iter.next(&list);) {
+    assert(*list != nullptr, "Discovered list not initialized");
+    assert((*list)->length() == 0, "Discovered list not empty");
   }
 
   assert(is_null(_pending_list.get()), "Pending list not empty");
@@ -462,7 +475,7 @@ void ZReferenceProcessor::process_references() {
   }
 
   initialize_null_queue_handle();
-
+  
   // Process discovered lists
   ZReferenceProcessorTask task(this);
   _workers->run(&task);

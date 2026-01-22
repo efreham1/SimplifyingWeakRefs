@@ -27,6 +27,7 @@
 #include "gc/shared/referenceDiscoverer.hpp"
 #include "gc/z/zAddress.hpp"
 #include "gc/z/zValue.hpp"
+#include "utilities/growableArray.hpp"
 
 class ConcurrentGCTimer;
 class ReferencePolicy;
@@ -45,7 +46,7 @@ private:
   ZPerWorker<Counters> _encountered_count;
   ZPerWorker<Counters> _discovered_count;
   ZPerWorker<Counters> _enqueued_count;
-  ZPerWorker<zaddress> _discovered_list;
+  ZPerWorker<GrowableArray<zaddress>*> _discovered_list;
   ZContended<zaddress> _pending_list;
   zaddress             _pending_list_tail;
   OopHandle            _null_queue_handle;
@@ -61,7 +62,7 @@ private:
 
   void verify_empty() const;
 
-  void process_worker_discovered_list(zaddress discovered_list);
+  void process_worker_discovered_list(GrowableArray<zaddress>* discovered_list);
   void work();
   void collect_statistics();
 
