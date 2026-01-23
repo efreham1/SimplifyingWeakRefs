@@ -162,6 +162,7 @@ public:
 
   // Reference processor / weak cleaning barriers
   static bool clean_barrier_on_weak_oop_field(volatile zpointer* p);
+  static bool clean_barrier_on_weak_oop_field(volatile zpointer* p, const zpointer o);
   static bool clean_barrier_on_phantom_oop_field(volatile zpointer* p);
   static bool clean_barrier_on_final_oop_field(volatile zpointer* p);
 

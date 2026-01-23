@@ -107,10 +107,14 @@ public final class WeakRefGcBenchmark {
         if (holdMillis > 0) {
             Thread.sleep(holdMillis);
         }
+        for (int i = 0; i < 3; i++) {
+            System.gc();
+        }
         strongRefs.clear();
         if (weakRefPadding != null) {
             weakRefPadding.clear();
         }
+        System.out.println("Cleared strong references and padding arrays");
         long gcStart = System.nanoTime();
         System.gc();
         long gcDuration = System.nanoTime() - gcStart;

@@ -28,10 +28,19 @@
 #include "gc/z/zAddress.hpp"
 #include "gc/z/zValue.hpp"
 #include "utilities/growableArray.hpp"
+#include <stdint.h>
 
 class ConcurrentGCTimer;
 class ReferencePolicy;
 class ZWorkers;
+
+struct ZReferenceAndReferent {
+  zaddress reference;
+  zpointer referent;
+};
+
+
+
 
 class ZReferenceProcessor : public ReferenceDiscoverer {
   friend class ZReferenceProcessorTask;
@@ -46,10 +55,15 @@ private:
   ZPerWorker<Counters> _encountered_count;
   ZPerWorker<Counters> _discovered_count;
   ZPerWorker<Counters> _enqueued_count;
-  ZPerWorker<GrowableArray<zaddress>*> _discovered_list;
+  ZPerWorker<zaddress> _discovered_list;
   ZContended<zaddress> _pending_list;
   zaddress             _pending_list_tail;
+  ZPerWorker<GrowableArray<ZReferenceAndReferent>> _discovered_weak_refs_without_queue;
+  ZPerWorker<bool>     _array_empty;
   OopHandle            _null_queue_handle;
+
+  ZPerWorker<uint64_t> _discover_time_ns;
+  ZPerWorker<uint64_t> _process_time_ns;
 
   bool is_inactive(zaddress reference, oop referent, ReferenceType type) const;
   bool is_strongly_live(oop referent) const;
@@ -62,7 +76,9 @@ private:
 
   void verify_empty() const;
 
-  void process_worker_discovered_list(GrowableArray<zaddress>* discovered_list);
+  void process_worker_discovered_list(zaddress discovered_list);
+  void process_worker_discovered_weak_refs_without_queue(GrowableArray<ZReferenceAndReferent>& weak_refs_without_queue);
+  void log_reference_timing_totals() const;
   void work();
   void collect_statistics();
 
@@ -72,19 +88,23 @@ private:
 
   void initialize_null_queue_handle();
 
-public:
+  public:
   ZReferenceProcessor(ZWorkers* workers);
-
+  
   void set_soft_reference_policy(bool clear_all_soft_references);
   bool uses_clear_all_soft_reference_policy() const;
-
+  
   void reset_statistics();
-
+  
   virtual bool discover_reference(oop reference, ReferenceType type);
   void process_references();
   void enqueue_references();
-
+  
   void verify_pending_references();
+  
+  void prepare() {
+    initialize_null_queue_handle();
+  }
 };
 
 #endif // SHARE_GC_Z_ZREFERENCEPROCESSOR_HPP
