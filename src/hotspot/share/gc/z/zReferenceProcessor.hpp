@@ -72,6 +72,8 @@ private:
   bool should_discover(zaddress reference, ReferenceType type) const;
   bool try_make_inactive(zaddress reference, ReferenceType type) const;
 
+  void discover(zaddress reference, ReferenceType type);
+  
   void verify_empty() const;
 
   void process_worker_discovered_list(zaddress discovered_list);
@@ -95,7 +97,6 @@ private:
   void reset_statistics();
   
   virtual bool discover_reference(oop reference, ReferenceType type);
-  void discover(zaddress reference, ReferenceType type); // Exposed for testing
   void process_references();
   void enqueue_references();
   
