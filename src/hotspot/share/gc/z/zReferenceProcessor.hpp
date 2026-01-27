@@ -26,18 +26,13 @@
 
 #include "gc/shared/referenceDiscoverer.hpp"
 #include "gc/z/zAddress.hpp"
+#include "gc/z/zAddressArray.hpp"
 #include "gc/z/zValue.hpp"
-#include "utilities/growableArray.hpp"
 #include <stdint.h>
 
 class ConcurrentGCTimer;
 class ReferencePolicy;
 class ZWorkers;
-
-struct ZReferenceAndReferent {
-  zaddress reference;
-  zpointer referent;
-};
 
 
 
@@ -58,7 +53,7 @@ private:
   ZPerWorker<zaddress> _discovered_list;
   ZContended<zaddress> _pending_list;
   zaddress             _pending_list_tail;
-  ZPerWorker<GrowableArray<ZReferenceAndReferent>> _discovered_weak_refs_without_queue;
+  ZPerWorker<ZAddressArray> _discovered_weak_refs_without_queue;
   ZPerWorker<bool>     _array_empty;
   OopHandle            _null_queue_handle;
 
@@ -69,15 +64,15 @@ private:
   bool is_strongly_live(oop referent) const;
   bool is_softly_live(zaddress reference, ReferenceType type) const;
 
-  bool should_discover(zaddress reference, ReferenceType type) const;
+  bool should_discover(zaddress reference, ReferenceType type, oop referent) const;
   bool try_make_inactive(zaddress reference, ReferenceType type) const;
 
-  void discover(zaddress reference, ReferenceType type);
+  void discover(zaddress reference, ReferenceType type, zaddress referent);
   
   void verify_empty() const;
 
   void process_worker_discovered_list(zaddress discovered_list);
-  void process_worker_discovered_weak_refs_without_queue(GrowableArray<ZReferenceAndReferent>& weak_refs_without_queue);
+  void process_worker_discovered_weak_refs_without_queue(ZAddressArray& weak_refs_without_queue);
   void log_reference_timing_totals() const;
   void work();
   void collect_statistics();

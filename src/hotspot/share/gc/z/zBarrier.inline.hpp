@@ -560,14 +560,6 @@ inline bool ZBarrier::clean_barrier_on_weak_oop_field(volatile zpointer* p) {
   return is_null(barrier(is_mark_good_fast_path, slow_path, color_mark_good, p, o, true /* allow_null */));
 }
 
-inline bool ZBarrier::clean_barrier_on_weak_oop_field(volatile zpointer* p, const zpointer o) {
-  assert(ZResurrection::is_blocked(), "This operation is only valid when resurrection is blocked");
-  auto slow_path = [=](zaddress addr) -> zaddress {
-    return ZBarrier::blocking_load_barrier_on_weak_slow_path(p, addr);
-  };
-  return is_null(barrier(is_mark_good_fast_path, slow_path, color_mark_good, p, o, true /* allow_null */));
-}
-
 inline bool ZBarrier::clean_barrier_on_phantom_oop_field(volatile zpointer* p) {
   assert(ZResurrection::is_blocked(), "This operation is only valid when resurrection is blocked");
   const zpointer o = load_atomic(p);

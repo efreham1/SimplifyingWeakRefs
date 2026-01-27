@@ -47,7 +47,7 @@
 #include "oops/oopHandle.inline.hpp"
 #include "runtime/fieldDescriptor.inline.hpp"
 
-static constexpr bool UseGrowableArrayDiscoveredList = true;
+static constexpr bool UseGrowableArrayDiscoveredList = false;
 static constexpr bool TraceReferenceTiming = false;
 
 static const ZStatSubPhase ZSubPhaseConcurrentReferencesProcess("Concurrent References Process", ZGenerationId::old);
@@ -77,12 +77,16 @@ static const char* reference_type_name(ReferenceType type) {
   }
 }
 
-static volatile zpointer* reference_referent_addr(zaddress reference) {
-  return (volatile zpointer*)java_lang_ref_Reference::referent_addr_raw(to_oop(reference));
+static zpointer* reference_referent_addr(zaddress reference) {
+  return (zpointer*)java_lang_ref_Reference::referent_addr_raw(to_oop(reference));
 }
 
 static zpointer reference_referent(zaddress reference) {
   return ZBarrier::load_atomic(reference_referent_addr(reference));
+}
+
+static zaddress* reference_discovered_addr(zaddress reference) {
+  return (zaddress*)java_lang_ref_Reference::discovered_addr_raw(to_oop(reference));
 }
 
 static zaddress reference_discovered(zaddress reference) {
@@ -105,6 +109,14 @@ static void soft_reference_update_clock() {
   SuspendibleThreadSetJoiner sts_joiner;
   const jlong now = os::javaTimeNanos() / NANOSECS_PER_MILLISEC;
   java_lang_ref_SoftReference::set_clock(now);
+}
+
+inline bool is_strongly_reachable_fast(zpointer referent) {
+  return ZPointer::is_mark_good(referent);
+}
+
+inline bool is_strongly_reachable(zaddress referent_addr) {
+  return !ZHeap::heap()->is_old(referent_addr) && ZHeap::heap()->is_object_strongly_live(referent_addr);
 }
 
 static void list_append(zaddress& head, zaddress& tail, zaddress reference) {
@@ -192,10 +204,7 @@ bool ZReferenceProcessor::is_softly_live(zaddress reference, ReferenceType type)
   return !_soft_reference_policy->should_clear_reference(to_oop(reference), clock);
 }
 
-bool ZReferenceProcessor::should_discover(zaddress reference, ReferenceType type) const {
-  volatile zpointer* const referent_addr = reference_referent_addr(reference);
-  const oop referent = to_oop(ZBarrier::load_barrier_on_oop_field(referent_addr));
-
+bool ZReferenceProcessor::should_discover(zaddress reference, ReferenceType type, oop referent) const {
   if (is_inactive(reference, referent, type)) {
     return false;
   }
@@ -256,7 +265,7 @@ bool ZReferenceProcessor::try_make_inactive(zaddress reference, ReferenceType ty
   return false;
 }
 
-void ZReferenceProcessor::discover(zaddress reference, ReferenceType type) {
+void ZReferenceProcessor::discover(zaddress reference, ReferenceType type, zaddress referent) {
   const bool log_timing = TraceReferenceTiming;
   Ticks start;
   if (log_timing) {
@@ -273,12 +282,14 @@ void ZReferenceProcessor::discover(zaddress reference, ReferenceType type) {
 
   
   if (UseGrowableArrayDiscoveredList && type == REF_WEAK && !has_reference_queue(reference)) {
-    const zpointer referent_ptr = reference_referent(reference);
+    zpointer* const referent_addr = reference_referent_addr(reference);
+    zaddress* const discovered_addr = reference_discovered_addr(reference);
 
     // WeakReference with null ReferenceQueue - remember for special processing
-    GrowableArray<ZReferenceAndReferent>& weak_refs_without_queue = _discovered_weak_refs_without_queue.get();
-    ZReferenceAndReferent entry = { reference, referent_ptr };
-    weak_refs_without_queue.append(entry);
+    ZAddressArray& weak_refs_without_queue = _discovered_weak_refs_without_queue.get();
+    weak_refs_without_queue.append(referent_addr,
+                                   discovered_addr,
+                                   referent);
     _array_empty.set(false);
     reference_set_discovered(reference, reference); // mark as discovered
   } else {
@@ -316,12 +327,16 @@ bool ZReferenceProcessor::discover_reference(oop reference_obj, ReferenceType ty
   // Update statistics
   _encountered_count.get()[type]++;
 
-  if (!should_discover(reference, type)) {
+  volatile zpointer* const referent_addr = reference_referent_addr(reference);
+  const zaddress ref_raw_addr = ZBarrier::load_barrier_on_oop_field(referent_addr);
+  const oop referent = to_oop(ref_raw_addr);
+
+  if (!should_discover(reference, type, referent)) {
     // Not discovered
     return false;
   }
 
-  discover(reference, type);
+  discover(reference, type, ref_raw_addr);
 
   // Discovered
   return true;
@@ -375,28 +390,34 @@ void ZReferenceProcessor::process_worker_discovered_list(zaddress discovered_lis
   }
 }
 
-void ZReferenceProcessor::process_worker_discovered_weak_refs_without_queue(GrowableArray<ZReferenceAndReferent>& weak_refs_without_queue) {
-  if (weak_refs_without_queue.length() == 0) {
-    return;
-  }
-
+void ZReferenceProcessor::process_worker_discovered_weak_refs_without_queue(ZAddressArray& weak_refs_without_queue) {
+  size_t dropped = 0;
   for (int i = 0; i < weak_refs_without_queue.length(); i++) {
-    const ZReferenceAndReferent entry = weak_refs_without_queue.at(i);
-    const zaddress reference = entry.reference;
-    volatile zpointer* referent_addr = reference_referent_addr(reference);
-    const zpointer referent = entry.referent;
-    reference_set_discovered(reference, zaddress::null);
+    volatile zpointer* referent_field_addr = weak_refs_without_queue.referent_field_addr_at(i);
+    volatile zaddress* discovered_field_addr = weak_refs_without_queue.discovered_field_addr_at(i);
+    const zaddress referent_addr = weak_refs_without_queue.referent_addr_at(i);
+    
+    if (referent_field_addr == nullptr || discovered_field_addr == nullptr) {
+      continue; // Skip invalid entries
+    }
+    
+    const zpointer referent = ZBarrier::load_atomic(referent_field_addr);
 
-    if (ZBarrier::clean_barrier_on_weak_oop_field(referent_addr, referent)) {
-      log_trace(gc, ref)("Dropped and Cleared Reference: " PTR_FORMAT " -> referent " PTR_FORMAT " (Weak) - null ReferenceQueue",
-                         untype(reference), untype(referent));
-    } else {
+    if (is_strongly_reachable_fast(referent) || is_strongly_reachable(referent_addr)) {
       log_trace(gc, ref)("Dropped Reference: " PTR_FORMAT " -> referent " PTR_FORMAT " (Weak) - null ReferenceQueue (referent still live)",
-                         untype(reference), untype(referent));
+                         p2i(discovered_field_addr), untype(referent));
+      dropped++;
+      *discovered_field_addr = zaddress::null; // Mark as dropped
+    }
+    else {
+      log_trace(gc, ref)("Cleared and Dropped Reference: " PTR_FORMAT " -> referent " PTR_FORMAT " (Weak) - null ReferenceQueue (referent not live)",
+                         p2i(discovered_field_addr), untype(referent));
+      // Clear the referent field 
+      *referent_field_addr = zpointer::null;
     }
     SuspendibleThreadSet::yield();
   }
-  weak_refs_without_queue.clear_and_deallocate();
+  weak_refs_without_queue.clear_and_reserve(dropped);
 }
 
 void ZReferenceProcessor::log_reference_timing_totals() const {
@@ -435,11 +456,11 @@ void ZReferenceProcessor::work() {
   SuspendibleThreadSetJoiner sts_joiner;
 
   ZPerWorkerIterator<zaddress> iter(&_discovered_list);
-  ZPerWorkerIterator<GrowableArray<ZReferenceAndReferent>> iter_weak_refs(&_discovered_weak_refs_without_queue);
+  ZPerWorkerIterator<ZAddressArray> iter_weak_refs(&_discovered_weak_refs_without_queue);
   ZPerWorkerIterator<bool> iter_array_empty(&_array_empty);
 
   zaddress* list_addr = nullptr;
-  GrowableArray<ZReferenceAndReferent>* array_addr = nullptr;
+  ZAddressArray* array_addr = nullptr;
   bool* array_empty = nullptr;
 
   for (; iter.next(&list_addr) && iter_weak_refs.next(&array_addr) && iter_array_empty.next(&array_empty);) {
@@ -469,9 +490,9 @@ void ZReferenceProcessor::verify_empty() const {
     assert(is_null(*head), "Discovered list not empty");
   }
 
-  ZPerWorkerConstIterator<GrowableArray<ZReferenceAndReferent>> iter_weak(&_discovered_weak_refs_without_queue);
-  for (GrowableArray<ZReferenceAndReferent>* const list; iter_weak.next(&list);) {
-    assert((*list).length() == 0, "Weak refs without queue list not empty");
+  ZPerWorkerConstIterator<ZWeakRefsWithoutQueue> iter_weak(&_discovered_weak_refs_without_queue);
+  for (const ZWeakRefsWithoutQueue* list; iter_weak.next(&list);) {
+    assert(list->length() == 0, "Weak refs without queue list not empty");
   }
 
   assert(is_null(_pending_list.get()), "Pending list not empty");
