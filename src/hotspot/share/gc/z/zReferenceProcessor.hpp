@@ -57,9 +57,6 @@ private:
   ZPerWorker<bool>     _array_empty;
   OopHandle            _null_queue_handle;
 
-  ZPerWorker<uint64_t> _discover_time_ns;
-  ZPerWorker<uint64_t> _process_time_ns;
-
   bool is_inactive(zaddress reference, oop referent, ReferenceType type) const;
   bool is_strongly_live(oop referent) const;
   bool is_softly_live(zaddress reference, ReferenceType type) const;
@@ -73,7 +70,6 @@ private:
 
   void process_worker_discovered_list(zaddress discovered_list);
   void process_worker_discovered_weak_refs_without_queue(ZAddressArray& weak_refs_without_queue);
-  void log_reference_timing_totals() const;
   void work();
   void collect_statistics();
 

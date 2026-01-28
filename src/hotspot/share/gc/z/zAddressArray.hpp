@@ -29,49 +29,46 @@
 #include "utilities/debug.hpp"
 #include <string.h>
 
+struct ZWeakRefData {
+  zpointer* referent_field_addr;
+  zaddress* discovered_field_addr;
+  zaddress referent_addr;
+  zpointer referent_field_value;
+};
+
 // High-performance growable array specifically for storing discovered weak references.
-// Uses struct-of-arrays (SoA) layout for better cache locality and SIMD potential.
-// Stores three parallel arrays:
-// - referent_field_addrs: pointers to zpointer fields (the referent fields in Reference objects)
-// - discovered_field_addrs: pointers to zaddress fields (the discovered fields in Reference objects)
-// - referent_addrs: zaddress values of the referent objects
+// Uses array-of-structs (AoS) layout for better cache locality when processing sequentially.
+// Each element is a ZWeakRefData struct containing:
+// - referent_field_addr: pointer to zpointer field (the referent field in Reference object)
+// - discovered_field_addr: pointer to zaddress field (the discovered field in Reference object)
+// - referent_addr: zaddress value of the referent object
 //
 // Performance optimizations:
 // - Uses memcpy for bulk copying instead of element-by-element loops
 // - Does not zero newly allocated memory (caller responsible for initialization)
 // - Single clear_and_reserve operation to avoid separate clear/reserve calls
-// - Struct-of-arrays layout improves cache efficiency during sequential access
+// - Array-of-structs layout improves cache efficiency for sequential processing
 class ZAddressArray : public AnyObj {
 private:
-  zpointer** _referent_field_addrs;
-  zaddress** _discovered_field_addrs;
-  zaddress* _referent_addrs;
-  int       _length;
-  int       _capacity;
+  ZWeakRefData* _data;
+  int           _length;
+  int           _capacity;
 
   void expand_to(int new_capacity) {
     assert(new_capacity > _capacity, "expected growth but %d <= %d", new_capacity, _capacity);
     
-    zpointer** new_referent_field_addrs = (zpointer**)AllocateHeap(new_capacity * sizeof(zpointer*), mtGC);
-    zaddress** new_discovered_field_addrs = (zaddress**)AllocateHeap(new_capacity * sizeof(zaddress*), mtGC);
-    zaddress* new_referent_addrs = (zaddress*)AllocateHeap(new_capacity * sizeof(zaddress), mtGC);
+    ZWeakRefData* new_data = (ZWeakRefData*)AllocateHeap(new_capacity * sizeof(ZWeakRefData), mtGC);
     
     if (_length > 0) {
       // Use memcpy for trivially copyable types - much faster than element-by-element copy
-      memcpy(new_referent_field_addrs, _referent_field_addrs, _length * sizeof(zpointer*));
-      memcpy(new_discovered_field_addrs, _discovered_field_addrs, _length * sizeof(zaddress*));
-      memcpy(new_referent_addrs, _referent_addrs, _length * sizeof(zaddress));
+      memcpy(new_data, _data, _length * sizeof(ZWeakRefData));
     }
     
-    if (_referent_field_addrs != nullptr) {
-      FreeHeap(_referent_field_addrs);
-      FreeHeap(_discovered_field_addrs);
-      FreeHeap(_referent_addrs);
+    if (_data != nullptr) {
+      FreeHeap(_data);
     }
     
-    _referent_field_addrs = new_referent_field_addrs;
-    _discovered_field_addrs = new_discovered_field_addrs;
-    _referent_addrs = new_referent_addrs;
+    _data = new_data;
     _capacity = new_capacity;
   }
 
@@ -81,46 +78,49 @@ private:
   } 
 
 public:
-  ZAddressArray() : _referent_field_addrs(nullptr), _discovered_field_addrs(nullptr), _referent_addrs(nullptr), _length(0), _capacity(0) {}
+  ZAddressArray() : _data(nullptr), _length(0), _capacity(0) {}
 
   ~ZAddressArray() {
-    if (_referent_field_addrs != nullptr) {
-      FreeHeap(_referent_field_addrs);
-      FreeHeap(_discovered_field_addrs);
-      FreeHeap(_referent_addrs);
-      _referent_field_addrs = nullptr;
-      _discovered_field_addrs = nullptr;
-      _referent_addrs = nullptr;
+    if (_data != nullptr) {
+      FreeHeap(_data);
+      _data = nullptr;
     }
   }
 
   // Append a new entry
-  void append(zpointer* referent_field_addr, zaddress* discovered_field_addr, zaddress referent_addr) {
+  void append(zpointer* referent_field_addr, zaddress* discovered_field_addr, zaddress referent_addr, zpointer referent_field_value) {
     if (_length >= _capacity) {
       grow(_length + 1);
     }
-    _referent_field_addrs[_length] = referent_field_addr;
-    _discovered_field_addrs[_length] = discovered_field_addr;
-    _referent_addrs[_length] = referent_addr;
+    _data[_length].referent_field_addr = referent_field_addr;
+    _data[_length].discovered_field_addr = discovered_field_addr;
+    _data[_length].referent_addr = referent_addr;
+    _data[_length].referent_field_value = referent_field_value;
     _length++;
+  }
+
+  // Get entry at index
+  const ZWeakRefData& at(int index) const {
+    assert(index >= 0 && index < _length, "index out of bounds: %d (length: %d)", index, _length);
+    return _data[index];
   }
 
   // Get referent field address at index
   zpointer* referent_field_addr_at(int index) const {
     assert(index >= 0 && index < _length, "index out of bounds: %d (length: %d)", index, _length);
-    return _referent_field_addrs[index];
+    return _data[index].referent_field_addr;
   }
 
   // Get discovered field address at index
   zaddress* discovered_field_addr_at(int index) const {
     assert(index >= 0 && index < _length, "index out of bounds: %d (length: %d)", index, _length);
-    return _discovered_field_addrs[index];
+    return _data[index].discovered_field_addr;
   }
 
   // Get referent address at index
   zaddress referent_addr_at(int index) const {
     assert(index >= 0 && index < _length, "index out of bounds: %d (length: %d)", index, _length);
-    return _referent_addrs[index];
+    return _data[index].referent_addr;
   }
 
   // Current length
@@ -135,15 +135,11 @@ public:
 
   void clear_and_reserve(int new_capacity) {
     _length = 0;
-    if (_referent_field_addrs != nullptr) {
-        FreeHeap(_referent_field_addrs);
-        FreeHeap(_discovered_field_addrs);
-        FreeHeap(_referent_addrs);
+    if (_data != nullptr) {
+      FreeHeap(_data);
     }
     _capacity = MAX2(8, next_power_of_2(new_capacity - 1));
-    _referent_field_addrs = (zpointer**)AllocateHeap(_capacity * sizeof(zpointer*), mtGC);
-    _discovered_field_addrs = (zaddress**)AllocateHeap(_capacity * sizeof(zaddress*), mtGC);
-    _referent_addrs = (zaddress*)AllocateHeap(_capacity * sizeof(zaddress), mtGC);
+    _data = (ZWeakRefData*)AllocateHeap(_capacity * sizeof(ZWeakRefData), mtGC);
   }
 
   // Clear without deallocating

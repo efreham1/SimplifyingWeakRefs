@@ -41,14 +41,14 @@
 #include "runtime/mutexLocker.hpp"
 #include "runtime/os.hpp"
 #include "utilities/ticks.hpp"
+#include "zPage.inline.hpp"
 
 #include "classfile/symbolTable.hpp"
 #include "classfile/systemDictionary.hpp"
 #include "oops/oopHandle.inline.hpp"
 #include "runtime/fieldDescriptor.inline.hpp"
 
-static constexpr bool UseGrowableArrayDiscoveredList = false;
-static constexpr bool TraceReferenceTiming = false;
+static constexpr bool UseGrowableArrayDiscoveredList = true;
 
 static const ZStatSubPhase ZSubPhaseConcurrentReferencesProcess("Concurrent References Process", ZGenerationId::old);
 static const ZStatSubPhase ZSubPhaseConcurrentReferencesEnqueue("Concurrent References Enqueue", ZGenerationId::old);
@@ -111,14 +111,6 @@ static void soft_reference_update_clock() {
   java_lang_ref_SoftReference::set_clock(now);
 }
 
-inline bool is_strongly_reachable_fast(zpointer referent) {
-  return ZPointer::is_mark_good(referent);
-}
-
-inline bool is_strongly_reachable(zaddress referent_addr) {
-  return !ZHeap::heap()->is_old(referent_addr) && ZHeap::heap()->is_object_strongly_live(referent_addr);
-}
-
 static void list_append(zaddress& head, zaddress& tail, zaddress reference) {
   if (is_null(head)) {
     // First append - set up the head
@@ -144,12 +136,8 @@ ZReferenceProcessor::ZReferenceProcessor(ZWorkers* workers)
     _pending_list_tail(zaddress::null),
     _discovered_weak_refs_without_queue(),
     _array_empty(),
-    _null_queue_handle(),
-    _discover_time_ns(),
-    _process_time_ns() {
+    _null_queue_handle() {
   _array_empty.set_all(true);
-  _discover_time_ns.set_all(0);
-  _process_time_ns.set_all(0);
 }
 
 void ZReferenceProcessor::set_soft_reference_policy(bool clear_all_soft_references) {
@@ -266,12 +254,6 @@ bool ZReferenceProcessor::try_make_inactive(zaddress reference, ReferenceType ty
 }
 
 void ZReferenceProcessor::discover(zaddress reference, ReferenceType type, zaddress referent) {
-  const bool log_timing = TraceReferenceTiming;
-  Ticks start;
-  if (log_timing) {
-    start = Ticks::now();
-  }
-
   log_trace(gc, ref)("Discovered Reference: " PTR_FORMAT " (%s)", untype(reference), reference_type_name(type));
 
   // Update statistics
@@ -284,12 +266,14 @@ void ZReferenceProcessor::discover(zaddress reference, ReferenceType type, zaddr
   if (UseGrowableArrayDiscoveredList && type == REF_WEAK && !has_reference_queue(reference)) {
     zpointer* const referent_addr = reference_referent_addr(reference);
     zaddress* const discovered_addr = reference_discovered_addr(reference);
+    const zpointer referent_value = *referent_addr;
 
     // WeakReference with null ReferenceQueue - remember for special processing
     ZAddressArray& weak_refs_without_queue = _discovered_weak_refs_without_queue.get();
     weak_refs_without_queue.append(referent_addr,
                                    discovered_addr,
-                                   referent);
+                                   referent,
+                                   referent_value);
     _array_empty.set(false);
     reference_set_discovered(reference, reference); // mark as discovered
   } else {
@@ -305,12 +289,6 @@ void ZReferenceProcessor::discover(zaddress reference, ReferenceType type, zaddr
     zaddress* const head = _discovered_list.addr();
     reference_set_discovered(reference, *head);
     *head = reference;
-  }
-
-  if (log_timing) {
-    const uint64_t elapsed = (Ticks::now() - start).nanoseconds();
-    uint64_t& total = _discover_time_ns.get();
-    total += elapsed;
   }
 }
 
@@ -393,66 +371,36 @@ void ZReferenceProcessor::process_worker_discovered_list(zaddress discovered_lis
 void ZReferenceProcessor::process_worker_discovered_weak_refs_without_queue(ZAddressArray& weak_refs_without_queue) {
   size_t dropped = 0;
   for (int i = 0; i < weak_refs_without_queue.length(); i++) {
-    volatile zpointer* referent_field_addr = weak_refs_without_queue.referent_field_addr_at(i);
-    volatile zaddress* discovered_field_addr = weak_refs_without_queue.discovered_field_addr_at(i);
-    const zaddress referent_addr = weak_refs_without_queue.referent_addr_at(i);
-    
-    if (referent_field_addr == nullptr || discovered_field_addr == nullptr) {
-      continue; // Skip invalid entries
-    }
-    
-    const zpointer referent = ZBarrier::load_atomic(referent_field_addr);
+    const ZWeakRefData& data = weak_refs_without_queue.at(i);
+    const zaddress referent_addr = data.referent_addr;
+    const zpointer referent_ptr = data.referent_field_value;
 
-    if (is_strongly_reachable_fast(referent) || is_strongly_reachable(referent_addr)) {
-      log_trace(gc, ref)("Dropped Reference: " PTR_FORMAT " -> referent " PTR_FORMAT " (Weak) - null ReferenceQueue (referent still live)",
-                         p2i(discovered_field_addr), untype(referent));
+    ZPage* const page = ZHeap::heap()->page(referent_addr);
+
+    if (ZPointer::is_mark_good(referent_ptr)) {
+      log_trace(gc, ref)("Dropped Weak Reference without Queue");
       dropped++;
-      *discovered_field_addr = zaddress::null; // Mark as dropped
+      *data.discovered_field_addr = zaddress::null; // Mark as dropped
     }
-    else {
-      log_trace(gc, ref)("Cleared and Dropped Reference: " PTR_FORMAT " -> referent " PTR_FORMAT " (Weak) - null ReferenceQueue (referent not live)",
-                         p2i(discovered_field_addr), untype(referent));
-      // Clear the referent field 
-      *referent_field_addr = zpointer::null;
+    else if (!page->is_object_strongly_live(referent_addr) && page->is_old()) {
+      log_trace(gc, ref)("\"Enqueued\" Weak Reference without Queue");
+      *data.referent_field_addr = color_null();
+    } else {
+      log_trace(gc, ref)("Dropped Weak Reference without Queue");
+      dropped++;
+      *data.discovered_field_addr = zaddress::null; // Mark as dropped
+      *data.referent_field_addr = ZAddress::color(referent_addr, ZPointerLoadGoodMask | ZPointerMarkedYoung | ZPointerMarkedOld | ZPointerRememberedMask);
+      if (page->is_young() && ZGeneration::young()->is_phase_mark()) {
+        ZBarrier::mark_young<ZMark::Resurrect, ZMark::AnyThread, ZMark::Follow>(referent_addr);
+      }
     }
+
     SuspendibleThreadSet::yield();
   }
   weak_refs_without_queue.clear_and_reserve(dropped);
 }
 
-void ZReferenceProcessor::log_reference_timing_totals() const {
-  if (!TraceReferenceTiming || !log_is_enabled(Info, gc, ref)) {
-    return;
-  }
-
-  uint64_t discover_total = 0;
-  uint64_t process_total = 0;
-  uint64_t process_weak_total = 0;
-
-  ZPerWorkerConstIterator<uint64_t> iter_discover(&_discover_time_ns);
-  for (const uint64_t* t; iter_discover.next(&t);) {
-    discover_total += *t;
-  }
-
-  ZPerWorkerConstIterator<uint64_t> iter_process_weak(&_process_time_ns);
-  for (const uint64_t* t; iter_process_weak.next(&t);) {
-    process_weak_total += *t;
-  }
-
-  const char* mode = UseGrowableArrayDiscoveredList ? "growable-array" : "linked-list";
-  const uint64_t discover_ms = discover_total / 1000000;
-  const uint64_t process_weak_ms = process_weak_total / 1000000;
-
-  log_info(gc, ref)("Reference timing totals (%s): discover=" UINT64_FORMAT " ms, process=" UINT64_FORMAT " ms",
-                    mode, discover_ms, process_weak_ms);
-}
-
 void ZReferenceProcessor::work() {
-  Ticks start_discovered;
-  if (TraceReferenceTiming) {
-    start_discovered = Ticks::now();
-  }
-
   SuspendibleThreadSetJoiner sts_joiner;
 
   ZPerWorkerIterator<zaddress> iter(&_discovered_list);
@@ -475,11 +423,6 @@ void ZReferenceProcessor::work() {
     if (has_array) {
       process_worker_discovered_weak_refs_without_queue(*array_addr);
     }
-  }
-
-  if (TraceReferenceTiming) {
-    const uint64_t elapsed = (Ticks::now() - start_discovered).nanoseconds();
-    _process_time_ns.get() += elapsed;
   }
 }
 
@@ -600,9 +543,6 @@ void ZReferenceProcessor::process_references() {
 
   // Collect, log and trace statistics
   collect_statistics();
-
-  // Log aggregated timing totals for discover and processing
-  log_reference_timing_totals();
 }
 
 void ZReferenceProcessor::verify_pending_references() {

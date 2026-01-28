@@ -14,6 +14,7 @@ public final class WeakRefGcBenchmark {
     private static final int DEFAULT_STRONG_HOLD_MILLIS = 250;
     private static final int DEFAULT_QUEUE_WAIT_MILLIS = 5_000;
     private static final int DEFAULT_WEAK_REF_PADDING_BYTES = 1_024;
+    private static final int DEFAULT_ITERATIONS = 10;
 
     private static final class BigObject {
         final int id;
@@ -32,6 +33,7 @@ public final class WeakRefGcBenchmark {
         int holdMillis = DEFAULT_STRONG_HOLD_MILLIS;
         int queueWaitMillis = DEFAULT_QUEUE_WAIT_MILLIS;
         int weakRefPaddingBytes = DEFAULT_WEAK_REF_PADDING_BYTES;
+        int iterations = DEFAULT_ITERATIONS;
 
         if (args.length > 0) {
             objectCount = Integer.parseInt(args[0]);
@@ -46,10 +48,13 @@ public final class WeakRefGcBenchmark {
             holdMillis = Integer.parseInt(args[3]);
         }
         if (args.length > 4) {
-            queueWaitMillis = Integer.parseInt(args[5]);
+            queueWaitMillis = Integer.parseInt(args[4]);
         }
         if (args.length > 5) {
-            weakRefPaddingBytes = Integer.parseInt(args[6]);
+            weakRefPaddingBytes = Integer.parseInt(args[5]);
+        }
+        if (args.length > 6) {
+            iterations = Integer.parseInt(args[6]);
         }
 
         if (objectCount < 1) {
@@ -70,15 +75,34 @@ public final class WeakRefGcBenchmark {
         if (weakRefPaddingBytes < 0) {
             weakRefPaddingBytes = 0;
         }
+        if (iterations < 1) {
+            iterations = 1;
+        }
 
-        System.out.printf("WeakRefGcBenchmark: objects=%d minSize=%d maxSize=%d holdMillis=%d queueWaitMillis=%d weakRefPaddingBytes=%d%n",
-            objectCount, minSize, maxSize, holdMillis, queueWaitMillis, weakRefPaddingBytes);
+        System.out.printf("WeakRefGcBenchmark: objects=%d minSize=%d maxSize=%d holdMillis=%d queueWaitMillis=%d weakRefPaddingBytes=%d iterations=%d%n",
+            objectCount, minSize, maxSize, holdMillis, queueWaitMillis, weakRefPaddingBytes, iterations);
+        
+        double totalGcTimeMs = 0.0;
+        
+        for (int iter = 0; iter < iterations; iter++) {
+            double gcTimeMs = runIteration(iter, objectCount, minSize, maxSize, holdMillis, queueWaitMillis, weakRefPaddingBytes);
+            totalGcTimeMs += gcTimeMs;
+        }
+        
+        double avgGcTimeMs = totalGcTimeMs / iterations;
+        System.out.printf("AVERAGE_GC_TIME_MS: %.3f%n", avgGcTimeMs);
+    }
+    
+    private static double runIteration(int iter, int objectCount, int minSize, int maxSize, 
+                                       int holdMillis, int queueWaitMillis, int weakRefPaddingBytes) 
+            throws InterruptedException {
+        System.out.printf("%n=== Iteration %d ===%n", iter + 1);
         List<WeakReference<BigObject>> weakRefs = new ArrayList<>(objectCount);
         List<BigObject> strongRefs = new ArrayList<>(objectCount);
         ReferenceQueue<BigObject> queue = new ReferenceQueue<>();
         List<byte[]> weakRefPadding = weakRefPaddingBytes > 0 ? new ArrayList<>(objectCount) : null;
         int queuedRefTarget = Math.min(3, objectCount);
-        Random random = new Random(0x5eedcafeL);
+        Random random = new Random(0x5eedcafeL + iter);
 
         long allocationStart = System.nanoTime();
         long totalAllocatedBytes = 0;
@@ -118,8 +142,8 @@ public final class WeakRefGcBenchmark {
         long gcStart = System.nanoTime();
         System.gc();
         long gcDuration = System.nanoTime() - gcStart;
-        System.out.printf("System.gc() took %.3f ms%n",
-            gcDuration / 1_000_000.0);
+        double gcTimeMs = gcDuration / 1_000_000.0;
+        System.out.printf("GC_TIME_MS: %.3f%n", gcTimeMs);
 
         int enqueued = awaitQueue(queue, queuedRefTarget, queueWaitMillis);
         System.out.printf("Queued references collected=%d/%d%n",
@@ -127,6 +151,8 @@ public final class WeakRefGcBenchmark {
 
         long stillAlive = countAlive(weakRefs);
         System.out.printf("After GC: %d / %d objects still alive%n", stillAlive, objectCount);
+        
+        return gcTimeMs;
     }
 
     private static int randomSize(Random random, int minSize, int maxSize) {
