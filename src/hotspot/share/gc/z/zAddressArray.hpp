@@ -27,6 +27,8 @@
 #include "gc/z/zAddress.hpp"
 #include "memory/allocation.hpp"
 #include "utilities/debug.hpp"
+#include "utilities/powerOfTwo.hpp"
+#include "utilities/globalDefinitions.hpp"
 #include <string.h>
 
 struct ZWeakRefData {
@@ -51,10 +53,10 @@ struct ZWeakRefData {
 class ZAddressArray : public AnyObj {
 private:
   ZWeakRefData* _data;
-  int           _length;
-  int           _capacity;
+  size_t           _length;
+  size_t           _capacity;
 
-  void expand_to(int new_capacity) {
+  void expand_to(size_t new_capacity) {
     assert(new_capacity > _capacity, "expected growth but %d <= %d", new_capacity, _capacity);
     
     ZWeakRefData* new_data = (ZWeakRefData*)AllocateHeap(new_capacity * sizeof(ZWeakRefData), mtGC);
@@ -72,8 +74,8 @@ private:
     _capacity = new_capacity;
   }
 
-  void grow(int min_capacity) {
-    int new_capacity = MAX2(8, next_power_of_2(min_capacity - 1));
+  void grow(size_t min_capacity) {
+    size_t new_capacity = MAX2((size_t) 8, next_power_of_2(min_capacity - 1));
     expand_to(new_capacity);
   } 
 
@@ -100,45 +102,45 @@ public:
   }
 
   // Get entry at index
-  const ZWeakRefData& at(int index) const {
+  const ZWeakRefData& at(size_t index) const {
     assert(index >= 0 && index < _length, "index out of bounds: %d (length: %d)", index, _length);
     return _data[index];
   }
 
   // Get referent field address at index
-  zpointer* referent_field_addr_at(int index) const {
+  zpointer* referent_field_addr_at(size_t index) const {
     assert(index >= 0 && index < _length, "index out of bounds: %d (length: %d)", index, _length);
     return _data[index].referent_field_addr;
   }
 
   // Get discovered field address at index
-  zaddress* discovered_field_addr_at(int index) const {
+  zaddress* discovered_field_addr_at(size_t index) const {
     assert(index >= 0 && index < _length, "index out of bounds: %d (length: %d)", index, _length);
     return _data[index].discovered_field_addr;
   }
 
   // Get referent address at index
-  zaddress referent_addr_at(int index) const {
+  zaddress referent_addr_at(size_t index) const {
     assert(index >= 0 && index < _length, "index out of bounds: %d (length: %d)", index, _length);
     return _data[index].referent_addr;
   }
 
   // Current length
-  int length() const {
+  size_t length() const {
     return _length;
   }
 
   // Current capacity
-  int capacity() const {
+  size_t capacity() const {
     return _capacity;
   }
 
-  void clear_and_reserve(int new_capacity) {
+  void clear_and_reserve(size_t new_capacity) {
     _length = 0;
     if (_data != nullptr) {
       FreeHeap(_data);
     }
-    _capacity = MAX2(8, next_power_of_2(new_capacity - 1));
+    _capacity = MAX2((size_t) 8, next_power_of_2(new_capacity - 1));
     _data = (ZWeakRefData*)AllocateHeap(_capacity * sizeof(ZWeakRefData), mtGC);
   }
 
@@ -148,7 +150,7 @@ public:
   }
 
   // Reserve capacity without clearing
-  void reserve(int new_capacity) {
+  void reserve(size_t new_capacity) {
     if (new_capacity > _capacity) {
       grow(new_capacity);
     }

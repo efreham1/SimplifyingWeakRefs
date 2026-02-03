@@ -28,12 +28,10 @@
 #include "gc/z/zAddress.hpp"
 #include "gc/z/zAddressArray.hpp"
 #include "gc/z/zValue.hpp"
-#include <stdint.h>
 
 class ConcurrentGCTimer;
 class ReferencePolicy;
 class ZWorkers;
-
 
 
 
@@ -79,7 +77,7 @@ private:
 
   void initialize_null_queue_handle();
 
-  public:
+public:
   ZReferenceProcessor(ZWorkers* workers);
   
   void set_soft_reference_policy(bool clear_all_soft_references);
@@ -93,9 +91,7 @@ private:
   
   void verify_pending_references();
   
-  void prepare() {
-    initialize_null_queue_handle();
-  }
+  void prepare();
 };
 
 #endif // SHARE_GC_Z_ZREFERENCEPROCESSOR_HPP
