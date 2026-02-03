@@ -33,6 +33,7 @@
 #include "gc/z/zTask.hpp"
 #include "gc/z/zTracer.inline.hpp"
 #include "gc/z/zValue.inline.hpp"
+#include "gc/z/zPage.inline.hpp"
 #include "logging/log.hpp"
 #include "memory/allocation.hpp"
 #include "memory/universe.hpp"
@@ -41,7 +42,6 @@
 #include "runtime/mutexLocker.hpp"
 #include "runtime/os.hpp"
 #include "utilities/ticks.hpp"
-#include "zPage.inline.hpp"
 
 #include "classfile/symbolTable.hpp"
 #include "classfile/systemDictionary.hpp"
@@ -77,7 +77,11 @@ static const char* reference_type_name(ReferenceType type) {
   }
 }
 
-static zpointer* reference_referent_addr(zaddress reference) {
+static volatile zpointer* reference_referent_addr(zaddress reference) {
+  return (volatile zpointer*)java_lang_ref_Reference::referent_addr_raw(to_oop(reference));
+}
+
+static zpointer* reference_referent_addr_non_vol(zaddress reference) {
   return (zpointer*)java_lang_ref_Reference::referent_addr_raw(to_oop(reference));
 }
 
@@ -264,7 +268,7 @@ void ZReferenceProcessor::discover(zaddress reference, ReferenceType type, zaddr
 
   
   if (UseGrowableArrayDiscoveredList && type == REF_WEAK && !has_reference_queue(reference)) {
-    zpointer* const referent_addr = reference_referent_addr(reference);
+    zpointer* const referent_addr = reference_referent_addr_non_vol(reference);
     zaddress* const discovered_addr = reference_discovered_addr(reference);
     const zpointer referent_value = *referent_addr;
 
@@ -370,7 +374,7 @@ void ZReferenceProcessor::process_worker_discovered_list(zaddress discovered_lis
 
 void ZReferenceProcessor::process_worker_discovered_weak_refs_without_queue(ZAddressArray& weak_refs_without_queue) {
   size_t dropped = 0;
-  for (int i = 0; i < weak_refs_without_queue.length(); i++) {
+  for (size_t i = 0; i < weak_refs_without_queue.length(); i++) {
     const ZWeakRefData& data = weak_refs_without_queue.at(i);
     const zaddress referent_addr = data.referent_addr;
     const zpointer referent_ptr = data.referent_field_value;
@@ -433,9 +437,9 @@ void ZReferenceProcessor::verify_empty() const {
     assert(is_null(*head), "Discovered list not empty");
   }
 
-  ZPerWorkerConstIterator<ZWeakRefsWithoutQueue> iter_weak(&_discovered_weak_refs_without_queue);
-  for (const ZWeakRefsWithoutQueue* list; iter_weak.next(&list);) {
-    assert(list->length() == 0, "Weak refs without queue list not empty");
+  ZPerWorkerConstIterator<ZAddressArray> iter_weak_refs(&_discovered_weak_refs_without_queue);
+  for (const ZAddressArray* array; iter_weak_refs.next(&array);) {
+    assert(array->is_empty(), "Discovered weak refs without queue not empty");
   }
 
   assert(is_null(_pending_list.get()), "Pending list not empty");
@@ -622,4 +626,8 @@ void ZReferenceProcessor::initialize_null_queue_handle() {
   assert(found && fd.is_static(), "ReferenceQueue.NULL_QUEUE missing");
   oop null_q = ik->java_mirror()->obj_field(fd.offset());
   _null_queue_handle = OopHandle(Universe::vm_global(), null_q);
+}
+
+void ZReferenceProcessor::prepare() {
+  initialize_null_queue_handle();
 }

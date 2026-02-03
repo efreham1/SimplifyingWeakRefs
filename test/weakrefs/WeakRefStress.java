@@ -139,6 +139,10 @@ public final class WeakRefStress {
                 System.out.printf("step=%d allocated=%.2fGB alive_weak=%d strong=%d%n",
                         iteration, allocatedGb, aliveWeak, strongRefs.size());
             }
+
+            if (iteration % 1_000_000 == 0) {
+                System.gc();
+            }
         }
         compactWeakRefs(weakRefs);
         long alive = countAlive(weakRefs);
