@@ -5,7 +5,7 @@ import java.util.Random;
 
 public final class WeakRefStress {
 
-    private static final int DEFAULT_ITERATIONS = 20_000_000;
+    private static final int DEFAULT_ITERATIONS = 10_000_000;
     private static final int DEFAULT_MIN_SIZE = 128;
     private static final int DEFAULT_MAX_SIZE = 1024;
     private static final int DEFAULT_MIN_STRONG = 8 * 1024;
@@ -112,6 +112,7 @@ public final class WeakRefStress {
                 int numRefs = 10 + random.nextInt(3);
                 for (int i = 0; i < numRefs; i++) {
                     WeakReference<BigObject> weakRef = new WeakReference<>(obj);
+                    allocateEphemeralNoise(random, minSize, maxSize);
                     weakRefs.add(weakRef);
                 }
             }

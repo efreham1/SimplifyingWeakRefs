@@ -1,0 +1,25 @@
+prel. results, times for System.GC():
+    linked list: 306.557 ms
+    Old Subphase: Concurrent Mark Follow                      294.991 / 629.642     ms
+    Old Subphase: Concurrent Mark Root Colored                0.020 / 0.071         ms
+    Old Subphase: Concurrent Mark Root Uncolored              0.011 / 0.046         ms
+    Old Subphase: Concurrent Mark Roots                       0.071 / 0.219         ms
+    Old Subphase: Concurrent References Enqueue               0.001 / 0.003         ms
+    Old Subphase: Concurrent References Process               51.281 / 76.339       ms
+
+    array + seq. optimisations: 282.775 ms
+    Old Subphase: Concurrent Mark Follow                      294.637 / 446.105     ms **Should likely be higher**
+    Old Subphase: Concurrent Mark Root Colored                0.025 / 0.079         ms
+    Old Subphase: Concurrent Mark Root Uncolored              0.011 / 0.039         ms
+    Old Subphase: Concurrent Mark Roots                       0.070 / 0.178         ms
+    Old Subphase: Concurrent References Enqueue               0.006 / 0.225         ms
+    Old Subphase: Concurrent References Process               12.028 / 41.871       ms
+
+
+    linked list + some seq. optimisations: 299.913 ms
+    **missing**
+
+    downsides atm:
+    array -> 4*8 bytes extra per reference
+    array -> not using GrowableArray since it was poorly optimised for "pure data storage"
+    seq. optimisations -> very optimistic (dangerous) memory accesses

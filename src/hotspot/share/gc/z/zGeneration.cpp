@@ -1015,6 +1015,9 @@ bool ZGenerationOld::should_record_stats() {
 void ZGenerationOld::collect(ConcurrentGCTimer* timer) {
   ZGenerationCollectionScopeOld scope(timer);
 
+  // Prepare reference processing
+  _reference_processor.prepare();
+
   // Phase 1: Concurrent Mark
   concurrent_mark();
 

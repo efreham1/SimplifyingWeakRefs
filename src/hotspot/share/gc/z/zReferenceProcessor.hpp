@@ -26,11 +26,14 @@
 
 #include "gc/shared/referenceDiscoverer.hpp"
 #include "gc/z/zAddress.hpp"
+#include "gc/z/zAddressArray.hpp"
 #include "gc/z/zValue.hpp"
 
 class ConcurrentGCTimer;
 class ReferencePolicy;
 class ZWorkers;
+
+
 
 class ZReferenceProcessor : public ReferenceDiscoverer {
   friend class ZReferenceProcessorTask;
@@ -48,20 +51,23 @@ private:
   ZPerWorker<zaddress> _discovered_list;
   ZContended<zaddress> _pending_list;
   zaddress             _pending_list_tail;
+  ZPerWorker<ZAddressArray> _discovered_weak_refs_without_queue;
+  ZPerWorker<bool>     _array_empty;
   OopHandle            _null_queue_handle;
 
   bool is_inactive(zaddress reference, oop referent, ReferenceType type) const;
   bool is_strongly_live(oop referent) const;
   bool is_softly_live(zaddress reference, ReferenceType type) const;
 
-  bool should_discover(zaddress reference, ReferenceType type) const;
+  bool should_discover(zaddress reference, ReferenceType type, oop referent) const;
   bool try_make_inactive(zaddress reference, ReferenceType type) const;
 
-  void discover(zaddress reference, ReferenceType type);
-
+  void discover(zaddress reference, ReferenceType type, zaddress referent);
+  
   void verify_empty() const;
 
   void process_worker_discovered_list(zaddress discovered_list);
+  void process_worker_discovered_weak_refs_without_queue(ZAddressArray& weak_refs_without_queue);
   void work();
   void collect_statistics();
 
@@ -73,17 +79,19 @@ private:
 
 public:
   ZReferenceProcessor(ZWorkers* workers);
-
+  
   void set_soft_reference_policy(bool clear_all_soft_references);
   bool uses_clear_all_soft_reference_policy() const;
-
+  
   void reset_statistics();
-
+  
   virtual bool discover_reference(oop reference, ReferenceType type);
   void process_references();
   void enqueue_references();
-
+  
   void verify_pending_references();
+  
+  void prepare();
 };
 
 #endif // SHARE_GC_Z_ZREFERENCEPROCESSOR_HPP
