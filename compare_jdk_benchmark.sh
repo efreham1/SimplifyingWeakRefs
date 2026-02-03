@@ -1,6 +1,7 @@
 #!/bin/bash
 
-# Script to compare benchmark performance between custom JDK and standard OpenJDK
+# Script to compare benchmark performance between custom JDK (poll mode) and standard OpenJDK (queue mode)
+# This script tests the NEW poll-based implementation using custom JDK vs standard OpenJDK with queue mode
 
 set -e
 
@@ -27,7 +28,7 @@ fi
 cd "$CAFFEINE_DIR"
 
 echo "=========================================="
-echo "Running benchmark with CUSTOM JDK"
+echo "Running benchmark with CUSTOM JDK + POLL MODE (no ReferenceQueue)"
 echo "=========================================="
 export JAVA_HOME="$CUSTOM_JDK"
 export PATH="$JAVA_HOME/bin:$PATH"
@@ -35,12 +36,13 @@ echo "Java version:"
 java -version
 echo ""
 
-export JAVA_OPTS="-XX:+UseZGC"
-./gradlew jmh -PincludePattern=GetPutBenchmark 2>&1 | tee "${RESULTS_DIR}/custom_jdk_results.txt"
+# Use poll mode (no ReferenceQueue)
+# Note: jvmArgs uses comma-separated values for JMH
+./gradlew jmh --rerun -PjavaVersion=27 "-Porg.gradle.java.installations.paths=$CUSTOM_JDK" -PincludePattern=GetPutBenchmark "-PbenchmarkParameters=cacheType=Caffeine" -PjvmArgs="-XX:+UseZGC,-Dcaffeine.referenceCleanup=poll" 2>&1 | tee "${RESULTS_DIR}/custom_jdk_poll_results.txt"
 
 echo ""
 echo "=========================================="
-echo "Running benchmark with STANDARD OpenJDK"
+echo "Running benchmark with STANDARD OpenJDK + QUEUE MODE (ReferenceQueue)"
 echo "=========================================="
 
 # Download and setup OpenJDK 27+7 if not present
@@ -65,16 +67,19 @@ echo ""
 
 cd "$CAFFEINE_DIR"
 
-export JAVA_OPTS="-XX:+UseZGC"
-./gradlew jmh -PincludePattern=GetPutBenchmark 2>&1 | tee "${RESULTS_DIR}/standard_jdk_results.txt"
+# Use queue mode (default - ReferenceQueue)
+# Note: jvmArgs uses comma-separated values for JMH
+./gradlew jmh --rerun -PjavaVersion=27 "-Porg.gradle.java.installations.paths=$STANDARD_JDK" -PincludePattern=GetPutBenchmark "-PbenchmarkParameters=cacheType=Caffeine" -PjvmArgs="-XX:+UseZGC,-Dcaffeine.referenceCleanup=queue" 2>&1 | tee "${RESULTS_DIR}/standard_jdk_queue_results.txt"
 
 echo ""
 echo "=========================================="
 echo "Benchmark Complete!"
 echo "=========================================="
 echo "Results saved to:"
-echo "  Custom JDK:   ${RESULTS_DIR}/custom_jdk_results.txt"
-echo "  Standard JDK: ${RESULTS_DIR}/standard_jdk_results.txt"
+echo "  Custom JDK (poll):    ${RESULTS_DIR}/custom_jdk_poll_results.txt"
+echo "  Standard JDK (queue): ${RESULTS_DIR}/standard_jdk_queue_results.txt"
 echo ""
+echo "Compare results with:"
+echo "  diff ${RESULTS_DIR}/custom_jdk_poll_results.txt ${RESULTS_DIR}/standard_jdk_queue_results.txt"
 echo "Compare results with:"
 echo "  diff ${RESULTS_DIR}/custom_jdk_results.txt ${RESULTS_DIR}/standard_jdk_results.txt"
