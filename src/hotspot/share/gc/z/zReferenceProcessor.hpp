@@ -48,6 +48,9 @@ private:
   ZPerWorker<Counters> _encountered_count;
   ZPerWorker<Counters> _discovered_count;
   ZPerWorker<Counters> _enqueued_count;
+  ZPerWorker<size_t>   _encountered_weak_refs_without_queue_count;
+  ZPerWorker<size_t>   _discovered_weak_refs_without_queue_count;
+  ZPerWorker<size_t>   _cleared_weak_refs_without_queue_count;
   ZPerWorker<zaddress> _discovered_list;
   ZContended<zaddress> _pending_list;
   zaddress             _pending_list_tail;
@@ -62,7 +65,7 @@ private:
   bool should_discover(zaddress reference, ReferenceType type, oop referent) const;
   bool try_make_inactive(zaddress reference, ReferenceType type) const;
 
-  void discover(zaddress reference, ReferenceType type, zaddress referent);
+  void discover(zaddress reference, ReferenceType type, zaddress referent, bool has_queue);
   
   void verify_empty() const;
 

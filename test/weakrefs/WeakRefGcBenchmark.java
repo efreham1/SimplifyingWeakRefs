@@ -31,7 +31,6 @@ public final class WeakRefGcBenchmark {
         int minSize = DEFAULT_MIN_SIZE;
         int maxSize = DEFAULT_MAX_SIZE;
         int holdMillis = DEFAULT_STRONG_HOLD_MILLIS;
-        int queueWaitMillis = DEFAULT_QUEUE_WAIT_MILLIS;
         int weakRefPaddingBytes = DEFAULT_WEAK_REF_PADDING_BYTES;
         int iterations = DEFAULT_ITERATIONS;
 
@@ -48,13 +47,10 @@ public final class WeakRefGcBenchmark {
             holdMillis = Integer.parseInt(args[3]);
         }
         if (args.length > 4) {
-            queueWaitMillis = Integer.parseInt(args[4]);
+            weakRefPaddingBytes = Integer.parseInt(args[4]);
         }
         if (args.length > 5) {
-            weakRefPaddingBytes = Integer.parseInt(args[5]);
-        }
-        if (args.length > 6) {
-            iterations = Integer.parseInt(args[6]);
+            iterations = Integer.parseInt(args[5]);
         }
 
         if (objectCount < 1) {
@@ -69,9 +65,6 @@ public final class WeakRefGcBenchmark {
         if (holdMillis < 0) {
             holdMillis = 0;
         }
-        if (queueWaitMillis < 0) {
-            queueWaitMillis = 0;
-        }
         if (weakRefPaddingBytes < 0) {
             weakRefPaddingBytes = 0;
         }
@@ -79,26 +72,20 @@ public final class WeakRefGcBenchmark {
             iterations = 1;
         }
 
-        System.out.printf("WeakRefGcBenchmark: objects=%d minSize=%d maxSize=%d holdMillis=%d queueWaitMillis=%d weakRefPaddingBytes=%d iterations=%d%n",
-            objectCount, minSize, maxSize, holdMillis, queueWaitMillis, weakRefPaddingBytes, iterations);
-        
-        double totalGcTimeMs = 0.0;
+        System.out.printf("WeakRefGcBenchmark: objects=%d minSize=%d maxSize=%d holdMillis=%d weakRefPaddingBytes=%d iterations=%d%n",
+            objectCount, minSize, maxSize, holdMillis, weakRefPaddingBytes, iterations);
         
         for (int iter = 0; iter < iterations; iter++) {
-            double gcTimeMs = runIteration(iter, objectCount, minSize, maxSize, holdMillis, queueWaitMillis, weakRefPaddingBytes);
-            totalGcTimeMs += gcTimeMs;
+            runIteration(iter, objectCount, minSize, maxSize, holdMillis, weakRefPaddingBytes);
         }
-        
-        double avgGcTimeMs = totalGcTimeMs / iterations;
-        System.out.printf("AVERAGE_GC_TIME_MS: %.3f%n", avgGcTimeMs);
     }
     
-    private static double runIteration(int iter, int objectCount, int minSize, int maxSize, 
-                                       int holdMillis, int queueWaitMillis, int weakRefPaddingBytes) 
+    private static void runIteration(int iter, int objectCount, int minSize, int maxSize, 
+                                       int holdMillis, int weakRefPaddingBytes) 
             throws InterruptedException {
         System.out.printf("%n=== Iteration %d ===%n", iter + 1);
         List<WeakReference<BigObject>> weakRefs = new ArrayList<>(objectCount);
-        List<BigObject> strongRefs = new ArrayList<>(objectCount);
+        BigObject strongRef;
         ReferenceQueue<BigObject> queue = new ReferenceQueue<>();
         List<byte[]> weakRefPadding = weakRefPaddingBytes > 0 ? new ArrayList<>(objectCount) : null;
         int queuedRefTarget = Math.min(3, objectCount);
@@ -108,12 +95,11 @@ public final class WeakRefGcBenchmark {
         long totalAllocatedBytes = 0;
         for (int i = 0; i < objectCount; i++) {
             int size = randomSize(random, minSize, maxSize);
-            BigObject obj = new BigObject(i, size);
             totalAllocatedBytes += size;
-            strongRefs.add(obj);
+            strongRef = new BigObject(i, size); // Hold a strong reference to the most recently allocated object
             WeakReference<BigObject> ref = (i < queuedRefTarget)
-                    ? new WeakReference<>(obj, queue)
-                    : new WeakReference<>(obj);
+                    ? new WeakReference<>(strongRef, queue)
+                    : new WeakReference<>(strongRef);
             weakRefs.add(ref);
             if (weakRefPadding != null) {
                 int pad = weakRefPaddingBytes == 1
@@ -128,31 +114,20 @@ public final class WeakRefGcBenchmark {
         System.out.printf("Allocated %.1f MiB in %.3f s%n", allocatedMiB,
                 allocationDuration / 1_000_000_000.0);
 
+        for (int i = 0; i < objectCount/10; i++) {
+            int size = randomSize(random, minSize, maxSize);
+            strongRef = new BigObject(-1, size); // Allocate some additional objects to increase GC pressure
+        }
+
         if (holdMillis > 0) {
             Thread.sleep(holdMillis);
         }
-        for (int i = 0; i < 3; i++) {
-            System.gc();
-        }
-        strongRefs.clear();
         if (weakRefPadding != null) {
             weakRefPadding.clear();
         }
         System.out.println("Cleared strong references and padding arrays");
-        long gcStart = System.nanoTime();
-        System.gc();
-        long gcDuration = System.nanoTime() - gcStart;
-        double gcTimeMs = gcDuration / 1_000_000.0;
-        System.out.printf("GC_TIME_MS: %.3f%n", gcTimeMs);
-
-        int enqueued = awaitQueue(queue, queuedRefTarget, queueWaitMillis);
-        System.out.printf("Queued references collected=%d/%d%n",
-            enqueued, queuedRefTarget);
-
         long stillAlive = countAlive(weakRefs);
-        System.out.printf("After GC: %d / %d objects still alive%n", stillAlive, objectCount);
-        
-        return gcTimeMs;
+        System.out.printf("%d / %d objects still alive%n", stillAlive, objectCount);
     }
 
     private static int randomSize(Random random, int minSize, int maxSize) {
