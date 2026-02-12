@@ -36,6 +36,9 @@ struct ZWeakRefData {
   zaddress* discovered_field_addr;
   zaddress referent_addr;
   zpointer referent_field_value;
+  zaddress reference;
+  ReferenceType type;
+  bool has_queue;
 };
 
 // High-performance growable array specifically for storing discovered weak references.
@@ -90,7 +93,7 @@ public:
   }
 
   // Append a new entry
-  void append(zpointer* referent_field_addr, zaddress* discovered_field_addr, zaddress referent_addr, zpointer referent_field_value) {
+  void append(zpointer* referent_field_addr, zaddress* discovered_field_addr, zaddress referent_addr, zpointer referent_field_value, zaddress reference, ReferenceType type, bool has_queue) {
     if (_length >= _capacity) {
       grow(_length + 1);
     }
@@ -98,6 +101,9 @@ public:
     _data[_length].discovered_field_addr = discovered_field_addr;
     _data[_length].referent_addr = referent_addr;
     _data[_length].referent_field_value = referent_field_value;
+    _data[_length].reference = reference;
+    _data[_length].type = type;
+    _data[_length].has_queue = has_queue;
     _length++;
   }
 
@@ -105,24 +111,6 @@ public:
   const ZWeakRefData& at(size_t index) const {
     assert(index >= 0 && index < _length, "index out of bounds: %d (length: %d)", index, _length);
     return _data[index];
-  }
-
-  // Get referent field address at index
-  zpointer* referent_field_addr_at(size_t index) const {
-    assert(index >= 0 && index < _length, "index out of bounds: %d (length: %d)", index, _length);
-    return _data[index].referent_field_addr;
-  }
-
-  // Get discovered field address at index
-  zaddress* discovered_field_addr_at(size_t index) const {
-    assert(index >= 0 && index < _length, "index out of bounds: %d (length: %d)", index, _length);
-    return _data[index].discovered_field_addr;
-  }
-
-  // Get referent address at index
-  zaddress referent_addr_at(size_t index) const {
-    assert(index >= 0 && index < _length, "index out of bounds: %d (length: %d)", index, _length);
-    return _data[index].referent_addr;
   }
 
   // Current length

@@ -88,7 +88,7 @@ public final class WeakRefGcBenchmark {
         BigObject strongRef;
         ReferenceQueue<BigObject> queue = new ReferenceQueue<>();
         List<byte[]> weakRefPadding = weakRefPaddingBytes > 0 ? new ArrayList<>(objectCount) : null;
-        int queuedRefTarget = Math.min(3, objectCount);
+        int queuedRefTarget = objectCount;
         Random random = new Random(0x5eedcafeL + iter);
 
         long allocationStart = System.nanoTime();
@@ -126,6 +126,11 @@ public final class WeakRefGcBenchmark {
             weakRefPadding.clear();
         }
         System.out.println("Cleared strong references and padding arrays");
+        int clearedCount = 0;
+        while (queue.poll() != null) {
+            clearedCount++;
+        }
+        System.out.printf("Cleared %d weak references from the queue%n", clearedCount);
         long stillAlive = countAlive(weakRefs);
         System.out.printf("%d / %d objects still alive%n", stillAlive, objectCount);
     }
@@ -136,29 +141,6 @@ public final class WeakRefGcBenchmark {
         }
         int bound = maxSize - minSize + 1;
         return minSize + random.nextInt(bound);
-    }
-
-
-    private static int awaitQueue(ReferenceQueue<BigObject> queue, int expected, int timeoutMillis)
-            throws InterruptedException {
-        int enqueued = 0;
-        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMillis);
-        while (enqueued < expected) {
-            long now = System.nanoTime();
-            long remaining = deadline - now;
-            if (remaining <= 0) {
-                break;
-            }
-            Reference<? extends BigObject> ref = queue.remove(TimeUnit.NANOSECONDS.toMillis(remaining));
-            if (ref != null) {
-                enqueued++;
-            }
-        }
-        Reference<? extends BigObject> ref;
-        while ((ref = queue.poll()) != null) {
-            enqueued++;
-        }
-        return enqueued;
     }
 
     private static long countAlive(List<WeakReference<BigObject>> weakRefs) {

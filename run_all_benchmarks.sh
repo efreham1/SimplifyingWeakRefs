@@ -16,6 +16,23 @@ CAFFEINE_DIR="${SCRIPT_DIR}/caffeine"
 RESULTS_DIR="${SCRIPT_DIR}/benchmark_results"
 AGENT_DIR="${SCRIPT_DIR}/WeakRefAgent"
 AGENT_JAR="${AGENT_DIR}/weakref-agent.jar"
+CONFIG_FILE="${SCRIPT_DIR}/benchmark_config.sh"
+
+# Load configuration file
+if [ -f "$CONFIG_FILE" ]; then
+    source "$CONFIG_FILE"
+else
+    echo -e "${YELLOW}Warning: Configuration file not found at $CONFIG_FILE${NC}"
+    echo "Using default configuration (all benchmarks enabled)"
+    RUN_QUEUE_GROWABLE_ON=true
+    RUN_QUEUE_GROWABLE_ON_AGENT=true
+    RUN_QUEUE_GROWABLE_OFF=true
+    RUN_QUEUE_GROWABLE_OFF_AGENT=true
+    RUN_POLL_GROWABLE_ON=true
+    RUN_POLL_GROWABLE_ON_AGENT=true
+    RUN_POLL_GROWABLE_OFF=true
+    RUN_POLL_GROWABLE_OFF_AGENT=true
+fi
 
 # Check if we should just show results
 SHOW_RESULTS_ONLY=false
@@ -27,7 +44,7 @@ fi
 CPU_CORES="${CPU_CORES:-0-11}"          # CPU cores to pin to (override with CPU_CORES env var)
 COOLDOWN_SECONDS="${COOLDOWN_SECONDS:-10}"  # Seconds to wait between benchmarks
 # Comma-separated JVM options passed via -PjvmArgs; override with COMMON_JVM_OPTS env var
-COMMON_JVM_OPTS="${COMMON_JVM_OPTS:--XX:+UseZGC,-Xlog:gc*,-XX:InitialTenuringThreshold=1,-XX:MaxTenuringThreshold=1,-XX:+UnlockDiagnosticVMOptions}"
+COMMON_JVM_OPTS="${COMMON_JVM_OPTS:--XX:+UseZGC,-XX:InitialTenuringThreshold=1,-XX:MaxTenuringThreshold=1,-XX:+UnlockDiagnosticVMOptions}"
 
 # Colors for output
 RED='\033[0;31m'
@@ -282,27 +299,69 @@ prime_benchmarks() {
     print_success "Priming run completed; results discarded"
 }
 
+# Count enabled configurations
+ENABLED_CONFIGS=0
+if [ "$RUN_QUEUE_GROWABLE_ON" = "true" ]; then ENABLED_CONFIGS=$((ENABLED_CONFIGS + 1)); fi
+if [ "$RUN_QUEUE_GROWABLE_ON_AGENT" = "true" ]; then ENABLED_CONFIGS=$((ENABLED_CONFIGS + 1)); fi
+if [ "$RUN_QUEUE_GROWABLE_OFF" = "true" ]; then ENABLED_CONFIGS=$((ENABLED_CONFIGS + 1)); fi
+if [ "$RUN_QUEUE_GROWABLE_OFF_AGENT" = "true" ]; then ENABLED_CONFIGS=$((ENABLED_CONFIGS + 1)); fi
+if [ "$RUN_POLL_GROWABLE_ON" = "true" ]; then ENABLED_CONFIGS=$((ENABLED_CONFIGS + 1)); fi
+if [ "$RUN_POLL_GROWABLE_ON_AGENT" = "true" ]; then ENABLED_CONFIGS=$((ENABLED_CONFIGS + 1)); fi
+if [ "$RUN_POLL_GROWABLE_OFF" = "true" ]; then ENABLED_CONFIGS=$((ENABLED_CONFIGS + 1)); fi
+if [ "$RUN_POLL_GROWABLE_OFF_AGENT" = "true" ]; then ENABLED_CONFIGS=$((ENABLED_CONFIGS + 1)); fi
+
 if [ "$SHOW_RESULTS_ONLY" = true ]; then
     echo "Displaying previous benchmark results..."
     echo ""
     
-    if [ ! -f "${RESULTS_DIR}/custom_queue_growable_on.txt" ] || [ ! -f "${RESULTS_DIR}/custom_poll_growable_on.txt" ]; then
-        echo -e "${RED}Error: Benchmark results not found${NC}"
+    # Check if at least one result file exists
+    result_found=false
+    for file in "${RESULTS_DIR}"/custom_*.txt; do
+        if [ -f "$file" ]; then
+            result_found=true
+            break
+        fi
+    done
+    
+    if [ "$result_found" = false ]; then
+        echo -e "${RED}Error: No benchmark results found${NC}"
         echo "Please run benchmarks first without --results flag"
         exit 1
     fi
 else
-    echo "Testing 8 configurations:"
+    if [ $ENABLED_CONFIGS -eq 0 ]; then
+        echo -e "${RED}Error: No configurations enabled in $CONFIG_FILE${NC}"
+        echo "Please enable at least one configuration"
+        exit 1
+    fi
+    
+    echo "Testing $ENABLED_CONFIGS enabled configuration(s):"
     echo "  Queue/Poll × GrowableArray ON/OFF × Agent ON/OFF"
     echo ""
-    echo "  1. Queue + GrowableArray ON"
-    echo "  2. Queue + GrowableArray ON + WeakRef Agent"
-    echo "  3. Queue + GrowableArray OFF"
-    echo "  4. Queue + GrowableArray OFF + WeakRef Agent"
-    echo "  5. Poll + GrowableArray ON"
-    echo "  6. Poll + GrowableArray ON + WeakRef Agent"
-    echo "  7. Poll + GrowableArray OFF"
-    echo "  8. Poll + GrowableArray OFF + WeakRef Agent"
+    if [ "$RUN_QUEUE_GROWABLE_ON" = "true" ]; then
+        echo "  ✓ Queue + GrowableArray ON"
+    fi
+    if [ "$RUN_QUEUE_GROWABLE_ON_AGENT" = "true" ]; then
+        echo "  ✓ Queue + GrowableArray ON + WeakRef Agent"
+    fi
+    if [ "$RUN_QUEUE_GROWABLE_OFF" = "true" ]; then
+        echo "  ✓ Queue + GrowableArray OFF"
+    fi
+    if [ "$RUN_QUEUE_GROWABLE_OFF_AGENT" = "true" ]; then
+        echo "  ✓ Queue + GrowableArray OFF + WeakRef Agent"
+    fi
+    if [ "$RUN_POLL_GROWABLE_ON" = "true" ]; then
+        echo "  ✓ Poll + GrowableArray ON"
+    fi
+    if [ "$RUN_POLL_GROWABLE_ON_AGENT" = "true" ]; then
+        echo "  ✓ Poll + GrowableArray ON + WeakRef Agent"
+    fi
+    if [ "$RUN_POLL_GROWABLE_OFF" = "true" ]; then
+        echo "  ✓ Poll + GrowableArray OFF"
+    fi
+    if [ "$RUN_POLL_GROWABLE_OFF_AGENT" = "true" ]; then
+        echo "  ✓ Poll + GrowableArray OFF + WeakRef Agent"
+    fi
     echo ""
     echo "Benchmarks to run:"
     echo "  • GetPutWeakRefBenchmark - Basic get/put operations with weak references"
@@ -312,6 +371,7 @@ else
     echo ""
     echo "Custom JDK:   $CUSTOM_JDK"
     echo "Agent:        $AGENT_JAR"
+    echo "Config file:  $CONFIG_FILE"
     echo ""
     echo -e "${BOLD}Environment Settings:${NC}"
     echo "  CPU cores:    $CPU_CORES"
@@ -342,32 +402,58 @@ else
         "EvictionWeakRefBenchmark"
     )
     
-    # Run all benchmarks for all 8 configurations
+    # Run all benchmarks for enabled configurations
     BENCHMARK_PATTERN=$(IFS='|'; echo "${BENCHMARKS[*]}")
     
-    print_header "1/8: Custom JDK + Queue Mode + GrowableArray ON"
-    run_benchmark "$CUSTOM_JDK" "Custom JDK" "queue" "$BENCHMARK_PATTERN" "${RESULTS_DIR}/custom_queue_growable_on.txt" "enabled"
+    CURRENT_CONFIG=0
     
-    print_header "2/8: Custom JDK + Queue Mode + GrowableArray ON + WeakRef Agent"
-    run_benchmark "$CUSTOM_JDK" "Custom JDK" "queue" "$BENCHMARK_PATTERN" "${RESULTS_DIR}/custom_queue_growable_on_agent.txt" "enabled" "true"
+    if [ "$RUN_QUEUE_GROWABLE_ON" = "true" ]; then
+        CURRENT_CONFIG=$((CURRENT_CONFIG + 1))
+        print_header "$CURRENT_CONFIG/$ENABLED_CONFIGS: Custom JDK + Queue Mode + GrowableArray ON"
+        run_benchmark "$CUSTOM_JDK" "Custom JDK" "queue" "$BENCHMARK_PATTERN" "${RESULTS_DIR}/custom_queue_growable_on.txt" "enabled"
+    fi
     
-    print_header "3/8: Custom JDK + Queue Mode + GrowableArray OFF"
-    run_benchmark "$CUSTOM_JDK" "Custom JDK" "queue" "$BENCHMARK_PATTERN" "${RESULTS_DIR}/custom_queue_growable_off.txt" "disabled"
+    if [ "$RUN_QUEUE_GROWABLE_ON_AGENT" = "true" ]; then
+        CURRENT_CONFIG=$((CURRENT_CONFIG + 1))
+        print_header "$CURRENT_CONFIG/$ENABLED_CONFIGS: Custom JDK + Queue Mode + GrowableArray ON + WeakRef Agent"
+        run_benchmark "$CUSTOM_JDK" "Custom JDK" "queue" "$BENCHMARK_PATTERN" "${RESULTS_DIR}/custom_queue_growable_on_agent.txt" "enabled" "true"
+    fi
     
-    print_header "4/8: Custom JDK + Queue Mode + GrowableArray OFF + WeakRef Agent"
-    run_benchmark "$CUSTOM_JDK" "Custom JDK" "queue" "$BENCHMARK_PATTERN" "${RESULTS_DIR}/custom_queue_growable_off_agent.txt" "disabled" "true"
+    if [ "$RUN_QUEUE_GROWABLE_OFF" = "true" ]; then
+        CURRENT_CONFIG=$((CURRENT_CONFIG + 1))
+        print_header "$CURRENT_CONFIG/$ENABLED_CONFIGS: Custom JDK + Queue Mode + GrowableArray OFF"
+        run_benchmark "$CUSTOM_JDK" "Custom JDK" "queue" "$BENCHMARK_PATTERN" "${RESULTS_DIR}/custom_queue_growable_off.txt" "disabled"
+    fi
     
-    print_header "5/8: Custom JDK + Poll Mode + GrowableArray ON"
-    run_benchmark "$CUSTOM_JDK" "Custom JDK" "poll" "$BENCHMARK_PATTERN" "${RESULTS_DIR}/custom_poll_growable_on.txt" "enabled"
+    if [ "$RUN_QUEUE_GROWABLE_OFF_AGENT" = "true" ]; then
+        CURRENT_CONFIG=$((CURRENT_CONFIG + 1))
+        print_header "$CURRENT_CONFIG/$ENABLED_CONFIGS: Custom JDK + Queue Mode + GrowableArray OFF + WeakRef Agent"
+        run_benchmark "$CUSTOM_JDK" "Custom JDK" "queue" "$BENCHMARK_PATTERN" "${RESULTS_DIR}/custom_queue_growable_off_agent.txt" "disabled" "true"
+    fi
     
-    print_header "6/8: Custom JDK + Poll Mode + GrowableArray ON + WeakRef Agent"
-    run_benchmark "$CUSTOM_JDK" "Custom JDK" "poll" "$BENCHMARK_PATTERN" "${RESULTS_DIR}/custom_poll_growable_on_agent.txt" "enabled" "true"
+    if [ "$RUN_POLL_GROWABLE_ON" = "true" ]; then
+        CURRENT_CONFIG=$((CURRENT_CONFIG + 1))
+        print_header "$CURRENT_CONFIG/$ENABLED_CONFIGS: Custom JDK + Poll Mode + GrowableArray ON"
+        run_benchmark "$CUSTOM_JDK" "Custom JDK" "poll" "$BENCHMARK_PATTERN" "${RESULTS_DIR}/custom_poll_growable_on.txt" "enabled"
+    fi
     
-    print_header "7/8: Custom JDK + Poll Mode + GrowableArray OFF"
-    run_benchmark "$CUSTOM_JDK" "Custom JDK" "poll" "$BENCHMARK_PATTERN" "${RESULTS_DIR}/custom_poll_growable_off.txt" "disabled"
+    if [ "$RUN_POLL_GROWABLE_ON_AGENT" = "true" ]; then
+        CURRENT_CONFIG=$((CURRENT_CONFIG + 1))
+        print_header "$CURRENT_CONFIG/$ENABLED_CONFIGS: Custom JDK + Poll Mode + GrowableArray ON + WeakRef Agent"
+        run_benchmark "$CUSTOM_JDK" "Custom JDK" "poll" "$BENCHMARK_PATTERN" "${RESULTS_DIR}/custom_poll_growable_on_agent.txt" "enabled" "true"
+    fi
     
-    print_header "8/8: Custom JDK + Poll Mode + GrowableArray OFF + WeakRef Agent"
-    run_benchmark "$CUSTOM_JDK" "Custom JDK" "poll" "$BENCHMARK_PATTERN" "${RESULTS_DIR}/custom_poll_growable_off_agent.txt" "disabled" "true"
+    if [ "$RUN_POLL_GROWABLE_OFF" = "true" ]; then
+        CURRENT_CONFIG=$((CURRENT_CONFIG + 1))
+        print_header "$CURRENT_CONFIG/$ENABLED_CONFIGS: Custom JDK + Poll Mode + GrowableArray OFF"
+        run_benchmark "$CUSTOM_JDK" "Custom JDK" "poll" "$BENCHMARK_PATTERN" "${RESULTS_DIR}/custom_poll_growable_off.txt" "disabled"
+    fi
+    
+    if [ "$RUN_POLL_GROWABLE_OFF_AGENT" = "true" ]; then
+        CURRENT_CONFIG=$((CURRENT_CONFIG + 1))
+        print_header "$CURRENT_CONFIG/$ENABLED_CONFIGS: Custom JDK + Poll Mode + GrowableArray OFF + WeakRef Agent"
+        run_benchmark "$CUSTOM_JDK" "Custom JDK" "poll" "$BENCHMARK_PATTERN" "${RESULTS_DIR}/custom_poll_growable_off_agent.txt" "disabled" "true"
+    fi
 fi
 
 # Generate summary report
@@ -475,14 +561,34 @@ echo ""
 # Full results for all benchmarks
 print_header "FULL RESULTS BY CONFIGURATION"
 
-for config in "custom_queue_growable_on:Custom JDK + Queue + GA_ON" \
-              "custom_queue_growable_on_agent:Custom JDK + Queue + GA_ON + Agent" \
-              "custom_queue_growable_off:Custom JDK + Queue + GA_OFF" \
-              "custom_queue_growable_off_agent:Custom JDK + Queue + GA_OFF + Agent" \
-              "custom_poll_growable_on:Custom JDK + Poll + GA_ON" \
-              "custom_poll_growable_on_agent:Custom JDK + Poll + GA_ON + Agent" \
-              "custom_poll_growable_off:Custom JDK + Poll + GA_OFF" \
-              "custom_poll_growable_off_agent:Custom JDK + Poll + GA_OFF + Agent"; do
+# Build array of configs to show based on what ran or exists
+CONFIG_LIST=()
+if [ -f "${RESULTS_DIR}/custom_queue_growable_on.txt" ]; then
+    CONFIG_LIST+=("custom_queue_growable_on:Custom JDK + Queue + GA_ON")
+fi
+if [ -f "${RESULTS_DIR}/custom_queue_growable_on_agent.txt" ]; then
+    CONFIG_LIST+=("custom_queue_growable_on_agent:Custom JDK + Queue + GA_ON + Agent")
+fi
+if [ -f "${RESULTS_DIR}/custom_queue_growable_off.txt" ]; then
+    CONFIG_LIST+=("custom_queue_growable_off:Custom JDK + Queue + GA_OFF")
+fi
+if [ -f "${RESULTS_DIR}/custom_queue_growable_off_agent.txt" ]; then
+    CONFIG_LIST+=("custom_queue_growable_off_agent:Custom JDK + Queue + GA_OFF + Agent")
+fi
+if [ -f "${RESULTS_DIR}/custom_poll_growable_on.txt" ]; then
+    CONFIG_LIST+=("custom_poll_growable_on:Custom JDK + Poll + GA_ON")
+fi
+if [ -f "${RESULTS_DIR}/custom_poll_growable_on_agent.txt" ]; then
+    CONFIG_LIST+=("custom_poll_growable_on_agent:Custom JDK + Poll + GA_ON + Agent")
+fi
+if [ -f "${RESULTS_DIR}/custom_poll_growable_off.txt" ]; then
+    CONFIG_LIST+=("custom_poll_growable_off:Custom JDK + Poll + GA_OFF")
+fi
+if [ -f "${RESULTS_DIR}/custom_poll_growable_off_agent.txt" ]; then
+    CONFIG_LIST+=("custom_poll_growable_off_agent:Custom JDK + Poll + GA_OFF + Agent")
+fi
+
+for config in "${CONFIG_LIST[@]}"; do
     file="${config%%:*}"
     name="${config##*:}"
     
@@ -502,21 +608,37 @@ done
 
 print_header "BENCHMARK COMPLETE"
 echo "Raw results saved to:"
-echo "  ${RESULTS_DIR}/custom_queue_growable_on.txt"
-echo "  ${RESULTS_DIR}/custom_queue_growable_on_agent.txt"
-echo "  ${RESULTS_DIR}/custom_queue_growable_off.txt"
-echo "  ${RESULTS_DIR}/custom_queue_growable_off_agent.txt"
-echo "  ${RESULTS_DIR}/custom_poll_growable_on.txt"
-echo "  ${RESULTS_DIR}/custom_poll_growable_on_agent.txt"
-echo "  ${RESULTS_DIR}/custom_poll_growable_off.txt"
-echo "  ${RESULTS_DIR}/custom_poll_growable_off_agent.txt"
+for config in "${CONFIG_LIST[@]}"; do
+    file="${config%%:*}"
+    echo "  ${RESULTS_DIR}/${file}.txt"
+done
 echo ""
-echo "Tested configurations (8 total):"
-echo "  • Queue + GrowableArray ON"
-echo "  • Queue + GrowableArray ON + WeakRef Agent"
-echo "  • Queue + GrowableArray OFF"
-echo "  • Queue + GrowableArray OFF + WeakRef Agent"
-echo "  • Poll + GrowableArray ON"
-echo "  • Poll + GrowableArray ON + WeakRef Agent"
-echo "  • Poll + GrowableArray OFF"
-echo "  • Poll + GrowableArray OFF + WeakRef Agent"
+echo "To configure which benchmarks run, edit: $CONFIG_FILE"
+echo ""
+if [ "$SHOW_RESULTS_ONLY" = false ]; then
+    echo "Configurations tested in this run ($ENABLED_CONFIGS total):"
+    if [ "$RUN_QUEUE_GROWABLE_ON" = "true" ]; then
+        echo "  • Queue + GrowableArray ON"
+    fi
+    if [ "$RUN_QUEUE_GROWABLE_ON_AGENT" = "true" ]; then
+        echo "  • Queue + GrowableArray ON + WeakRef Agent"
+    fi
+    if [ "$RUN_QUEUE_GROWABLE_OFF" = "true" ]; then
+        echo "  • Queue + GrowableArray OFF"
+    fi
+    if [ "$RUN_QUEUE_GROWABLE_OFF_AGENT" = "true" ]; then
+        echo "  • Queue + GrowableArray OFF + WeakRef Agent"
+    fi
+    if [ "$RUN_POLL_GROWABLE_ON" = "true" ]; then
+        echo "  • Poll + GrowableArray ON"
+    fi
+    if [ "$RUN_POLL_GROWABLE_ON_AGENT" = "true" ]; then
+        echo "  • Poll + GrowableArray ON + WeakRef Agent"
+    fi
+    if [ "$RUN_POLL_GROWABLE_OFF" = "true" ]; then
+        echo "  • Poll + GrowableArray OFF"
+    fi
+    if [ "$RUN_POLL_GROWABLE_OFF_AGENT" = "true" ]; then
+        echo "  • Poll + GrowableArray OFF + WeakRef Agent"
+    fi
+fi

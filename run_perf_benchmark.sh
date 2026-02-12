@@ -14,6 +14,14 @@
 #   --output <file>               Output file for perf data (default: auto-generated)
 #   --events <events>             Perf events to record (default: cycles,instructions,cache-misses,branches,branch-misses)
 #   --help                        Show this help message
+#
+# Environment variables for GC control:
+#   GC_COLLECTION_INTERVAL=<ms>     Collection interval for ZGC (default: 5000ms)
+#   GC_TARGET_MARK_TIME=<seconds>   Target concurrent marking time (default: 10s)
+#   HEAP_SIZE=<size>                Heap size, e.g., 1g, 2g (default: 2g)
+#
+# Example - Force very frequent collections (every 2 seconds):
+#   GC_COLLECTION_INTERVAL=2000 GC_TARGET_MARK_TIME=5 HEAP_SIZE=1g ./run_perf_benchmark.sh
 
 set -e
 
@@ -35,7 +43,17 @@ PERF_EVENTS="cycles,instructions,cache-misses,branches,branch-misses"
 
 # Benchmark environment settings
 CPU_CORES="${CPU_CORES:-0-11}"
-COMMON_JVM_OPTS="${COMMON_JVM_OPTS:--XX:+UseZGC,-Xlog:gc*,-XX:InitialTenuringThreshold=1,-XX:MaxTenuringThreshold=1,-XX:+UnlockDiagnosticVMOptions}"
+
+# GC Collection Frequency Settings
+# For more frequent collections, especially major GCs that trigger reference processing:
+# - ZCollectionInterval: Time between collections (ms). Lower = more frequent. Default: unlimited
+# - Heap size: Smaller heap triggers more GCs due to memory pressure
+# - ZTargetConcMarkingTime: Target time for concurrent marking (lower = more aggressive)
+GC_COLLECTION_INTERVAL="${GC_COLLECTION_INTERVAL:-5000}"  # 5 seconds - force collection every 5s
+GC_TARGET_MARK_TIME="${GC_TARGET_MARK_TIME:-10}"          # 10 seconds - target concurrent mark time
+HEAP_SIZE="${HEAP_SIZE:-2g}"                              # Heap size - smaller = more frequent GCs
+
+COMMON_JVM_OPTS="${COMMON_JVM_OPTS:--XX:+UseZGC,-XX:ZCollectionInterval=$GC_COLLECTION_INTERVAL,-XX:ZTargetConcMarkingTime=$GC_TARGET_MARK_TIME,-XX:InitialTenuringThreshold=1,-XX:MaxTenuringThreshold=1,-XX:+UnlockDiagnosticVMOptions,-Xms$HEAP_SIZE,-Xmx$HEAP_SIZE}"
 
 # Colors
 RED='\033[0;31m'

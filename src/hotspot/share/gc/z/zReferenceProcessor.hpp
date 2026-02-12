@@ -54,7 +54,7 @@ private:
   ZPerWorker<zaddress> _discovered_list;
   ZContended<zaddress> _pending_list;
   zaddress             _pending_list_tail;
-  ZPerWorker<ZAddressArray> _discovered_weak_refs_without_queue;
+  ZPerWorker<ZAddressArray> _discovered_array;
   ZPerWorker<bool>     _array_empty;
   OopHandle            _null_queue_handle;
 
@@ -70,7 +70,7 @@ private:
   void verify_empty() const;
 
   void process_worker_discovered_list(zaddress discovered_list);
-  void process_worker_discovered_weak_refs_without_queue(ZAddressArray& weak_refs_without_queue);
+  void process_worker_discovered_array(ZAddressArray& discovered_array);
   void work();
   void collect_statistics();
 

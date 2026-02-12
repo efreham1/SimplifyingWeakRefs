@@ -1,6 +1,17 @@
 #!/bin/bash
 
-# Benchmark script for Custom JDK with Poll mode (Scan-based cleanup, no ReferenceQueue)
+# Benchmark script for Custom JDK with Queue mode (Scan-based cleanup, no ReferenceQueue)
+#
+# Control GC frequency with environment variables:
+#   GC_COLLECTION_INTERVAL=<ms>     Collection interval for ZGC (default: 5000ms)
+#   GC_TARGET_MARK_TIME=<seconds>   Target concurrent marking time (default: 10s)
+#   HEAP_SIZE=<size>                Heap size, e.g., 1g, 2g (default: 2g)
+#
+# Example - Force very frequent collections (every 2 seconds):
+#   GC_COLLECTION_INTERVAL=2000 GC_TARGET_MARK_TIME=5 HEAP_SIZE=1g ./run_caffeine_weakref_benchmark.sh
+#
+# Example - More aggressive GC to trigger reference processing:
+#   GC_COLLECTION_INTERVAL=1000 GC_TARGET_MARK_TIME=5 HEAP_SIZE=512m ./run_caffeine_weakref_benchmark.sh
 
 set -e
 
@@ -12,6 +23,14 @@ RESULTS_DIR="${SCRIPT_DIR}/benchmark_results"
 # Benchmark environment settings
 CPU_CORES="${CPU_CORES:-0-11}"          # CPU cores to pin to (override with CPU_CORES env var)
 COOLDOWN_SECONDS="${COOLDOWN_SECONDS:-10}"  # Seconds to wait between benchmarks
+
+# GC Collection Frequency Settings
+# For more frequent collections, especially major GCs that trigger reference processing:
+# - ZCollectionInterval: Time between collections (ms). Lower = more frequent. Default: unlimited
+# - Heap size: Smaller heap triggers more GCs due to memory pressure
+# - ZTargetConcMarkingTime: Target time for concurrent marking (lower = more aggressive)
+GC_COLLECTION_INTERVAL="${GC_COLLECTION_INTERVAL:-100}"  # 0.1 seconds - force collection every 0.1s
+HEAP_SIZE="${HEAP_SIZE:-4g}"                              # Heap size - smaller = more frequent GCs
 
 # Colors for output
 RED='\033[0;31m'
@@ -160,6 +179,8 @@ run_benchmark() {
     echo "  JDK: $jdk_path"
     echo "  Mode: -Dcaffeine.referenceCleanup=$mode"
     echo "  GrowableArray: $growable_array_flag"
+    echo "  GC Collection Interval: ${GC_COLLECTION_INTERVAL}ms"
+    echo "  Heap Size: $HEAP_SIZE"
     echo "  Benchmark: $benchmark_pattern"
     echo "  CPU cores: $CPU_CORES"
     echo ""
@@ -169,7 +190,7 @@ run_benchmark() {
         ./gradlew jmh -PjavaVersion=27 \
             "-Porg.gradle.java.installations.paths=$jdk_path" \
             -PincludePattern="$benchmark_pattern" \
-            "-PjvmArgs=-XX:+UseZGC,-XX:+UnlockDiagnosticVMOptions,$growable_array_flag,-Dcaffeine.referenceCleanup=$mode" \
+            "-PjvmArgs=-Xlog:gc+ref,-XX:+UseZGC,-XX:ZCollectionInterval=$GC_COLLECTION_INTERVAL,-XX:InitialTenuringThreshold=1,-XX:MaxTenuringThreshold=1,-XX:+UnlockDiagnosticVMOptions,$growable_array_flag,-Xms$HEAP_SIZE,-Xmx$HEAP_SIZE,-Dcaffeine.referenceCleanup=$mode" \
             --rerun -q 2>&1 | tee "$output_file"
     
     print_success "Completed: $jdk_name + $mode mode + $growable_array_display + $benchmark_pattern"
@@ -179,18 +200,14 @@ run_benchmark() {
 # Function to extract all main benchmark results (not sub-benchmarks)
 extract_main_results() {
     local file="$1"
-    grep -E "^(GetPutWeakRefBenchmark|ComputeWeakRefBenchmark|PutRemoveWeakRefBenchmark|EvictionWeakRefBenchmark|TimerWheelBenchmark)\." "$file" || true
+    grep -E "^(ExtremeWeakKeysBenchmark)\." "$file" || true
 }
 
-print_header "CAFFEINE BENCHMARK SUITE - POLL MODE ONLY"
-echo "Testing Custom JDK with Poll mode (Scan-based cleanup, no ReferenceQueue)"
+print_header "CAFFEINE BENCHMARK SUITE - QUEUE MODE ONLY"
+echo "Testing Custom JDK with Queue mode (Scan-based cleanup, no ReferenceQueue)"
 echo ""
 echo "Benchmarks to run:"
-echo "  • GetPutWeakRefBenchmark - Basic get/put operations with weak references"
-echo "  • ComputeWeakRefBenchmark - computeIfAbsent with weak references"
-echo "  • PutRemoveWeakRefBenchmark - High churn put/remove operations with weak references"
-echo "  • EvictionWeakRefBenchmark - 100% eviction rate with weak references"
-echo "  • TimerWheelBenchmark - Time-based expiration"
+echo "  • ExtremeWeakKeysBenchmark - High churn put/remove operations with weak references"
 echo ""
 echo "Custom JDK:   $CUSTOM_JDK"
 echo ""
@@ -209,49 +226,45 @@ trap restore_cpu_governor EXIT
 
 # List of benchmarks to run
 BENCHMARKS=(
-    "GetPutWeakRefBenchmark"
-    "ComputeWeakRefBenchmark"
-    "PutRemoveWeakRefBenchmark"
-    "EvictionWeakRefBenchmark"
-    "TimerWheelBenchmark"
+    "ExtremeWeakKeysBenchmark"
 )
 
-# Run all benchmarks in poll mode with both GrowableArray settings
+# Run all benchmarks in queue mode with both GrowableArray settings
 BENCHMARK_PATTERN=$(IFS='|'; echo "${BENCHMARKS[*]}")
 
-print_header "1/2: Custom JDK + Poll Mode + GrowableArray ON (All Benchmarks)"
-run_benchmark "$CUSTOM_JDK" "Custom JDK" "poll" "$BENCHMARK_PATTERN" "${RESULTS_DIR}/custom_poll_growable_on.txt" "enabled"
+print_header "1/2: Custom JDK + Queue Mode + GrowableArray ON (All Benchmarks)"
+run_benchmark "$CUSTOM_JDK" "Custom JDK" "queue" "$BENCHMARK_PATTERN" "${RESULTS_DIR}/custom_queue_growable_on.txt" "enabled"
 
-print_header "2/2: Custom JDK + Poll Mode + GrowableArray OFF (All Benchmarks)"
-run_benchmark "$CUSTOM_JDK" "Custom JDK" "poll" "$BENCHMARK_PATTERN" "${RESULTS_DIR}/custom_poll_growable_off.txt" "disabled"
+print_header "2/2: Custom JDK + Queue Mode + GrowableArray OFF (All Benchmarks)"
+run_benchmark "$CUSTOM_JDK" "Custom JDK" "queue" "$BENCHMARK_PATTERN" "${RESULTS_DIR}/custom_queue_growable_off.txt" "disabled"
 
 # Generate summary report
 print_header "BENCHMARK RESULTS"
 
-echo -e "${BOLD}Caffeine Cache Performance - Poll Mode (ops/s - higher is better)${NC}"
+echo -e "${BOLD}Caffeine Cache Performance - Queue Mode (ops/s - higher is better)${NC}"
 echo ""
 
-if [ -f "${RESULTS_DIR}/custom_poll_growable_on.txt" ]; then
-    echo -e "${CYAN}Custom JDK + Poll Mode + GrowableArray ON${NC}"
+if [ -f "${RESULTS_DIR}/custom_queue_growable_on.txt" ]; then
+    echo -e "${CYAN}Custom JDK + Queue Mode + GrowableArray ON${NC}"
     echo "────────────────────────────────────────────────────────────────────────"
-    extract_main_results "${RESULTS_DIR}/custom_poll_growable_on.txt" | while read line; do
+    extract_main_results "${RESULTS_DIR}/custom_queue_growable_on.txt" | while read line; do
         bench=$(echo "$line" | awk '{print $1}')
         cache=$(echo "$line" | awk '{print $2}')
-        score=$(echo "$line" | awk '{printf "%.2fM", $5/1000000}')
-        error=$(echo "$line" | awk '{printf "±%.2fM", $7/1000000}')
+        score=$(echo "$line" | awk '{printf "%.2fM", $4/1000000}')
+        error=$(echo "$line" | awk '{printf "±%.2fM", $6/1000000}')
         printf "  %-50s %-15s %12s %12s ops/s\n" "$bench" "$cache" "$score" "$error"
     done
     echo ""
 fi
 
-if [ -f "${RESULTS_DIR}/custom_poll_growable_off.txt" ]; then
-    echo -e "${CYAN}Custom JDK + Poll Mode + GrowableArray OFF${NC}"
+if [ -f "${RESULTS_DIR}/custom_queue_growable_off.txt" ]; then
+    echo -e "${CYAN}Custom JDK + Queue Mode + GrowableArray OFF${NC}"
     echo "────────────────────────────────────────────────────────────────────────"
-    extract_main_results "${RESULTS_DIR}/custom_poll_growable_off.txt" | while read line; do
+    extract_main_results "${RESULTS_DIR}/custom_queue_growable_off.txt" | while read line; do
         bench=$(echo "$line" | awk '{print $1}')
         cache=$(echo "$line" | awk '{print $2}')
-        score=$(echo "$line" | awk '{printf "%.2fM", $5/1000000}')
-        error=$(echo "$line" | awk '{printf "±%.2fM", $7/1000000}')
+        score=$(echo "$line" | awk '{printf "%.2fM", $4/1000000}')
+        error=$(echo "$line" | awk '{printf "±%.2fM", $6/1000000}')
         printf "  %-50s %-15s %12s %12s ops/s\n" "$bench" "$cache" "$score" "$error"
     done
     echo ""
@@ -259,10 +272,10 @@ fi
 
 print_header "BENCHMARK COMPLETE"
 echo "Raw results saved to:"
-echo "  ${RESULTS_DIR}/custom_poll_growable_on.txt"
-echo "  ${RESULTS_DIR}/custom_poll_growable_off.txt"
+echo "  ${RESULTS_DIR}/custom_queue_growable_on.txt"
+echo "  ${RESULTS_DIR}/custom_queue_growable_off.txt"
 echo ""
 echo "Tested configurations:"
-echo "  • Poll mode + GrowableArray ON"
-echo "  • Poll mode + GrowableArray OFF"
+echo "  • Queue mode + GrowableArray ON"
+echo "  • Queue mode + GrowableArray OFF"
 echo ""
