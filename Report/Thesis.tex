@@ -1,0 +1,203 @@
+% Uppsala University Thesis Template
+% Adapted for Master's Thesis in Computer Science
+% Original template for Doctoral Theses
+% Ver 5.2 - 2012-08-08                  
+%                                         
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+\documentclass{UUThesisTemplate}
+
+% Package to determine wether XeTeX is used
+\usepackage{ifxetex}
+
+\ifxetex
+	% XeTeX specific packages and settings
+	% Language, diacritics and hyphenation
+	\usepackage[babelshorthands]{polyglossia}
+	\setmainlanguage{english}
+	\setotherlanguages{swedish}
+
+	% Font settings with fontspec for proper shape support
+	\usepackage{fontspec}
+	\setmainfont{texgyretermes}[
+		Extension=.otf,
+		UprightFont=*-regular,
+		BoldFont=*-bold,
+		ItalicFont=*-italic,
+		BoldItalicFont=*-bolditalic
+	]
+	\setsansfont{texgyreheros}[
+		Extension=.otf,
+		UprightFont=*-regular,
+		BoldFont=*-bold,
+		ItalicFont=*-italic,
+		BoldItalicFont=*-bolditalic
+	]
+	\setmonofont{texgyrecursor}[
+		Extension=.otf,
+		UprightFont=*-regular,
+		BoldFont=*-bold,
+		ItalicFont=*-italic,
+		BoldItalicFont=*-bolditalic
+	]
+\else
+	% Plain LaTeX specific packages and settings
+	% Language, diacritics and hyphenation
+	\usepackage[swedish,english]{babel}
+
+	% Font settings (UTF-8 is now standard, not latin1)
+	\usepackage{type1cm}
+	\usepackage[utf8]{inputenc}
+	\usepackage[T1]{fontenc}
+	\usepackage{mathptmx}
+	
+	% Enable scaling of images on import
+	\usepackage{graphicx}
+\fi
+
+% Graphics path for figures
+\graphicspath{{figures/}{images/}}
+
+% Code listings for Java/C++ code (essential for CS thesis)
+\usepackage{listings}
+\usepackage{xcolor}
+
+% Configure listings for Java code
+\lstset{
+	basicstyle=\ttfamily\small,
+	keywordstyle=\color{blue}\bfseries,
+	commentstyle=\color{gray}\itshape,
+	stringstyle=\color{red},
+	numbers=left,
+	numberstyle=\tiny\color{gray},
+	stepnumber=1,
+	numbersep=8pt,
+	backgroundcolor=\color{white},
+	showspaces=false,
+	showstringspaces=false,
+	showtabs=false,
+	frame=single,
+	tabsize=4,
+	captionpos=b,
+	breaklines=true,
+	breakatwhitespace=false,
+	escapeinside={(*@}{@*)},
+	language=Java
+}
+
+% URL handling
+\usepackage{url}
+\urlstyle{same}
+
+
+% Tables
+\usepackage{booktabs}
+\usepackage{tabularx}
+
+% Document links and bookmarks (modern configuration)
+\usepackage{hyperref}
+\hypersetup{
+	colorlinks=true,
+	linkcolor=black,
+	citecolor=blue,
+	urlcolor=blue,
+	pdftitle={Optimizing Weak Reference Processing in the JVM Z Garbage Collector},
+	pdfauthor={Fredrik Hammarberg},
+	pdfsubject={Master's Thesis in Computer Science},
+	pdfkeywords={Java, JVM, Garbage Collection, ZGC, Weak References, Performance Optimization}
+} 
+
+% Better cross-referencing (must be loaded AFTER hyperref)
+\usepackage{cleveref}
+
+% Numbering of headings down to the subsection level
+\numberingdepth{subsection}
+
+% Including headings down to the subsection level in contents
+\contentsdepth{subsection}
+
+
+% Define thesis metadata
+\title{Optimizing Weak Reference Processing in the JVM Z Garbage Collector}
+\subtitle{A Performance Analysis and Optimization of the ZGC Reference Processing Pipeline}
+\author{Fredrik Hammarberg}
+\authorshort{Hammarberg, F.}
+\date{June 2026}
+\titlepagelogo{UU_logo_sv_42.eps}
+\publisher{Uppsala University}
+\series{Master's Thesis in Computer Science}
+\address{Department of Information Technology\\Uppsala University\\Uppsala, Sweden}
+
+% Abstract
+\abstractdummy{
+	\begin{abstract}
+        PLACEHOLDER
+    \end{abstract}
+}
+
+
+\begin{document}
+\frontmatter
+    % Creates the front matter (title page(s), abstract, list of papers)
+    % frontmatterCS = Comprehensive Summary (no half-title, good for Master's)
+    % frontmatterMonograph = Monograph (includes half-title, typically for PhD)
+    \frontmatterCS 
+    
+    % Dedication (optional)
+    %\cleardoublepage
+    %\vspace*{\fill}
+    %\begin{center}
+    %    \textit{To...}
+    %\end{center}
+    %\vspace*{\fill}
+    
+    % Acknowledgments
+    \chapter*{Acknowledgments}
+    \addcontentsline{toc}{chapter}{Acknowledgments}
+    
+    I would like to express my sincere gratitude to my supervisor for their guidance and support throughout this thesis work. Their expertise in JVM internals and garbage collection algorithms has been invaluable in shaping this research.
+    
+    Special thanks to the Department of Information Technology at Uppsala University for providing the resources and environment necessary to conduct this research.
+    
+    Finally, I would like to thank my family and friends for their patience and encouragement throughout my studies.
+    
+    \vspace{1cm}
+    
+    Uppsala, Sweden, June 2026
+    
+    \vspace{0.5cm}
+    
+    Fredrik Hammarberg
+    
+    % Table of contents
+    \begingroup
+        \tableofcontents
+    \endgroup
+    
+    % Lists of figures and tables (uncomment when you have them)
+    %\listoffigures
+    %\listoftabl
+    
+    % Lists of tables and figures
+    \listoftables
+    \listoffigures
+
+\mainmatter
+    % Main thesis chapters
+    \input{Introduction}
+    \input{Background}
+    \input{Method}
+    \input{Results}
+    \input{Discussion}
+    \input{Conclusion}
+
+
+\backmatter
+    % References
+    % Using ieeetr style (modern, suitable for CS)
+    % Alternative: alpha, abbrv, or acm
+    \bibliographystyle{ieeetr}
+    \bibliography{References}
+
+\end{document}
