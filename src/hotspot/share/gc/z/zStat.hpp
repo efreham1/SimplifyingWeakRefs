@@ -571,13 +571,14 @@ private:
     size_t encountered;
     size_t discovered;
     size_t enqueued;
-  } _soft, _weak, _final, _phantom;
+  } _soft, _weak, _weak_no_queue, _final, _phantom;
 
   static void set(ZCount* count, size_t encountered, size_t discovered, size_t enqueued);
 
 public:
   static void set_soft(size_t encountered, size_t discovered, size_t enqueued);
   static void set_weak(size_t encountered, size_t discovered, size_t enqueued);
+  static void set_weak_no_queue(size_t encountered, size_t discovered, size_t enqueued);
   static void set_final(size_t encountered, size_t discovered, size_t enqueued);
   static void set_phantom(size_t encountered, size_t discovered, size_t enqueued);
 
