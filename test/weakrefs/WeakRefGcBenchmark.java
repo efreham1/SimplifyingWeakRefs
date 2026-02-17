@@ -1,4 +1,3 @@
-import java.lang.ref.Reference;
 import java.lang.ref.ReferenceQueue;
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
@@ -8,13 +7,12 @@ import java.util.concurrent.TimeUnit;
 
 public final class WeakRefGcBenchmark {
 
-    private static final int DEFAULT_OBJECT_COUNT = 2_000_000;
-    private static final int DEFAULT_MIN_SIZE = 256;
-    private static final int DEFAULT_MAX_SIZE = 4 * 1024;
-    private static final int DEFAULT_STRONG_HOLD_MILLIS = 250;
-    private static final int DEFAULT_QUEUE_WAIT_MILLIS = 5_000;
-    private static final int DEFAULT_WEAK_REF_PADDING_BYTES = 1_024;
-    private static final int DEFAULT_ITERATIONS = 10;
+    private static final int DEFAULT_OBJECT_COUNT = 2287*2293;
+    private static final int DEFAULT_MIN_SIZE = 67;
+    private static final int DEFAULT_MAX_SIZE = 509;
+    private static final int DEFAULT_STRONG_HOLD_MILLIS = 1500;
+    private static final int DEFAULT_WEAK_REF_PADDING_BYTES = 521;
+    private static final int DEFAULT_ITERATIONS = 1;    
 
     private static final class BigObject {
         final int id;
@@ -77,62 +75,144 @@ public final class WeakRefGcBenchmark {
 
         for (int iter = 0; iter < iterations; iter++) {
             runIteration(iter, objectCount, minSize, maxSize, holdMillis, weakRefPaddingBytes);
+            System.out.println("Cooling down for 5 seconds...");
+            Thread.sleep(TimeUnit.SECONDS.toMillis(5));
         }
     }
 
+    @SuppressWarnings("unchecked")
     private static void runIteration(int iter, int objectCount, int minSize, int maxSize, 
                                        int holdMillis, int weakRefPaddingBytes) 
             throws InterruptedException {
         System.out.printf("%n=== Iteration %d ===%n", iter + 1);
-        List<WeakReference<BigObject>> weakRefs = new ArrayList<>(objectCount);
-        BigObject strongRef;
+        
+        // Arrays to hold strong and weak references
+        BigObject[] strongRefs = new BigObject[objectCount];
+        WeakReference<BigObject>[] weakRefs = new WeakReference[objectCount];
         ReferenceQueue<BigObject> queue = new ReferenceQueue<>();
-        List<byte[]> weakRefPadding = weakRefPaddingBytes > 0 ? new ArrayList<>(objectCount) : null;
-        int queuedRefTarget = objectCount;
+        List<byte[]> strongPadding = new ArrayList<>(objectCount);
+        List<byte[]> weakPadding = new ArrayList<>(objectCount);
         Random random = new Random(0x5eedcafeL + iter);
 
+        // Phase 1: Allocate strong refs to BigObjects in random order with padding
+        System.out.println("Phase 1: Allocating strong references...");
         long allocationStart = System.nanoTime();
         long totalAllocatedBytes = 0;
-        for (int i = 0; i < objectCount; i++) {
+        
+        int[] strongOrder = shuffledIndices(objectCount, random);
+        for (int idx : strongOrder) {
             int size = randomSize(random, minSize, maxSize);
             totalAllocatedBytes += size;
-            strongRef = new BigObject(i, size); // Hold a strong reference to the most recently allocated object
-            WeakReference<BigObject> ref = (i < queuedRefTarget)
-                    ? new WeakReference<>(strongRef, queue)
-                    : new WeakReference<>(strongRef);
-            weakRefs.add(ref);
-            if (weakRefPadding != null) {
+            strongRefs[idx] = new BigObject(idx, size);
+            
+            // Allocate padding between strong ref allocations
+            if (weakRefPaddingBytes > 0) {
                 int pad = weakRefPaddingBytes == 1
                         ? 1
                         : Math.max(1, weakRefPaddingBytes + random.nextInt(weakRefPaddingBytes));
-                weakRefPadding.add(new byte[pad]);
+                strongPadding.add(new byte[pad]);
             }
         }
-        long allocationDuration = System.nanoTime() - allocationStart;
-
+        
+        long strongAllocDuration = System.nanoTime() - allocationStart;
         double allocatedMiB = totalAllocatedBytes / (1024.0 * 1024.0);
-        System.out.printf("Allocated %.1f MiB in %.3f s%n", allocatedMiB,
-                allocationDuration / 1_000_000_000.0);
+        System.out.printf("Allocated %d strong refs (%.1f MiB) in %.3f s%n", 
+                objectCount, allocatedMiB, strongAllocDuration / 1_000_000_000.0);
 
-        for (int i = 0; i < objectCount/10; i++) {
-            int size = randomSize(random, minSize, maxSize);
-            strongRef = new BigObject(-1, size); // Allocate some additional objects to increase GC pressure
+        for (int i = 0; i < objectCount; i++) {
+            strongRefs[i].payload[0] = (byte) (strongRefs[i].id & 0xFF);
         }
 
+        // Phase 2: Allocate weak refs in random order with padding, pointing to unique BigObjects
+        System.out.println("Phase 2: Allocating weak references...");
+        long weakAllocStart = System.nanoTime();
+        
+        int[] weakOrder = shuffledIndices(objectCount, random);
+        int[] targetMapping = shuffledIndices(objectCount, random); // Map weak refs to unique strong refs
+        int queuedRefCount = objectCount / 20; // 5% of weak refs get a queue
+        
+        for (int i = 0; i < objectCount; i++) {
+            int weakIdx = weakOrder[i];
+            int targetIdx = targetMapping[i];
+            BigObject target = strongRefs[targetIdx];
+            
+            // 5% of weak refs use the reference queue
+            if (i < queuedRefCount) {
+                weakRefs[weakIdx] = new WeakReference<>(target, queue);
+            } else {
+                weakRefs[weakIdx] = new WeakReference<>(target);
+            }
+            
+            // Allocate padding between weak ref allocations
+            if (weakRefPaddingBytes > 0) {
+                int pad = weakRefPaddingBytes == 1
+                        ? 1
+                        : Math.max(1, weakRefPaddingBytes + random.nextInt(weakRefPaddingBytes));
+                weakPadding.add(new byte[pad]);
+            }
+        }
+        
+        long weakAllocDuration = System.nanoTime() - weakAllocStart;
+        System.out.printf("Allocated %d weak refs (%d with queue) in %.3f s%n", 
+                objectCount, queuedRefCount, weakAllocDuration / 1_000_000_000.0);
+
+        // Phase 3: Hold everything still for a couple of seconds
+        System.out.printf("Phase 3: Holding still for %d ms...%n", holdMillis);
         if (holdMillis > 0) {
             Thread.sleep(holdMillis);
         }
-        if (weakRefPadding != null) {
-            weakRefPadding.clear();
+        
+        // Phase 4+: Repeatedly clear half of remaining strong refs until all are gone
+        int phaseNum = 4;
+        int remainingRefs = objectCount;
+
+        int [] clearOrder = shuffledIndices(objectCount, random);
+        
+        for (int j = 0 ; j < 11; j++) {
+            // Count and clear half of remaining strong refs
+            System.out.printf("Phase %d: Clearing half of remaining strong references...%n", phaseNum);
+            int toClear = Math.max((int)Math.ceil(2287*2293/1024), (int)Math.ceil(remainingRefs / 2));
+            int clearedThisRound = 0;
+            int i = 0;
+            for (; i < objectCount && clearedThisRound < toClear; i++) {
+                int idx = clearOrder[i];
+                if (strongRefs[idx] != null) {
+                    strongRefs[idx] = null;
+                    clearedThisRound++;
+                }
+            }
+            for (; i < objectCount; i++) {
+                int idx = clearOrder[i];
+                strongRefs[idx].payload[0] = (byte) (strongRefs[idx].id & 0xFF);
+            }
+            
+            remainingRefs -= clearedThisRound;
+            System.out.printf("Cleared %d strong references, %d remaining%n", clearedThisRound, remainingRefs);
+            phaseNum++;
+            
+            // Wait
+            System.out.printf("Phase %d: Waiting %d ms...%n", phaseNum, holdMillis);
+            if (holdMillis > 0) {
+                Thread.sleep(holdMillis);
+            }
+            phaseNum++;
+            
+            // Empty the queue and count alive weak refs
+            System.out.printf("Phase %d: Emptying queue and counting alive weak refs...%n", phaseNum);
+            int queuedCount = 0;
+            while (queue.poll() != null) {
+                queuedCount++;
+            }
+            System.out.printf("Emptied %d weak references from the queue%n", queuedCount);
+            
+            phaseNum++;
         }
-        System.out.println("Cleared strong references and padding arrays");
-        int clearedCount = 0;
-        while (queue.poll() != null) {
-            clearedCount++;
-        }
-        System.out.printf("Cleared %d weak references from the queue%n", clearedCount);
-        long stillAlive = countAlive(weakRefs);
-        System.out.printf("%d / %d objects still alive%n", stillAlive, objectCount);
+        
+        // Clear padding to allow GC
+        strongPadding.clear();
+        weakPadding.clear();
+        int aliveWeakRefs = AliveWeakRefs(weakRefs);
+        System.out.printf("Final count of alive weak references: %d%n", aliveWeakRefs);
     }
 
     private static int randomSize(Random random, int minSize, int maxSize) {
@@ -143,13 +223,28 @@ public final class WeakRefGcBenchmark {
         return minSize + random.nextInt(bound);
     }
 
-    private static long countAlive(List<WeakReference<BigObject>> weakRefs) {
-        long alive = 0;
+    private static int[] shuffledIndices(int count, Random random) {
+        int[] indices = new int[count];
+        for (int i = 0; i < count; i++) {
+            indices[i] = i;
+        }
+        // Fisher-Yates shuffle
+        for (int i = count - 1; i > 0; i--) {
+            int j = random.nextInt(i + 1);
+            int temp = indices[i];
+            indices[i] = indices[j];
+            indices[j] = temp;
+        }
+        return indices;
+    }
+
+    private static int AliveWeakRefs(WeakReference<BigObject>[] weakRefs) {
+        int aliveCount = 0;
         for (WeakReference<BigObject> ref : weakRefs) {
             if (ref.get() != null) {
-                alive++;
+                aliveCount++;
             }
         }
-        return alive;
+        return aliveCount;
     }
 }
