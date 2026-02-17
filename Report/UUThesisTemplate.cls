@@ -724,7 +724,7 @@
 		\small\par\otable}%
 		\g@addto@macro\endtable\endgroup%
 		\let\ofigure\figure%
-		\def \figure{\begingroup\captionsetup{labelfont=it,textfont=rm}\ofigure}%
+		\def \figure{\begingroup\captionsetup{labelfont=it,textfont=normalfont}\ofigure}%
 		\g@addto@macro\endfigure\endgroup%
 	}{}%
 %
@@ -1231,7 +1231,7 @@
 \providecommand{\abstractfoot}{}
 \providecommand{\abstractsection}{\vskip\baselineskip\noindent\textbf{Abstract}\par\noindent\ignorespaces}
 \providecommand{\abstractpreamble}{\clearpage\thispagestyle{empty}}
-\providecommand{\abstractfont}{\fontsize{9}{11}\fontshape{rm}\selectfont}
+\providecommand{\abstractfont}{\fontsize{9}{11}\fontshape{n}\selectfont}
 
 \newenvironment{abstract}{%
 	\abstractfont\abstractpreamble %
