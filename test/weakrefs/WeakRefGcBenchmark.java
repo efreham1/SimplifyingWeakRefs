@@ -10,9 +10,9 @@ public final class WeakRefGcBenchmark {
     private static final int DEFAULT_OBJECT_COUNT = 2287*2293;
     private static final int DEFAULT_MIN_SIZE = 67;
     private static final int DEFAULT_MAX_SIZE = 509;
-    private static final int DEFAULT_STRONG_HOLD_MILLIS = 1500;
+    private static final int DEFAULT_STRONG_HOLD_MILLIS = 3000;
     private static final int DEFAULT_WEAK_REF_PADDING_BYTES = 521;
-    private static final int DEFAULT_ITERATIONS = 1;    
+    private static final int DEFAULT_ITERATIONS = 2;    
 
     private static final class BigObject {
         final int id;
@@ -75,6 +75,7 @@ public final class WeakRefGcBenchmark {
 
         for (int iter = 0; iter < iterations; iter++) {
             runIteration(iter, objectCount, minSize, maxSize, holdMillis, weakRefPaddingBytes);
+            
             System.out.println("Cooling down for 5 seconds...");
             Thread.sleep(TimeUnit.SECONDS.toMillis(5));
         }
@@ -162,16 +163,18 @@ public final class WeakRefGcBenchmark {
             Thread.sleep(holdMillis);
         }
         
-        // Phase 4+: Repeatedly clear half of remaining strong refs until all are gone
-        int phaseNum = 4;
+        System.out.println("Phase 4: Starting to clear strong references in phases...");
+
+        // Phase 4-*: Repeatedly clear half of remaining strong refs until all are gone
+        int subPhase = 1;
         int remainingRefs = objectCount;
 
         int [] clearOrder = shuffledIndices(objectCount, random);
         
-        for (int j = 0 ; j < 11; j++) {
+        for (int j = 0 ; j < 5; j++) {
             // Count and clear half of remaining strong refs
-            System.out.printf("Phase %d: Clearing half of remaining strong references...%n", phaseNum);
-            int toClear = Math.max((int)Math.ceil(2287*2293/1024), (int)Math.ceil(remainingRefs / 2));
+            System.out.printf("Phase 4-%d: Clearing half of remaining strong references...%n", subPhase++);
+            int toClear = (int)Math.ceil(remainingRefs/5);
             int clearedThisRound = 0;
             int i = 0;
             for (; i < objectCount && clearedThisRound < toClear; i++) {
@@ -188,31 +191,28 @@ public final class WeakRefGcBenchmark {
             
             remainingRefs -= clearedThisRound;
             System.out.printf("Cleared %d strong references, %d remaining%n", clearedThisRound, remainingRefs);
-            phaseNum++;
             
             // Wait
-            System.out.printf("Phase %d: Waiting %d ms...%n", phaseNum, holdMillis);
+            System.out.printf("Waiting %d ms...%n", holdMillis);
             if (holdMillis > 0) {
                 Thread.sleep(holdMillis);
             }
-            phaseNum++;
-            
-            // Empty the queue and count alive weak refs
-            System.out.printf("Phase %d: Emptying queue and counting alive weak refs...%n", phaseNum);
-            int queuedCount = 0;
-            while (queue.poll() != null) {
-                queuedCount++;
-            }
-            System.out.printf("Emptied %d weak references from the queue%n", queuedCount);
-            
-            phaseNum++;
         }
+
+        System.out.printf("Phase 5: Final GC and weak reference check...%n");
         
         // Clear padding to allow GC
         strongPadding.clear();
         weakPadding.clear();
         int aliveWeakRefs = AliveWeakRefs(weakRefs);
         System.out.printf("Final count of alive weak references: %d%n", aliveWeakRefs);
+
+        // Empty the reference queue to see how many were enqueued
+        int queuedCount = 0;
+        while (queue.poll() != null) {
+            queuedCount++;
+        }
+        System.out.printf("References enqueued in ReferenceQueue: %d%n", queuedCount);
     }
 
     private static int randomSize(Random random, int minSize, int maxSize) {
