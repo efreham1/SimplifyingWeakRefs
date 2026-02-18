@@ -7,7 +7,7 @@ set -e
 # Default values
 JAVA_BIN="./build/linux-x86_64-server-release/jdk/bin/java"
 JCMD_BIN="./build/linux-x86_64-server-release/jdk/bin/jcmd"
-COMMON_JVM_OPTS="${COMMON_JVM_OPTS:--Xms10g -Xmx10g -XX:+UseZGC -Xlog:gc+stats,gc+ref -XX:InitialTenuringThreshold=1 -XX:MaxTenuringThreshold=1 -XX:ZCollectionIntervalMajor=0.5 -XX:+ZCollectionIntervalOnly -XX:+UnlockDiagnosticVMOptions -XX:NativeMemoryTracking=summary}"
+COMMON_JVM_OPTS="${COMMON_JVM_OPTS:--Xms8g -Xmx8g -XX:+UseZGC -Xlog:gc+stats,gc+ref -XX:InitialTenuringThreshold=1 -XX:MaxTenuringThreshold=1 -XX:ZCollectionIntervalMajor=0.5 -XX:+ZCollectionIntervalOnly -XX:+UnlockDiagnosticVMOptions -XX:NativeMemoryTracking=summary}"
 BENCHMARK_CLASS="test/weakrefs/WeakRefGcBenchmark.java"
 OUTER_ITERATIONS=10
 CPU_CORES="${CPU_CORES:-0-11}"

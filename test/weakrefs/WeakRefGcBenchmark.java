@@ -7,7 +7,7 @@ import java.util.concurrent.TimeUnit;
 
 public final class WeakRefGcBenchmark {
 
-    private static final int DEFAULT_OBJECT_COUNT = 9437179;
+    private static final int DEFAULT_OBJECT_COUNT = 7340009;
     private static final int DEFAULT_MIN_SIZE = 509;
     private static final int DEFAULT_MAX_SIZE = 1097;
     private static final int DEFAULT_STRONG_HOLD_MILLIS = 3000;

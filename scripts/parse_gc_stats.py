@@ -237,7 +237,7 @@ def plot_continuous_monitoring(on_data, off_data, on_monitor_files=None, off_mon
     """Plot continuous memory monitoring data over time."""
     
     if output_file is None:
-        output_file = f'output/continuous_memory_{run_id}.png'
+        output_file = f'images/continuous_memory_{run_id}.png'
     
     # Ensure output directory exists
     Path('output').mkdir(parents=True, exist_ok=True)
