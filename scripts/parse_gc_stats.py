@@ -335,8 +335,8 @@ def plot_continuous_monitoring(on_data, off_data, on_monitor_files=None, off_mon
     if output_file is None:
         output_file = f'images/continuous_memory_{run_id}.png'
     
-    # Ensure output directory exists
-    Path('output').mkdir(parents=True, exist_ok=True)
+    # Ensure images directory exists
+    Path('images').mkdir(parents=True, exist_ok=True)
     
     if not on_data and not off_data:
         print("No continuous monitoring data to plot")

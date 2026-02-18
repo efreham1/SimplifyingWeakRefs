@@ -346,7 +346,7 @@ echo -e "${BOLD}All benchmark logs saved to:${NC} $OUTPUT_DIR_TIMESTAMPED"
 echo ""
 echo -e "${BOLD}Growable Array ON runs:${NC}"
 for ((i=1; i<=RUN_COUNT; i++)); do
-    local file="${OUTPUT_DIR_TIMESTAMPED}/jython_ga_on_run${i}.log"
+    file="${OUTPUT_DIR_TIMESTAMPED}/jython_ga_on_run${i}.log"
     if [ -f "$file" ]; then
         echo "  Run $i: $file"
     fi
@@ -355,7 +355,7 @@ done
 echo ""
 echo -e "${BOLD}Growable Array OFF runs:${NC}"
 for ((i=1; i<=RUN_COUNT; i++)); do
-    local file="${OUTPUT_DIR_TIMESTAMPED}/jython_ga_off_run${i}.log"
+    file="${OUTPUT_DIR_TIMESTAMPED}/jython_ga_off_run${i}.log"
     if [ -f "$file" ]; then
         echo "  Run $i: $file"
     fi
