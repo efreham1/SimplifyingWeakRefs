@@ -9,10 +9,10 @@ JAVA_BIN="./build/linux-x86_64-server-release/jdk/bin/java"
 JCMD_BIN="./build/linux-x86_64-server-release/jdk/bin/jcmd"
 COMMON_JVM_OPTS="${COMMON_JVM_OPTS:--Xms10g -Xmx10g -XX:+UseZGC -Xlog:gc+stats,gc+ref -XX:InitialTenuringThreshold=1 -XX:MaxTenuringThreshold=1 -XX:ZCollectionIntervalMajor=0.5 -XX:+ZCollectionIntervalOnly -XX:+UnlockDiagnosticVMOptions -XX:NativeMemoryTracking=summary}"
 BENCHMARK_CLASS="test/weakrefs/WeakRefGcBenchmark.java"
-OUTER_ITERATIONS=2
+OUTER_ITERATIONS=10
 CPU_CORES="${CPU_CORES:-0-11}"
 MONITOR_CPU_CORES="${MONITOR_CPU_CORES:-12-19}"
-MONITOR_INTERVAL="${MONITOR_INTERVAL:-0.001}"  # 1ms interval for monitoring
+MONITOR_INTERVAL="${MONITOR_INTERVAL:-0.0001}"  # 100us interval for monitoring
 COOLDOWN_SECONDS="${COOLDOWN_SECONDS:-10}"
 MONITOR_SCRIPT="./scripts/monitor_memory.sh"
 RUN_ID=1  # Default ID for filenames
@@ -157,102 +157,108 @@ restore_cpu_governor() {
     fi
 }
 
-run_suite() {
+cleanup_old_results() {
+    print_step "Cleaning up old CSV and log files for Run ID $RUN_ID..."
+    
+    mkdir -p output
+    
+    # Remove old benchmark output files only for this run ID
+    rm -f output/run_ON_run*_${RUN_ID}.log output/run_OFF_run*_${RUN_ID}.log
+    rm -f output/monitor_ON_run*_${RUN_ID}.csv output/monitor_OFF_run*_${RUN_ID}.csv
+    
+    print_success "Old results cleaned up for Run ID $RUN_ID"
+}
+
+run_single() {
     local growable_flag=$1   # "+ZUseGrowableArrayDiscoveredList" or "-ZUseGrowableArrayDiscoveredList"
     local label=$2           # display label
+    local run=$3             # run number
+    local total_runs=$4      # total number of runs
 
-    print_header "GA $label"
-    print_step "Running $OUTER_ITERATIONS runs × 20 iterations"
+    # Create separate log and monitor files for each run with run number tag and execution ID
+    local log_file="output/run_${label}_run${run}_${RUN_ID}.log"
+    local monitor_log="output/monitor_${label}_run${run}_${RUN_ID}.csv"
+
+    printf "${CYAN}▶${NC} Run %d/%d (GA %s) - Starting...${NC}\r" "$run" "$total_runs" "$label"
     echo ""
+    echo "  Logging to: $log_file"
+    echo "  Memory monitoring to: $monitor_log"
+    
+    JAVA_OPTS="$COMMON_JVM_OPTS -XX:$growable_flag"
 
-    for ((run=1; run<=OUTER_ITERATIONS; run++)); do
-        # Create separate log and monitor files for each iteration with iteration number tag and run ID
-        local log_file="output/run_${label}_iter${run}_${RUN_ID}.log"
-        local monitor_log="output/monitor_${label}_iter${run}_${RUN_ID}.csv"
-
-        printf "${CYAN}▶${NC} Run %d/%d (GA %s) - Starting...${NC}\r" "$run" "$OUTER_ITERATIONS" "$label"
+    # Start Java process in background
+    (
         echo ""
-        echo "Logging to: $log_file"
-        echo "Memory monitoring to: $monitor_log"
-        
-        JAVA_OPTS="$COMMON_JVM_OPTS -XX:$growable_flag"
-
-        # Start Java process in background
-        (
-            echo ""
-            echo "=== RUN $run/$OUTER_ITERATIONS (GA $label) ==="
-            echo ""
-            taskset -c "$CPU_CORES" nice -n -5 \
-                $JAVA_BIN $JAVA_OPTS $BENCHMARK_CLASS 2>&1
-        ) >> "$log_file" 2>&1 &
-        
-        local wrapper_pid=$!
-        
-        # Wait a moment for Java to actually start and get its PID
-        sleep 1
-        local java_pid=$(pgrep -P $wrapper_pid java | head -1)
-        
-        if [ -z "$java_pid" ]; then
-            # Fallback: try to find the java process by other means
-            java_pid=$(ps -o pid= --ppid $wrapper_pid 2>/dev/null | head -1 | tr -d ' ')
+        echo "=== RUN $run/$total_runs (GA $label) ==="
+        echo ""
+        taskset -c "$CPU_CORES" nice -n -5 \
+            $JAVA_BIN $JAVA_OPTS $BENCHMARK_CLASS 2>&1
+    ) >> "$log_file" 2>&1 &
+    
+    local wrapper_pid=$!
+    
+    # Wait a moment for Java to actually start and get its PID
+    sleep 1
+    local java_pid=$(pgrep -P $wrapper_pid java | head -1)
+    
+    if [ -z "$java_pid" ]; then
+        # Fallback: try to find the java process by other means
+        java_pid=$(ps -o pid= --ppid $wrapper_pid 2>/dev/null | head -1 | tr -d ' ')
+    fi
+    
+    # Start memory monitor on dedicated cores if we got the PID
+    local monitor_pid=""
+    if [ -n "$java_pid" ] && kill -0 $java_pid 2>/dev/null; then
+        taskset -c "$MONITOR_CPU_CORES" nice -n 5 \
+            $MONITOR_SCRIPT "$java_pid" "$monitor_log" "$MONITOR_INTERVAL" "$JCMD_BIN" "$log_file" &
+        monitor_pid=$!
+        printf "${CYAN}▶${NC} Run %d/%d (GA %s) - Memory monitor started (PID: %s -> %s on cores %s)\r" \
+            "$run" "$total_runs" "$label" "$java_pid" "$monitor_pid" "$MONITOR_CPU_CORES"
+        sleep 0.5
+    fi
+    
+    # Monitor progress while Java is running
+    local last_phase=""
+    local last_iteration=""
+    while kill -0 $wrapper_pid 2>/dev/null; do
+        # Extract latest iteration and phase from log
+        if [ -f "$log_file" ]; then
+            last_iteration=$(grep -oP '=== Iteration \K\d+' "$log_file" | tail -1)
+            # Capture phases like 'Phase 1' or 'Phase 4-1' and extract the numeric token
+            last_phase=$(grep -oP 'Phase\s+\d+(?:-\d+)?' "$log_file" | tail -1 | awk '{print $2}')
         fi
         
-        # Start memory monitor on dedicated cores if we got the PID
-        local monitor_pid=""
-        if [ -n "$java_pid" ] && kill -0 $java_pid 2>/dev/null; then
-            taskset -c "$MONITOR_CPU_CORES" nice -n 5 \
-                $MONITOR_SCRIPT "$java_pid" "$monitor_log" "$MONITOR_INTERVAL" "$JCMD_BIN" "$log_file" &
-            monitor_pid=$!
-            printf "${CYAN}▶${NC} Run %d/%d (GA %s) - Memory monitor started (PID: %s -> %s on cores %s)\r" \
-                "$run" "$OUTER_ITERATIONS" "$label" "$java_pid" "$monitor_pid" "$MONITOR_CPU_CORES"
-            sleep 0.5
+        if [ -n "$last_iteration" ] && [ -n "$last_phase" ]; then
+            printf "${CYAN}▶${NC} Run %d/%d (GA %s) - Iteration %s, Phase %s    \r" \
+                "$run" "$total_runs" "$label" "$last_iteration" "$last_phase"
+        elif [ -n "$last_iteration" ]; then
+            printf "${CYAN}▶${NC} Run %d/%d (GA %s) - Iteration %s          \r" \
+                "$run" "$total_runs" "$label" "$last_iteration"
         fi
         
-        # Monitor progress while Java is running
-        local last_phase=""
-        local last_iteration=""
-        while kill -0 $wrapper_pid 2>/dev/null; do
-            # Extract latest iteration and phase from log
-            if [ -f "$log_file" ]; then
-                last_iteration=$(grep -oP '=== Iteration \K\d+' "$log_file" | tail -1)
-                # Capture phases like 'Phase 1' or 'Phase 4-1' and extract the numeric token
-                last_phase=$(grep -oP 'Phase\s+\d+(?:-\d+)?' "$log_file" | tail -1 | awk '{print $2}')
-            fi
-            
-            if [ -n "$last_iteration" ] && [ -n "$last_phase" ]; then
-                printf "${CYAN}▶${NC} Run %d/%d (GA %s) - Iteration %s, Phase %s    \r" \
-                    "$run" "$OUTER_ITERATIONS" "$label" "$last_iteration" "$last_phase"
-            elif [ -n "$last_iteration" ]; then
-                printf "${CYAN}▶${NC} Run %d/%d (GA %s) - Iteration %s          \r" \
-                    "$run" "$OUTER_ITERATIONS" "$label" "$last_iteration"
-            fi
-            
-            sleep 0.5
-        done
-        
-        # Wait for process to complete
-        wait $wrapper_pid
-        local exit_code=$?
-        
-        # Monitor should stop automatically when Java exits, but ensure it's gone
-        if [ -n "$monitor_pid" ]; then
-            sleep 1
-            kill $monitor_pid 2>/dev/null || true
-        fi
-        
-        if [ $exit_code -eq 0 ]; then
-            printf "${GREEN}✓${NC} Run %d/%d (GA %s) - Completed successfully!          \n" \
-                "$run" "$OUTER_ITERATIONS" "$label"
-        else
-            printf "${RED}✗${NC} Run %d/%d (GA %s) - Failed with exit code %d\n" \
-                "$run" "$OUTER_ITERATIONS" "$label" "$exit_code"
-            return $exit_code
-        fi
+        sleep 0.5
     done
-
-    print_header "FINAL RESULTS (GA $label)"
-    echo "Run output files saved to output/run_${label}_iter*_*.log"
-    echo "Memory monitoring files saved to output/monitor_${label}_iter*_*.csv"
+    
+    # Wait for process to complete
+    wait $wrapper_pid
+    local exit_code=$?
+    
+    # Monitor should stop automatically when Java exits, but ensure it's gone
+    if [ -n "$monitor_pid" ]; then
+        sleep 1
+        kill $monitor_pid 2>/dev/null || true
+    fi
+    
+    if [ $exit_code -eq 0 ]; then
+        printf "${GREEN}✓${NC} Run %d/%d (GA %s) - Completed successfully!          \n" \
+            "$run" "$total_runs" "$label"
+        echo ""
+    else
+        printf "${RED}✗${NC} Run %d/%d (GA %s) - Failed with exit code %d\n" \
+            "$run" "$total_runs" "$label" "$exit_code"
+        echo ""
+        return $exit_code
+    fi
 
     return 0
 }
@@ -260,30 +266,48 @@ run_suite() {
 setup_cpu_performance
 trap restore_cpu_governor EXIT
 
-prepare_environment
+cleanup_old_results
 
-run_suite "+ZUseGrowableArrayDiscoveredList" "ON"
-ga_on_status=$?
+print_header "STARTING BENCHMARK SUITE"
+print_step "Alternating between GA OFF and GA ON runs"
+echo ""
 
-prepare_environment
+# Alternate between OFF and ON runs
+overall_status=0
+for ((run=1; run<=OUTER_ITERATIONS; run++)); do
+    # Run GA OFF first
+    print_header "Run $run/$OUTER_ITERATIONS - GA OFF"
+    prepare_environment
+    run_single "-ZUseGrowableArrayDiscoveredList" "OFF" "$run" "$OUTER_ITERATIONS"
+    if [ $? -ne 0 ]; then
+        overall_status=1
+        break
+    fi
+    
+    # Run GA ON second
+    print_header "Run $run/$OUTER_ITERATIONS - GA ON"
+    prepare_environment
+    run_single "+ZUseGrowableArrayDiscoveredList" "ON" "$run" "$OUTER_ITERATIONS"
+    if [ $? -ne 0 ]; then
+        overall_status=1
+        break
+    fi
+done
 
-run_suite "-ZUseGrowableArrayDiscoveredList" "OFF"
-ga_off_status=$?
-
-if [ $ga_on_status -ne 0 ] || [ $ga_off_status -ne 0 ]; then
+if [ $overall_status -ne 0 ]; then
+    print_header "BENCHMARK FAILED"
+    echo -e "${RED}One or more runs failed. Check the log files for details.${NC}"
     exit 1
 fi
 
 print_header "BENCHMARK COMPLETE"
-print_success "GA ON and GA OFF suites finished"
-
+echo -e "${BOLD}All benchmark runs completed successfully!${NC}"
 echo ""
-echo -e "${GREEN}Run output files have been saved:${NC}"
-echo "  - output/run_ON_iter*_*.log"
-echo "  - output/run_OFF_iter*_*.log"
-echo "  - output/monitor_ON_iter*_*.csv"
-echo "  - output/monitor_OFF_iter*_*.csv"
+echo -e "${GREEN}Output Summary:${NC}"
+echo "  • Benchmark logs:     output/run_{ON,OFF}_run*_${RUN_ID}.log"
+echo "  • Memory monitoring:  output/monitor_{ON,OFF}_run*_${RUN_ID}.csv"
 echo ""
-echo -e "${YELLOW}To analyze and compare continuous memory usage, run:${NC}"
-echo "  python3 scripts/parse_gc_stats.py"
+echo -e "${CYAN}Next Steps:${NC}"
+echo "  To analyze and compare results, run:"
+echo -e "  ${YELLOW}python3 scripts/parse_gc_stats.py${NC}"
 echo ""
