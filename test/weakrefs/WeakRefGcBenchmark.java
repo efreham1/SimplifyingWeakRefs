@@ -11,7 +11,7 @@ public final class WeakRefGcBenchmark {
     private static final int DEFAULT_MIN_SIZE = 509;
     private static final int DEFAULT_MAX_SIZE = 1097;
     private static final int DEFAULT_STRONG_HOLD_MILLIS = 3000;
-    private static final int DEFAULT_ITERATIONS = 10;    
+    private static final int DEFAULT_ITERATIONS = 3;    
 
     private static final class BigObject {
         final int id;

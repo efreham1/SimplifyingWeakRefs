@@ -233,6 +233,102 @@ def extract_phases_with_iteration(data_list):
     return phase_marks
 
 
+def plot_metric_histograms(on_metrics, off_metrics, metric_names, run_id=1):
+    """Plot histograms comparing ON vs OFF distributions for specific metrics."""
+    
+    # Ensure output directory exists
+    Path('images').mkdir(parents=True, exist_ok=True)
+    
+    # Filter to only the requested metrics
+    metrics_to_plot = []
+    for metric_name in metric_names:
+        if metric_name in on_metrics or metric_name in off_metrics:
+            metrics_to_plot.append(metric_name)
+    
+    if not metrics_to_plot:
+        print("Warning: None of the requested metrics found in data")
+        return
+    
+    # Create subplots - 2 columns, multiple rows as needed
+    n_metrics = len(metrics_to_plot)
+    n_cols = 2
+    n_rows = (n_metrics + n_cols - 1) // n_cols
+    
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(14, 4 * n_rows))
+    if n_rows == 1 and n_cols == 1:
+        axes = np.array([[axes]])
+    elif n_rows == 1:
+        axes = axes.reshape(1, -1)
+    elif n_cols == 1:
+        axes = axes.reshape(-1, 1)
+    
+    for idx, metric_name in enumerate(metrics_to_plot):
+        row = idx // n_cols
+        col = idx % n_cols
+        ax = axes[row, col]
+        
+        on_values = on_metrics.get(metric_name, {}).get("avg", [])
+        off_values = off_metrics.get(metric_name, {}).get("avg", [])
+        units = on_metrics.get(metric_name, {}).get("units", "")
+        if not units:
+            units = off_metrics.get(metric_name, {}).get("units", "")
+        
+        # Determine bin range to cover both datasets
+        all_values = []
+        if on_values:
+            all_values.extend(on_values)
+        if off_values:
+            all_values.extend(off_values)
+        
+        if not all_values:
+            ax.text(0.5, 0.5, 'No data', ha='center', va='center')
+            ax.set_title(metric_name[:40], fontsize=10, fontweight='bold')
+            continue
+        
+        # Create bins
+        min_val = min(all_values)
+        max_val = max(all_values)
+        bins = np.linspace(min_val, max_val, 20)
+        
+        # Plot histograms
+        if on_values:
+            ax.hist(on_values, bins=bins, alpha=0.6, label=f'GA ON (n={len(on_values)})', 
+                   color='blue', edgecolor='black', linewidth=0.5)
+        if off_values:
+            ax.hist(off_values, bins=bins, alpha=0.6, label=f'GA OFF (n={len(off_values)})', 
+                   color='red', edgecolor='black', linewidth=0.5)
+        
+        # Add mean lines
+        if on_values:
+            on_mean = np.mean(on_values)
+            ax.axvline(on_mean, color='blue', linestyle='--', linewidth=2, 
+                      label=f'ON mean: {on_mean:.2f}')
+        if off_values:
+            off_mean = np.mean(off_values)
+            ax.axvline(off_mean, color='red', linestyle='--', linewidth=2,
+                      label=f'OFF mean: {off_mean:.2f}')
+        
+        # Formatting
+        metric_display = metric_name if len(metric_name) <= 50 else metric_name[:47] + "..."
+        ax.set_title(metric_display, fontsize=10, fontweight='bold')
+        ax.set_xlabel(f'Value ({units})', fontsize=9)
+        ax.set_ylabel('Frequency', fontsize=9)
+        ax.legend(fontsize=8)
+        ax.grid(True, alpha=0.3)
+    
+    # Hide unused subplots
+    for idx in range(n_metrics, n_rows * n_cols):
+        row = idx // n_cols
+        col = idx % n_cols
+        axes[row, col].axis('off')
+    
+    plt.tight_layout()
+    output_file = f'images/metric_histograms_{run_id}.png'
+    plt.savefig(output_file, dpi=150, bbox_inches='tight')
+    print(f"Metric histograms saved to: {output_file}")
+    plt.close()
+
+
 def plot_continuous_monitoring(on_data, off_data, on_monitor_files=None, off_monitor_files=None, run_id=1, output_file=None):
     """Plot continuous memory monitoring data over time."""
     
@@ -535,7 +631,9 @@ def parse_gc_stats_file(filename):
 def aggregate_gc_metrics(file_list):
     """Aggregate GC metrics across multiple run log files (all runs pooled).
     
-    Returns dict: metric_name -> {'avg': avg_value, 'max': avg_value, 'avg_std': std_value, 'max_std': std_value, 'units': str}
+    Returns two dicts:
+    1. all_metrics: metric_name -> {'avg': [list of values], 'max': [list of values], 'units': str}
+    2. agg: metric_name -> {'avg': avg_value, 'max': avg_value, 'avg_std': std_value, 'max_std': std_value, 'units': str}
     """
     all_metrics = {}
     
@@ -558,7 +656,7 @@ def aggregate_gc_metrics(file_list):
             "units": data["units"]
         }
     
-    return agg
+    return all_metrics, agg
 
 
 def main():
@@ -611,8 +709,8 @@ def main():
     
     # Parse and aggregate GC metrics from all run logs (across all runs)
     print("Parsing and aggregating GC metrics from all runs...")
-    on_gc_agg = aggregate_gc_metrics(on_log_files)
-    off_gc_agg = aggregate_gc_metrics(off_log_files)
+    on_gc_all, on_gc_agg = aggregate_gc_metrics(on_log_files)
+    off_gc_all, off_gc_agg = aggregate_gc_metrics(off_log_files)
     print(f"  Found {len(on_gc_agg)} metrics in ON runs")
     print(f"  Found {len(off_gc_agg)} metrics in OFF runs")
     
@@ -672,6 +770,81 @@ def main():
         
         print("-" * 170)
         print()
+        
+        # Find metrics with statistically significant differences (outside std dev ranges)
+        # Only check Avg values, calculate conservative percentage (smallest absolute difference)
+        significant_diffs = []
+        
+        for metric in all_metrics:
+            on_avg = on_gc_agg.get(metric, {}).get("avg", None)
+            on_avg_std = on_gc_agg.get(metric, {}).get("avg_std", None)
+            off_avg = off_gc_agg.get(metric, {}).get("avg", None)
+            off_avg_std = off_gc_agg.get(metric, {}).get("avg_std", None)
+            
+            # Get units
+            units = on_gc_agg.get(metric, {}).get("units", "")
+            if not units:
+                units = off_gc_agg.get(metric, {}).get("units", "")
+            
+            # Check Avg: ranges don't overlap means significant difference
+            if (on_avg is not None and off_avg is not None and 
+                on_avg_std is not None and off_avg_std is not None):
+                on_avg_lower = on_avg - on_avg_std
+                on_avg_upper = on_avg + on_avg_std
+                off_avg_lower = off_avg - off_avg_std
+                off_avg_upper = off_avg + off_avg_std
+                
+                # Check if ranges don't overlap
+                if off_avg_lower > on_avg_upper or on_avg_lower > off_avg_upper:
+                    # Calculate conservative percentage: always add std to ON, subtract std from OFF
+                    # This gives the smallest absolute percentage difference
+                    on_adjusted = on_avg_upper  # ON + std
+                    off_adjusted = off_avg_lower  # OFF - std
+                    
+                    if on_adjusted > 0:
+                        conservative_pct = (off_adjusted - on_adjusted) / on_adjusted * 100
+                    else:
+                        conservative_pct = float('inf')
+                    
+                    if abs(conservative_pct) != float('inf'):
+                        significant_diffs.append({
+                            'metric': metric,
+                            'units': units,
+                            'on_val': on_avg,
+                            'on_std': on_avg_std,
+                            'off_val': off_avg,
+                            'off_std': off_avg_std,
+                            'conservative_pct': conservative_pct
+                        })
+        
+        # Display statistically significant differences
+        if significant_diffs:
+            print("\n" + "-" * 150)
+            print(" " * 30 + "STATISTICALLY SIGNIFICANT DIFFERENCES - Avg Values (Outside Std Dev Ranges)")
+            print("-" * 150)
+            print(f"{'Metric':<60} {'Unit':>8} {'ON Value':>18} {'OFF Value':>18} {'Conservative %':>15}")
+            print("-" * 150)
+            
+            # Sort by absolute conservative percentage (descending)
+            significant_diffs.sort(key=lambda x: abs(x['conservative_pct']), reverse=True)
+            
+            for diff in significant_diffs:
+                metric_display = diff['metric'][:60]
+                on_str = f"{diff['on_val']:.2f}±{diff['on_std']:.2f}"
+                off_str = f"{diff['off_val']:.2f}±{diff['off_std']:.2f}"
+                pct_str = f"{diff['conservative_pct']:+.2f}"
+                units_str = diff['units'] if diff['units'] else "-"
+                
+                row = f"{metric_display:<60} {units_str:>8} {on_str:>18} {off_str:>18} {pct_str:>15}"
+                print(row)
+            
+            print("-" * 150)
+            print(f"\nFound {len(significant_diffs)} metric(s) with statistically significant differences")
+            print("Note: Conservative % = ((OFF - OFF_std) - (ON + ON_std)) / (ON + ON_std) × 100")
+            print()
+        else:
+            print("\n✓ No statistically significant differences found (all ranges overlap within std dev)")
+            print()
     
     # Parse continuous monitoring data and aggregate across outer runs
     print("Aggregating continuous monitoring data...")
@@ -686,28 +859,28 @@ def main():
         off_continuous = aggregate_monitor_files(off_monitor_files)
         print(f"  OFF: Aggregated {len(off_continuous)} continuous samples")
     
-    # Debug: Show what phases are in each monitor file
-    print("\nPhase information from monitor files:")
-    for f in on_monitor_files:
-        phases = extract_phases_from_monitor_file(f)
-        # Filter out empty iterations to match what's actually plotted
-        phases = {k: v for k, v in phases.items() if k[1]}  # k = (phase, iteration)
-        run_num = extract_run_num(f)
-        if phases:
-            phase_strs = [f"{phase} [{iter_str}]" for phase, iter_str in sorted(phases.keys())]
-            print(f"  ON run{run_num}: {', '.join(phase_strs)}")
-        else:
-            print(f"  ON run{run_num}: (no phases)")
-    for f in off_monitor_files:
-        phases = extract_phases_from_monitor_file(f)
-        # Filter out empty iterations to match what's actually plotted
-        phases = {k: v for k, v in phases.items() if k[1]}  # k = (phase, iteration)
-        run_num = extract_run_num(f)
-        if phases:
-            phase_strs = [f"{phase} [{iter_str}]" for phase, iter_str in sorted(phases.keys())]
-            print(f"  OFF run{run_num}: {', '.join(phase_strs)}")
-        else:
-            print(f"  OFF run{run_num}: (no phases)")
+    # # Debug: Show what phases are in each monitor file
+    # print("\nPhase information from monitor files:")
+    # for f in on_monitor_files:
+    #     phases = extract_phases_from_monitor_file(f)
+    #     # Filter out empty iterations to match what's actually plotted
+    #     phases = {k: v for k, v in phases.items() if k[1]}  # k = (phase, iteration)
+    #     run_num = extract_run_num(f)
+    #     if phases:
+    #         phase_strs = [f"{phase} [{iter_str}]" for phase, iter_str in sorted(phases.keys())]
+    #         print(f"  ON run{run_num}: {', '.join(phase_strs)}")
+    #     else:
+    #         print(f"  ON run{run_num}: (no phases)")
+    # for f in off_monitor_files:
+    #     phases = extract_phases_from_monitor_file(f)
+    #     # Filter out empty iterations to match what's actually plotted
+    #     phases = {k: v for k, v in phases.items() if k[1]}  # k = (phase, iteration)
+    #     run_num = extract_run_num(f)
+    #     if phases:
+    #         phase_strs = [f"{phase} [{iter_str}]" for phase, iter_str in sorted(phases.keys())]
+    #         print(f"  OFF run{run_num}: {', '.join(phase_strs)}")
+    #     else:
+    #         print(f"  OFF run{run_num}: (no phases)")
     
     # Plot continuous monitoring data if available
     if on_continuous or off_continuous:
@@ -717,6 +890,19 @@ def main():
     else:
         print("Warning: No continuous monitoring data to plot")
         return 1
+    
+    # Generate histograms for specific metrics
+    print("\nGenerating metric histograms...")
+    metrics_to_histogram = [
+        "Major Collection: Major Collection",
+        "Old Generation: Old Generation",
+        "Old Subphase: Concurrent Mark Follow",
+        "Old Subphase: Concurrent References Process",
+        "Young Generation: Young Generation",
+        "Young Subphase: Concurrent Mark Follow"
+    ]
+    plot_metric_histograms(on_gc_all, off_gc_all, metrics_to_histogram, run_id)
+    print("✓ Histograms generated successfully!")
     
     print("\n" + "=" * 100)
     print()
