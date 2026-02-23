@@ -1,14 +1,29 @@
 \chapter{Introduction}
 \label{chap:introduction}
-    As the Java programming language moves further away from end-users and into the realm of large-scale enterprise applications, the performance of the Java Virtual Machine (JVM) becomes increasingly critical. Especially when it comes to performance on large heaps since many enterprise applications utilize large amounts of memory.
 
-    The Z Garbage Collector (ZGC) is a low-latency garbage collector designed to handle large heaps with minimal pause times. However, the processing of weak references in ZGC has been identified as a potential bottleneck, particularly in applications that heavily utilize weak references. This thesis aims to analyze the performance of weak reference processing in ZGC and explore potential optimizations to improve its efficiency.
+Java is one of the most widely deployed programming languages in enterprise and server-side computing, where applications routinely manage heaps of tens to hundreds of gigabytes. In these environments, the performance of the Java Virtual Machine's (JVM) garbage collector (GC) directly affects application latency and throughput. The Z Garbage Collector (ZGC) addresses this by performing nearly all garbage collection work concurrently with the application, achieving sub-millisecond pause times regardless of heap size.
 
+However, one aspect of ZGC that has received comparatively little optimization attention is its processing of \emph{weak references}. Java's \texttt{WeakReference} class allows applications to hold references that do not prevent the referent from being collected, and it is widely used in caching libraries, canonical mappings, and listener registrations. When the garbage collector determines that a weakly referenced object is no longer strongly reachable, it must clear the reference and if the reference was registered with a \texttt{ReferenceQueue}, enqueue it for the application to process.
+
+The current ZGC reference processing pipeline treats all discovered weak references uniformly: they are linked together in an intrusive linked list, processed, and then handed to a Java-level daemon thread (the \texttt{ReferenceHandler}) for enqueueing. This design introduces overhead that is disproportionate for a specific subset of weak references: those that are not registered with a \texttt{ReferenceQueue}.
+
+This thesis investigates whether targeted modifications to ZGC's reference processing pipeline can reduce this overhead. Three orthogonal optimization approaches are explored: skipping the enqueue path for references without queues, replacing the intrusive linked list with a cache-friendly dynamic array for such references, and reducing per-reference instruction cost through sequential code optimizations.
 
     \section{Motivation}
     \label{sec:motivation}
-        Because of the increasing usage of Java in server-side applications and other large-scale applications, the performance of the JVM is crucial. ZGC is designed to handle large heaps (100s of GBs) with low latency, making it suitable for such applications. However, the processing of weak references in ZGC can lead to performance issues, especially in applications that heavily utilize weak references. Understanding and optimizing this aspect of ZGC can lead to significant performance improvements for a wide range of applications.
 
+        Weak references occupy a unique position in JVM garbage collection. Unlike regular references, which are handled implicitly by the mark phase, weak references require explicit processing by the collector: each discovered weak reference must be individually evaluated, its referent cleared if unreachable, and the reference potentially enqueued. This per-reference processing cost scales linearly with the number of weak references, making it a bottleneck in applications that allocate millions of them.
+
+        The problem is amplified by a mismatch between the API design and its typical usage. Java's \texttt{WeakReference} API provides an optional \texttt{ReferenceQueue} parameter, and the garbage collector's pipeline is designed around the assumption that cleared references will always be enqueued. The result is a pipeline that performs linked-list threading, cross-thread handoff, and iteration work for references that will never be enqueued.
+
+        ZGC's concurrent architecture makes this inefficiency particularly relevant. Because ZGC processes references concurrently with the application, any reduction in per-reference overhead translates directly into less time spent in the reference processing phase, freeing GC worker threads for other tasks.
+
+    \section{Problem Statement}
+    \label{sec:problem-statement}
+
+        The current ZGC reference processing pipeline does not distinguish between weak references with and without reference queues during the discovery and enqueue phases. All cleared references are threaded onto a pending list, transferred to the \texttt{ReferenceHandler} thread, and iterated regardless of whether they will actually be enqueued. Additionally, the intrusive linked-list data structure used for discovered references exhibits poor cache locality and overloads the \texttt{discovered} field for both GC-internal linking and pending-list linking.
+
+        This thesis seeks to determine whether these inefficiencies can be addressed through modifications to ZGC's reference processor, and to quantify the resulting performance impact.
 
     \section{Research Questions}
     \label{sec:research-questions}
@@ -17,21 +32,17 @@
             \item \label{rq:design-change} What design changes and optimizations can be made to the weak reference processing in ZGC to improve its performance?
             \item \label{rq:design-impact} How do these design changes and optimizations impact the overall performance and memory footprint of ZGC?
         \end{enumerate}
-    
+
     \section{Stretch Goals}
     \label{sec:stretch-goals}
-        The following stretch goals are defined for this thesis:
+        In addition to the primary research questions, the following stretch goals are defined to explore the broader implications of this work:
         \begin{enumerate}
-            \item \label{sg:weak-field} Does the introduction of a weak field annotation in Java provide a more efficient way to handle weak references compared to the current implementation?
-            \item \label{sg:other-collectors} Can the optimizations developed for ZGC be applied to other garbage collectors in the JVM, such as the G1 garbage collector, and if so, what performance improvements can be observed?
+            \item \label{sg:weak-field} Does the introduction of a weak field annotation in Java provide a more efficient way to handle weak references compared to the current \texttt{WeakReference} object-based implementation? A weak field would allow individual fields of an object to have weak-reference semantics without allocating a separate \texttt{WeakReference} object, potentially eliminating both the memory overhead and the reference processing cost entirely.
+            \item \label{sg:other-collectors} Can the optimizations developed for ZGC be applied to other garbage collectors in the JVM, such as the G1 garbage collector, and if so, what performance improvements can be observed? The shared reference processor used by G1 has a different threading model (using CAS-based discovery), so the applicability and performance characteristics of the optimizations may differ.
         \end{enumerate}
 
-    \section{Contributions}
-    \label{sec:contributions}
+    \section{Scope and Delimitations}
+    \label{sec:scope}
+        This thesis focuses on the reference processing pipeline within ZGC, specifically targeting weak references. While the optimization approaches are described in general terms and the stretch goals consider applicability to G1 and alternative API designs, the primary implementation and evaluation are conducted within the ZGC codebase of OpenJDK.
 
-    % TODO: Describe main contributions
-
-    \section{Thesis Structure}
-    \label{sec:thesis-structure}
-
-% TODO: Outline thesis structure
+        The correctness of the optimizations is verified through the standard OpenJDK test suite and manual inspection; formal verification is outside the scope of this work. Performance measurements are conducted on a single hardware platform under controlled conditions so therefore may not generalize to all environments.

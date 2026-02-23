@@ -548,20 +548,20 @@ def plot_continuous_monitoring(on_data, off_data, on_monitor_files=None, off_mon
                         ax.axvspan(t_min, t_max, alpha=0.06, color='red')
     
     # Convert phase times from ms to seconds for shading
-    on_phase_times_sec = {key: [t_ms / 1000.0 for t_ms in times] for key, times in on_phases_from_files.items()} if 'on_phases_from_files' in locals() and on_phases_from_files else {}
-    off_phase_times_sec = {key: [t_ms / 1000.0 for t_ms in times] for key, times in off_phases_from_files.items()} if 'off_phases_from_files' in locals() and off_phases_from_files else {}
-    shade_phase_spans_by_mode([ax1, ax2, ax3], 
-                              on_phase_marks if on_data else [], 
-                              off_phase_marks if off_data else [],
-                              on_phase_times_sec,
-                              off_phase_times_sec)
+    # on_phase_times_sec = {key: [t_ms / 1000.0 for t_ms in times] for key, times in on_phases_from_files.items()} if 'on_phases_from_files' in locals() and on_phases_from_files else {}
+    # off_phase_times_sec = {key: [t_ms / 1000.0 for t_ms in times] for key, times in off_phases_from_files.items()} if 'off_phases_from_files' in locals() and off_phases_from_files else {}
+    # shade_phase_spans_by_mode([ax1, ax2, ax3], 
+    #                           on_phase_marks if on_data else [], 
+    #                           off_phase_marks if off_data else [],
+    #                           on_phase_times_sec,
+    #                           off_phase_times_sec)
     
-    draw_phase_marks(ax1, on_phase_marks if on_data else [], 'blue')
-    draw_phase_marks(ax2, on_phase_marks if on_data else [], 'blue')
-    draw_phase_marks(ax3, on_phase_marks if on_data else [], 'blue')
-    draw_phase_marks(ax1, off_phase_marks if off_data else [], 'red')
-    draw_phase_marks(ax2, off_phase_marks if off_data else [], 'red')
-    draw_phase_marks(ax3, off_phase_marks if off_data else [], 'red')
+    # draw_phase_marks(ax1, on_phase_marks if on_data else [], 'blue')
+    # draw_phase_marks(ax2, on_phase_marks if on_data else [], 'blue')
+    # draw_phase_marks(ax3, on_phase_marks if on_data else [], 'blue')
+    # draw_phase_marks(ax1, off_phase_marks if off_data else [], 'red')
+    # draw_phase_marks(ax2, off_phase_marks if off_data else [], 'red')
+    # draw_phase_marks(ax3, off_phase_marks if off_data else [], 'red')
     
     plt.tight_layout()
     plt.savefig(output_file, dpi=150, bbox_inches='tight')

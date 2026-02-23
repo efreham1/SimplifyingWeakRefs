@@ -1,12 +1,16 @@
 \chapter{Method}
 \label{chap:method}
 
-% TODO: Write methodology chapter
+Three orthgonal approaches were proposed to optimize the reference processing of weak references in ZGC. These approaches were implemented in ZGC in different combinations to evaluate their individual and combined impact on performance. 
 
-\section{Implementation Approach}
+\section{Optimisation Approaches}
 \label{sec:implementation}
 
-% TODO: Describe implementation strategy
+\paragraph{Eliminating Reference Queue} For weak references that are not created with a reference queue, the reference processor can skip the enqueue step entirely, as there will be no reference queue to enqueue to. This optimization can significantly reduce the overhead of processing weak references that do not require reference queues.
+
+\paragraph{Sequetial Code Optimisations} The reference processor can be optimized to reduce the number of instructions executed or the complexity of those instructions.
+
+\paragraph{Dynamic Array for Discovered References} The reference processor can use a dynamic array to store discovered references instead of linking the references together. This can reduce the overhead of managing linked lists and improve cache locality, leading to better performance.
 
 \subsection{ZGC Modifications}
 \label{subsec:zgc-mods}
