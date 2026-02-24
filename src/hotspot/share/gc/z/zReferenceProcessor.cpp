@@ -202,10 +202,6 @@ bool ZReferenceProcessor::should_discover(zaddress reference, ReferenceType type
     return false;
   }
 
-  if (ZHeap::heap()->is_young(reference)) {
-    return false;
-  }
-
   if (is_strongly_live(referent)) {
     return false;
   }
@@ -258,6 +254,7 @@ bool ZReferenceProcessor::try_make_inactive(zaddress reference, ReferenceType ty
   return false;
 }
 
+#ifdef ZUseSeqCodeOptimisations
 // Try to make a WeakReference without a ReferenceQueue inactive.
 // Returns true if the referent was cleared (i.e. treated as "kept"),
 // false if the reference should be considered dropped.
@@ -281,6 +278,7 @@ bool ZReferenceProcessor::try_make_inactive_fast(const ZWeakRefData& data) {
     return false;
   }
 }
+#endif // ZUseSeqCodeOptimisations
 
 void ZReferenceProcessor::discover(zaddress reference, ReferenceType type, zaddress referent) {
   log_trace(gc, ref)("Discovered Reference: " PTR_FORMAT " (%s)", untype(reference), reference_type_name(type));
@@ -296,8 +294,9 @@ void ZReferenceProcessor::discover(zaddress reference, ReferenceType type, zaddr
   assert(ZHeap::heap()->is_old(reference), "Must be old");
   assert(is_null(reference_discovered(reference)), "Already discovered");
 
-  
-  if (ZUseSeperateDiscoveredLists && type == REF_WEAK && !has_reference_queue(reference)) {
+#ifdef ZUseSeperateDiscoveredLists
+  if (type == REF_WEAK && !has_reference_queue(reference)) {
+#ifdef ZUseDynamicArray
     zpointer* const referent_addr = reference_referent_addr_non_vol(reference);
     zaddress* const discovered_addr = reference_discovered_addr(reference);
     const zpointer referent_value = *referent_addr;
@@ -310,6 +309,11 @@ void ZReferenceProcessor::discover(zaddress reference, ReferenceType type, zaddr
                                    referent_value);
     _array_empty.set(false);
     reference_set_discovered(reference, reference); // mark as discovered
+#else // !ZUseDynamicArray
+    zaddress* const head = _discovered_weak_refs_without_queue_ll.addr();
+    reference_set_discovered(reference, *head);
+    *head = reference;
+#endif // ZUseDynamicArray
   } else {
     if (type == REF_FINAL) {
       // Mark referent (and its reachable subgraph) finalizable. This avoids
@@ -324,6 +328,20 @@ void ZReferenceProcessor::discover(zaddress reference, ReferenceType type, zaddr
     reference_set_discovered(reference, *head);
     *head = reference;
   }
+#else // !ZUseSeperateDiscoveredLists
+  if (type == REF_FINAL) {
+    // Mark referent (and its reachable subgraph) finalizable. This avoids
+    // the problem of later having to mark those objects if the referent is
+    // still final reachable during processing.
+    volatile zpointer* const referent_addr = reference_referent_addr(reference);
+    ZBarrier::mark_barrier_on_old_oop_field(referent_addr, true /* finalizable */);
+  }
+
+  // Add reference to discovered list
+  zaddress* const head = _discovered_list.addr();
+  reference_set_discovered(reference, *head);
+  *head = reference;
+#endif // ZUseSeperateDiscoveredLists
 }
 
 bool ZReferenceProcessor::discover_reference(oop reference_obj, ReferenceType type) {
@@ -342,6 +360,11 @@ bool ZReferenceProcessor::discover_reference(oop reference_obj, ReferenceType ty
   }
   else {
     _encountered_count.get()[type]++;
+  }
+
+  if (ZHeap::heap()->is_young(reference)) {
+    // Don't discover young references. Young gen reference processing is scary and therefore not supported.
+    return false;
   }
 
   volatile zpointer* const referent_addr = reference_referent_addr(reference);
@@ -414,29 +437,29 @@ void ZReferenceProcessor::process_worker_discovered_list(zaddress discovered_lis
 void ZReferenceProcessor::process_worker_discovered_weak_refs_without_queue(ZAddressArray& weak_refs_without_queue) {
   size_t dropped = 0;
   for (size_t i = 0; i < weak_refs_without_queue.length(); i++) {
-    const ZWeakRefData& data = weak_refs_without_queue.at(i);
+    const ZWeakRefData& data = weak_refs_without_queue.at(i);    
+#ifdef ZUseSeqCodeOptimisations
     *data.discovered_field_addr = zaddress::null; // Mark as dropped
-
-    if (ZUseSeqCodeOptimisations) {
-      if (try_make_inactive_fast(data)) {
-        log_trace(gc, ref)("\"Enqueued\" Weak Reference without Queue");
-        // Update statistics
-        _cleared_weak_refs_without_queue_count.get()++;
-      } else {
-        log_trace(gc, ref)("Dropped Weak Reference without Queue");
-        dropped++;
-      }
+    if (try_make_inactive_fast(data)) {
+      log_trace(gc, ref)("\"Enqueued\" Weak Reference without Queue");
+      // Update statistics
+      _cleared_weak_refs_without_queue_count.get()++;
     } else {
-      if (try_make_inactive(data.referent_addr, data.referent_field_value)) {
-        log_trace(gc, ref)("\"Enqueued\" Weak Reference without Queue");
-        // Update statistics
-        _cleared_weak_refs_without_queue_count.get()++;
-      } else {
-        log_trace(gc, ref)("Dropped Weak Reference without Queue");
-        dropped++;
-      }
+      log_trace(gc, ref)("Dropped Weak Reference without Queue");
+      dropped++;
     }
-
+#else //!ZUseSeqCodeOptimisations
+    zaddress reference = data.reference;
+    reference_set_discovered(reference, zaddress::null); // Mark as dropped
+    if (try_make_inactive(reference, reference_type(reference))) {
+      log_trace(gc, ref)("\"Enqueued\" Weak Reference without Queue");
+      // Update statistics
+      _cleared_weak_refs_without_queue_count.get()++;
+    } else {
+      log_trace(gc, ref)("Dropped Weak Reference without Queue");
+      dropped++;
+    }
+#endif // ZUseSeqCodeOptimisations
     SuspendibleThreadSet::yield();
   }
   weak_refs_without_queue.clear_and_reserve(dropped);
@@ -444,30 +467,29 @@ void ZReferenceProcessor::process_worker_discovered_weak_refs_without_queue(ZAdd
 
 void ZReferenceProcessor::process_worker_discovered_weak_refs_without_queue(zaddress weak_refs_without_queue) {
   for (zaddress current = weak_refs_without_queue; !is_null(current);) {
+#ifdef ZUseSeqCodeOptimisations
     ZWeakRefData data;
-    
-    if (ZUseSeqCodeOptimisations) {
-      data.referent_field_addr = reference_referent_addr_non_vol(current);
-      data.discovered_field_addr = reference_discovered_addr(current);
-      data.referent_addr = *data.referent_field_addr;
-      *data.discovered_field_addr = zaddress::null; // Mark as dropped
-      if (try_make_inactive_fast(data)) {
-        log_trace(gc, ref)("\"Enqueued\" Weak Reference without Queue");
-        // Update statistics
-        _cleared_weak_refs_without_queue_count.get()++;
-      } else {
-        log_trace(gc, ref)("Dropped Weak Reference without Queue");
-      }
+    data.referent_field_addr = reference_referent_addr_non_vol(current);
+    data.discovered_field_addr = reference_discovered_addr(current);
+    data.referent_addr = *data.referent_field_addr;
+    *data.discovered_field_addr = zaddress::null; // Mark as dropped
+    if (try_make_inactive_fast(data)) {
+      log_trace(gc, ref)("\"Enqueued\" Weak Reference without Queue");
+      // Update statistics
+      _cleared_weak_refs_without_queue_count.get()++;
     } else {
-      if (try_make_inactive(current, reference_type(current))) {
-        log_trace(gc, ref)("\"Enqueued\" Weak Reference without Queue");
-        // Update statistics
-        _cleared_weak_refs_without_queue_count.get()++;
-      } else {
-        log_trace(gc, ref)("Dropped Weak Reference without Queue");
-      }
-
+      log_trace(gc, ref)("Dropped Weak Reference without Queue");
     }
+#else //!ZUseSeqCodeOptimisations
+    reference_set_discovered(current, zaddress::null); // Mark as dropped
+    if (try_make_inactive(current, reference_type(current))) {
+      log_trace(gc, ref)("\"Enqueued\" Weak Reference without Queue");
+      // Update statistics
+      _cleared_weak_refs_without_queue_count.get()++;
+    } else {
+      log_trace(gc, ref)("Dropped Weak Reference without Queue");
+    }
+#endif // ZUseSeqCodeOptimisations
     current = reference_discovered(current);
     SuspendibleThreadSet::yield();
   }
@@ -476,20 +498,22 @@ void ZReferenceProcessor::process_worker_discovered_weak_refs_without_queue(zadd
 void ZReferenceProcessor::work() {
   SuspendibleThreadSetJoiner sts_joiner;
 
+#ifdef ZUseSeperateDiscoveredLists
+#ifdef ZUseDynamicArray
   ZPerWorkerIterator<zaddress> iter(&_discovered_list);
-  ZPerWorkerIterator<ZAddressArray> iter_weak_refs(&_discovered_weak_refs_without_queue);
+  ZPerWorkerIterator<ZAddressArray> iter_weak_refs(&_discovered_weak_refs_without_queue_arr);
   ZPerWorkerIterator<bool> iter_array_empty(&_array_empty);
-
+  
   zaddress* list_addr = nullptr;
   ZAddressArray* array_addr = nullptr;
   bool* array_empty = nullptr;
-
+  
   for (; iter.next(&list_addr) && iter_weak_refs.next(&array_addr) && iter_array_empty.next(&array_empty);) {
-
+    
     const zaddress discovered_list = AtomicAccess::xchg(list_addr, zaddress::null);
     const bool has_array = !AtomicAccess::xchg(array_empty, true);
     const bool has_discovered = discovered_list != zaddress::null;
-
+    
     if (has_discovered) {
       process_worker_discovered_list(discovered_list);
     }
@@ -497,6 +521,34 @@ void ZReferenceProcessor::work() {
       process_worker_discovered_weak_refs_without_queue(*array_addr);
     }
   }
+#else // !ZUseDynamicArray
+  ZPerWorkerIterator<zaddress> iter(&_discovered_list);
+  ZPerWorkerIterator<zaddress> iter_weak_refs(&_discovered_weak_refs_without_queue_ll);
+
+  zaddress* list_addr = nullptr;
+  zaddress* no_queue_list_addr = nullptr;
+
+  for (; iter.next(&list_addr) && iter_weak_refs.next(&no_queue_list_addr);) {
+    const zaddress discovered_list = AtomicAccess::xchg(list_addr, zaddress::null);
+    const zaddress weak_refs_without_queue = AtomicAccess::xchg(no_queue_list_addr, zaddress::null);
+
+    if (!is_null(discovered_list)) {
+      process_worker_discovered_list(discovered_list);
+    }
+    if (!is_null(weak_refs_without_queue)) {
+      process_worker_discovered_weak_refs_without_queue(weak_refs_without_queue);
+    }
+  }
+#endif // ZUseDynamicArray
+#else // !ZUseSeperateDiscoveredLists
+  ZPerWorkerIterator<zaddress> iter(&_discovered_list);
+  for (zaddress* list_addr; iter.next(&list_addr);) {
+    const zaddress discovered_list = AtomicAccess::xchg(list_addr, zaddress::null);
+    if (!is_null(discovered_list)) {
+      process_worker_discovered_list(discovered_list);
+    }
+  }
+#endif // ZUseSeperateDiscoveredLists
 }
 
 void ZReferenceProcessor::verify_empty() const {
@@ -505,12 +557,19 @@ void ZReferenceProcessor::verify_empty() const {
   for (const zaddress* head; iter.next(&head);) {
     assert(is_null(*head), "Discovered list not empty");
   }
-
+#ifdef ZUseSeperateDiscoveredLists
+#ifdef ZUseDynamicArray
   ZPerWorkerConstIterator<ZAddressArray> iter_weak_refs(&_discovered_weak_refs_without_queue);
   for (const ZAddressArray* array; iter_weak_refs.next(&array);) {
     assert(array->is_empty(), "Discovered weak refs without queue not empty");
   }
-
+#else // !ZUseDynamicArray
+  ZPerWorkerConstIterator<zaddress> iter_weak_refs(&_discovered_weak_refs_without_queue_ll);
+  for (const zaddress* head; iter_weak_refs.next(&head);) {
+    assert(is_null(*head), "Discovered weak refs without queue not empty");
+  }
+#endif // ZUseDynamicArray
+#endif // ZUseSeperateDiscoveredLists
   assert(is_null(_pending_list.get()), "Pending list not empty");
 #endif
 }
@@ -540,6 +599,12 @@ void ZReferenceProcessor::reset_statistics() {
     for (int i = REF_SOFT; i <= REF_PHANTOM; i++) {
       (*counters)[i] = 0;
     }
+  }
+
+  // Reset weak references without queue
+  ZPerWorkerIterator<size_t> iter_encountered_weak_no_queue(&_encountered_weak_refs_without_queue_count);
+  for (size_t* count; iter_encountered_weak_no_queue.next(&count);) {
+    *count = 0;
   }
 }
 

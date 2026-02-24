@@ -54,9 +54,14 @@ private:
   ZPerWorker<zaddress>      _discovered_list;
   ZContended<zaddress>      _pending_list;
   zaddress                  _pending_list_tail;
+#ifdef ZUseSeperateDiscoveredList
+#ifdef ZUseDynamicArray
   ZPerWorker<ZAddressArray> _discovered_weak_refs_without_queue_arr;
   ZPerWorker<bool>          _array_empty;
+#else // !ZUseDynamicArray
   ZPerWorker<zaddress>      _discovered_weak_refs_without_queue_ll;
+#endif // ZUseDynamicArray
+#endif // ZUseSeperateDiscoveredList
   OopHandle                 _null_queue_handle;
 
   bool is_inactive(zaddress reference, oop referent, ReferenceType type) const;
@@ -65,14 +70,22 @@ private:
 
   bool should_discover(zaddress reference, ReferenceType type, oop referent) const;
   bool try_make_inactive(zaddress reference, ReferenceType type) const;
+#ifdef ZUseSeqCodeOptimisations
+  bool ZReferenceProcessor::try_make_inactive_fast(const ZWeakRefData& data)
+#endif // ZUseSeqCodeOptimisations
 
   void discover(zaddress reference, ReferenceType type, zaddress referent);
   
   void verify_empty() const;
 
   void process_worker_discovered_list(zaddress discovered_list);
+#ifdef ZUseSeperateDiscoveredList
+#ifdef ZUseDynamicArray
   void process_worker_discovered_weak_refs_without_queue(ZAddressArray& weak_refs_without_queue);
+#else // !ZUseDynamicArray
   void process_worker_discovered_weak_refs_without_queue(zaddress weak_refs_without_queue);
+#endif // ZUseDynamicArray
+#endif // ZUseSeperateDiscoveredList
   void work();
   void collect_statistics();
 

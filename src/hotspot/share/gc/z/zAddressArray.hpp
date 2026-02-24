@@ -32,10 +32,14 @@
 #include <string.h>
 
 struct ZWeakRefData {
+#ifdef ZUseSeqCodeOptimisations
   zpointer* referent_field_addr;
   zaddress* discovered_field_addr;
   zaddress referent_addr;
   zpointer referent_field_value;
+#else //!ZUseSeqCodeOptimisations
+  zaddress reference;
+#endif // ZUseSeqCodeOptimisations
 };
 
 // High-performance growable array specifically for storing discovered weak references.
@@ -90,6 +94,7 @@ public:
   }
 
   // Append a new entry
+#ifdef ZUseSeqCodeOptimisations
   void append(zpointer* referent_field_addr, zaddress* discovered_field_addr, zaddress referent_addr, zpointer referent_field_value) {
     if (_length >= _capacity) {
       grow(_length + 1);
@@ -100,29 +105,20 @@ public:
     _data[_length].referent_field_value = referent_field_value;
     _length++;
   }
+#else //!ZUseSeqCodeOptimisations
+  void append(zaddress reference) {
+    if (_length >= _capacity) {
+      grow(_length + 1);
+    }
+    _data[_length].reference = reference;
+    _length++;
+  }
+#endif // ZUseSeqCodeOptimisations
 
   // Get entry at index
   const ZWeakRefData& at(size_t index) const {
     assert(index >= 0 && index < _length, "index out of bounds: %d (length: %d)", index, _length);
     return _data[index];
-  }
-
-  // Get referent field address at index
-  zpointer* referent_field_addr_at(size_t index) const {
-    assert(index >= 0 && index < _length, "index out of bounds: %d (length: %d)", index, _length);
-    return _data[index].referent_field_addr;
-  }
-
-  // Get discovered field address at index
-  zaddress* discovered_field_addr_at(size_t index) const {
-    assert(index >= 0 && index < _length, "index out of bounds: %d (length: %d)", index, _length);
-    return _data[index].discovered_field_addr;
-  }
-
-  // Get referent address at index
-  zaddress referent_addr_at(size_t index) const {
-    assert(index >= 0 && index < _length, "index out of bounds: %d (length: %d)", index, _length);
-    return _data[index].referent_addr;
   }
 
   // Current length

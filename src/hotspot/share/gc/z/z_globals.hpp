@@ -114,17 +114,7 @@
   product(int, ZTenuringThreshold, -1, DIAGNOSTIC,                          \
           "Young generation tenuring threshold, -1 for dynamic computation")\
           range(-1, static_cast<int>(ZPageAgeCount) - 1)                    \
-                                                                            \
-  product(bool, ZUseGrowableArrayDiscoveredList, true, DIAGNOSTIC,          \
-          "Use GrowableArray for discovered weak references without queue") \
-          constraint(ZUseGrowableArrayDiscoveredListConstraintFunc, AtParse)    \
-                                                                            \
-  product(bool, ZUseSeqCodeOptimisations, true, DIAGNOSTIC,                 \
-          "Use sequential code optimisations for reference processing")     \
-                                                                            \
-  product(bool, ZUseSeperateDiscoveredLists, true, DIAGNOSTIC,              \
-          "Use separate discovered lists for weak references without queue")\
-                                                                            \                                                                            
+                                                                            \                                                                           
   develop(bool, ZVerifyOops, false,                                         \
           "Verify accessed oops")                                           \
                                                                             \
