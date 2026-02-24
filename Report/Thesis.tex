@@ -38,6 +38,9 @@
 	\usepackage{graphicx}
 \fi
 
+% Micro-typography: improves justification and reduces underfull \hbox warnings
+\usepackage{microtype}
+
 % Graphics path for figures
 \graphicspath{{figures/}{images/}}
 
@@ -50,11 +53,29 @@
 \fi
 
 % Allow TeX to stretch whitespace to avoid overfull hboxes
-\setlength{\emergencystretch}{3em}
+% Increase emergency stretch slightly to help with tight lines
+\setlength{\emergencystretch}{5em}
+
+% Tolerance and hyphenation penalties: make hyphenation and stretching
+% slightly more acceptable to avoid underfull \hbox warnings.
+\tolerance=1000
+\hyphenpenalty=500
+\exhyphenpenalty=500
+
+% Allow uneven bottom pages to avoid underfull \vbox warnings
+% (keeps full justification but does not force vertical stretching)
+\raggedbottom
 
 % Code listings for Java/C++ code (essential for CS thesis)
 \usepackage{listings}
 \usepackage{xcolor}
+\usepackage{float}
+
+% Define listing as a float type
+\floatstyle{plain}
+\newfloat{listing}{htbp}{lol}
+\floatname{listing}{Listing}
+\newcommand{\listoflistings}{\listof{listing}{List of Listings}}
 
 % Configure listings for Java code
 \lstset{
@@ -108,6 +129,9 @@
 % Better cross-referencing (must be loaded AFTER hyperref)
 \usepackage{cleveref}
 
+% Configure cref to use "Listing" (capitalized) for listing references
+\crefname{listing}{Listing}{Listings}
+
 % Numbering of headings down to the subsection level
 \numberingdepth{subsection}
 
@@ -153,13 +177,13 @@
     \chapter*{Acknowledgments}
     \addcontentsline{toc}{chapter}{Acknowledgments}
     
-    I would like to express my sincere gratitude to my supervisor for their guidance and support throughout this thesis work. It is through their help and encouragement that I was able to complete this thesis.
+    I would like to express my sincere gratitude to my supervisor for his guidance and support throughout this thesis work. It is through his help, encouragement, and expertise that I was able to learn so much about the JVM and bring this thesis to completion.
     
-    A special thanks to the Department of Information Technology at Uppsala University for providing the resources necessary to conduct the performance evaluations and experiments described in this thesis.
+	I would also like to thank my subject reviewer for his valuable academic guidance and thoughtful feedback, which helped strengthen the structure and quality of this thesis.
+    
+	Additionally, I would like to thank the Department of Information Technology at Uppsala University for providing the resources necessary to conduct the performance evaluations and experiments described in this thesis.
 
-	I would also like to thank my colleagues at Oracle for their insights and feedback on my work throughout the development process.
-    
-    Finally, I would like to thank my family and friends for their patience and encouragement throughout my studies.
+	Lastly, I would also like to thank my colleagues at Oracle for their insights and feedback on my work throughout the development process. Without their help, I would not have been able to achieve the results presented in this thesis.
     
     \vspace{1cm}
     
@@ -177,8 +201,10 @@
     % Lists of tables and figures
     \listoftables
     \listoffigures
+	\listoflistings
 
 \mainmatter
+\setcounter{page}{1}
     % Main thesis chapters
     \input{Introduction}
     \input{Background}

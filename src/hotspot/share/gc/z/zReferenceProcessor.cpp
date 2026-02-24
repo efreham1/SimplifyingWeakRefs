@@ -258,6 +258,30 @@ bool ZReferenceProcessor::try_make_inactive(zaddress reference, ReferenceType ty
   return false;
 }
 
+// Try to make a WeakReference without a ReferenceQueue inactive.
+// Returns true if the referent was cleared (i.e. treated as "kept"),
+// false if the reference should be considered dropped.
+bool ZReferenceProcessor::try_make_inactive_fast(const ZWeakRefData& data) {
+  const zaddress referent_addr = data.referent_addr;
+  const zpointer referent_ptr = data.referent_field_value;
+
+  ZPage* const page = ZHeap::heap()->page(referent_addr);
+
+  if (ZPointer::is_mark_good(referent_ptr)) {
+    return false;
+  }
+  else if (!page->is_object_strongly_live(referent_addr) && page->is_old()) {
+    *data.referent_field_addr = color_null();
+    return true;
+  } else {
+    *data.referent_field_addr = ZAddress::color(referent_addr, ZPointerLoadGoodMask | ZPointerMarkedYoung | ZPointerMarkedOld | ZPointerRememberedMask);
+    if (page->is_young() && ZGeneration::young()->is_phase_mark()) {
+      ZBarrier::mark_young<ZMark::Resurrect, ZMark::AnyThread, ZMark::Follow>(referent_addr);
+    }
+    return false;
+  }
+}
+
 void ZReferenceProcessor::discover(zaddress reference, ReferenceType type, zaddress referent) {
   log_trace(gc, ref)("Discovered Reference: " PTR_FORMAT " (%s)", untype(reference), reference_type_name(type));
 
@@ -273,7 +297,7 @@ void ZReferenceProcessor::discover(zaddress reference, ReferenceType type, zaddr
   assert(is_null(reference_discovered(reference)), "Already discovered");
 
   
-  if (ZUseGrowableArrayDiscoveredList && type == REF_WEAK && !has_reference_queue(reference)) {
+  if (ZUseSeperateDiscoveredLists && type == REF_WEAK && !has_reference_queue(reference)) {
     zpointer* const referent_addr = reference_referent_addr_non_vol(reference);
     zaddress* const discovered_addr = reference_discovered_addr(reference);
     const zpointer referent_value = *referent_addr;
@@ -391,33 +415,62 @@ void ZReferenceProcessor::process_worker_discovered_weak_refs_without_queue(ZAdd
   size_t dropped = 0;
   for (size_t i = 0; i < weak_refs_without_queue.length(); i++) {
     const ZWeakRefData& data = weak_refs_without_queue.at(i);
-    const zaddress referent_addr = data.referent_addr;
-    const zpointer referent_ptr = data.referent_field_value;
-
-    ZPage* const page = ZHeap::heap()->page(referent_addr);
-
     *data.discovered_field_addr = zaddress::null; // Mark as dropped
 
-    if (ZPointer::is_mark_good(referent_ptr)) {
-      log_trace(gc, ref)("Dropped Weak Reference without Queue");
-      dropped++;
-    }
-    else if (!page->is_object_strongly_live(referent_addr) && page->is_old()) {
-      log_trace(gc, ref)("\"Enqueued\" Weak Reference without Queue");
-      *data.referent_field_addr = color_null();
-      _cleared_weak_refs_without_queue_count.get()++;
+    if (ZUseSeqCodeOptimisations) {
+      if (try_make_inactive_fast(data)) {
+        log_trace(gc, ref)("\"Enqueued\" Weak Reference without Queue");
+        // Update statistics
+        _cleared_weak_refs_without_queue_count.get()++;
+      } else {
+        log_trace(gc, ref)("Dropped Weak Reference without Queue");
+        dropped++;
+      }
     } else {
-      log_trace(gc, ref)("Dropped Weak Reference without Queue");
-      dropped++;
-      *data.referent_field_addr = ZAddress::color(referent_addr, ZPointerLoadGoodMask | ZPointerMarkedYoung | ZPointerMarkedOld | ZPointerRememberedMask);
-      if (page->is_young() && ZGeneration::young()->is_phase_mark()) {
-        ZBarrier::mark_young<ZMark::Resurrect, ZMark::AnyThread, ZMark::Follow>(referent_addr);
+      if (try_make_inactive(data.referent_addr, data.referent_field_value)) {
+        log_trace(gc, ref)("\"Enqueued\" Weak Reference without Queue");
+        // Update statistics
+        _cleared_weak_refs_without_queue_count.get()++;
+      } else {
+        log_trace(gc, ref)("Dropped Weak Reference without Queue");
+        dropped++;
       }
     }
 
     SuspendibleThreadSet::yield();
   }
   weak_refs_without_queue.clear_and_reserve(dropped);
+}
+
+void ZReferenceProcessor::process_worker_discovered_weak_refs_without_queue(zaddress weak_refs_without_queue) {
+  for (zaddress current = weak_refs_without_queue; !is_null(current);) {
+    ZWeakRefData data;
+    
+    if (ZUseSeqCodeOptimisations) {
+      data.referent_field_addr = reference_referent_addr_non_vol(current);
+      data.discovered_field_addr = reference_discovered_addr(current);
+      data.referent_addr = *data.referent_field_addr;
+      *data.discovered_field_addr = zaddress::null; // Mark as dropped
+      if (try_make_inactive_fast(data)) {
+        log_trace(gc, ref)("\"Enqueued\" Weak Reference without Queue");
+        // Update statistics
+        _cleared_weak_refs_without_queue_count.get()++;
+      } else {
+        log_trace(gc, ref)("Dropped Weak Reference without Queue");
+      }
+    } else {
+      if (try_make_inactive(current, reference_type(current))) {
+        log_trace(gc, ref)("\"Enqueued\" Weak Reference without Queue");
+        // Update statistics
+        _cleared_weak_refs_without_queue_count.get()++;
+      } else {
+        log_trace(gc, ref)("Dropped Weak Reference without Queue");
+      }
+
+    }
+    current = reference_discovered(current);
+    SuspendibleThreadSet::yield();
+  }
 }
 
 void ZReferenceProcessor::work() {

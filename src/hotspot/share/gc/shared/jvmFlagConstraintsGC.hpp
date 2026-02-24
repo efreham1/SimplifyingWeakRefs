@@ -34,6 +34,9 @@
 #if INCLUDE_PARALLELGC
 #include "gc/parallel/jvmFlagConstraintsParallel.hpp"
 #endif
+#if INCLUDE_ZGC
+#include "gc/z/jvmFlagConstraintsZ.hpp"
+#endif
 
 /*
  * Here we have GC arguments constraints functions, which are called automatically
