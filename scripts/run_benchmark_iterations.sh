@@ -7,7 +7,7 @@ set -e
 # Default values
 JAVA_BIN="./build/linux-x86_64-server-release/jdk/bin/java"
 JCMD_BIN="./build/linux-x86_64-server-release/jdk/bin/jcmd"
-COMMON_JVM_OPTS="${COMMON_JVM_OPTS:--Xms8g -Xmx8g -XX:+UseZGC -Xlog:gc+stats,gc+ref -XX:InitialTenuringThreshold=1 -XX:MaxTenuringThreshold=1 -XX:ZCollectionIntervalMajor=0.5 -XX:+ZCollectionIntervalOnly -XX:+UnlockDiagnosticVMOptions -XX:NativeMemoryTracking=summary}"
+COMMON_JVM_OPTS="${COMMON_JVM_OPTS:--Xms8g -Xmx8g -XX:+UseZGC -Xlog:gc+stats,gc+ref -XX:InitialTenuringThreshold=1 -XX:MaxTenuringThreshold=1 -XX:ZCollectionIntervalMajor=0.5 -XX:+ZCollectionIntervalOnly -XX:NativeMemoryTracking=summary}"
 BENCHMARK_CLASS="test/weakrefs/WeakRefGcBenchmark.java"
 OUTER_ITERATIONS=100
 CPU_CORES="${CPU_CORES:-0-11}"
@@ -57,11 +57,8 @@ while [ $# -gt 0 ]; do
             shift 2
             ;;
         *)
-            if [ -z "$OUTER_ITERATIONS" ] || [ "$OUTER_ITERATIONS" = "2" ]; then
+            if [ -z "$OUTER_ITERATIONS" ] || [ "$OUTER_ITERATIONS" = "100" ]; then
                 OUTER_ITERATIONS=$1
-                shift
-            elif [ -z "$INNER_ITERATIONS" ]; then
-                INNER_ITERATIONS=$1
                 shift
             else
                 shift
@@ -71,7 +68,7 @@ while [ $# -gt 0 ]; do
 done
 
 print_header "WEAKREF GC BENCHMARK"
-echo -e "${BOLD}Running:${NC} $OUTER_ITERATIONS runs × 20 iterations"
+echo -e "${BOLD}Running:${NC} $OUTER_ITERATIONS runs × 3 iterations"
 echo -e "${BOLD}Run ID:${NC} $RUN_ID"
 echo -e "${BOLD}CPU cores:${NC} $CPU_CORES"
 echo -e "${BOLD}Cooldown:${NC} ${COOLDOWN_SECONDS}s between GA configs"
@@ -163,17 +160,16 @@ cleanup_old_results() {
     mkdir -p output
     
     # Remove old benchmark output files only for this run ID
-    rm -f output/run_ON_run*_${RUN_ID}.log output/run_OFF_run*_${RUN_ID}.log
-    rm -f output/monitor_ON_run*_${RUN_ID}.csv output/monitor_OFF_run*_${RUN_ID}.csv
+    rm -f output/run_*_run*_${RUN_ID}.log
+    rm -f output/monitor_*_run*_${RUN_ID}.csv
     
     print_success "Old results cleaned up for Run ID $RUN_ID"
 }
 
 run_single() {
-    local growable_flag=$1   # "+ZUseGrowableArrayDiscoveredList" or "-ZUseGrowableArrayDiscoveredList"
-    local label=$2           # display label
-    local run=$3             # run number
-    local total_runs=$4      # total number of runs
+    local label=$1           # variant label
+    local run=$2             # run number
+    local total_runs=$3      # total number of runs
 
     # Create separate log and monitor files for each run with run number tag and execution ID
     local log_file="output/run_${label}_run${run}_${RUN_ID}.log"
@@ -184,7 +180,7 @@ run_single() {
     echo "  Logging to: $log_file"
     echo "  Memory monitoring to: $monitor_log"
     
-    JAVA_OPTS="$COMMON_JVM_OPTS -XX:$growable_flag"
+    JAVA_OPTS="$COMMON_JVM_OPTS"
 
     # Start Java process in background
     (
@@ -269,29 +265,43 @@ trap restore_cpu_governor EXIT
 cleanup_old_results
 
 print_header "STARTING BENCHMARK SUITE"
-print_step "Alternating between GA OFF and GA ON runs"
+print_step "Running all variant builds for each iteration"
 echo ""
 
-# Alternate between OFF and ON runs
+# Define the variants corresponding to builds created by scripts/build_exploded_images_variants.sh
+variants=(
+    "none"
+    "seq_only"
+    "seq_sep"
+    "sep_only"
+    "sep_dyn"
+    "all"
+)
+
 overall_status=0
 for ((run=1; run<=OUTER_ITERATIONS; run++)); do
-    # Run GA OFF first
-    print_header "Run $run/$OUTER_ITERATIONS - GA OFF"
-    prepare_environment
-    run_single "-ZUseGrowableArrayDiscoveredList" "OFF" "$run" "$OUTER_ITERATIONS"
-    if [ $? -ne 0 ]; then
-        overall_status=1
-        break
-    fi
-    
-    # Run GA ON second
-    print_header "Run $run/$OUTER_ITERATIONS - GA ON"
-    prepare_environment
-    run_single "+ZUseGrowableArrayDiscoveredList" "ON" "$run" "$OUTER_ITERATIONS"
-    if [ $? -ne 0 ]; then
-        overall_status=1
-        break
-    fi
+    for variant in "${variants[@]}"; do
+        variant_build_dir="./build/${variant}-linux-x86_64-server-release"
+        variant_java="$variant_build_dir/jdk/bin/java"
+        variant_jcmd="$variant_build_dir/jdk/bin/jcmd"
+
+        if [ ! -x "$variant_java" ]; then
+            print_warning "Build for variant '$variant' not found at $variant_java; skipping"
+            continue
+        fi
+
+        # Point global JAVA_BIN/JCMD_BIN to this variant for run_single internals
+        JAVA_BIN="$variant_java"
+        JCMD_BIN="$variant_jcmd"
+
+        print_header "Run $run/$OUTER_ITERATIONS - Variant $variant"
+        prepare_environment
+        run_single "$variant" "$run" "$OUTER_ITERATIONS"
+        if [ $? -ne 0 ]; then
+            overall_status=1
+            break 2
+        fi
+    done
 done
 
 if [ $overall_status -ne 0 ]; then
@@ -304,8 +314,8 @@ print_header "BENCHMARK COMPLETE"
 echo -e "${BOLD}All benchmark runs completed successfully!${NC}"
 echo ""
 echo -e "${GREEN}Output Summary:${NC}"
-echo "  • Benchmark logs:     output/run_{ON,OFF}_run*_${RUN_ID}.log"
-echo "  • Memory monitoring:  output/monitor_{ON,OFF}_run*_${RUN_ID}.csv"
+echo "  • Benchmark logs:     output/run_<variant>_run*_${RUN_ID}.log"
+echo "  • Memory monitoring:  output/monitor_<variant>_run*_${RUN_ID}.csv"
 echo ""
 echo -e "${CYAN}Next Steps:${NC}"
 echo "  To analyze and compare results, run:"

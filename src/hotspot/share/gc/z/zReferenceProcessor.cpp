@@ -139,8 +139,14 @@ ZReferenceProcessor::ZReferenceProcessor(ZWorkers* workers)
     _discovered_list(),
     _pending_list(zaddress::null),
     _pending_list_tail(zaddress::null),
-    _discovered_weak_refs_without_queue(),
-    _array_empty(),
+#if ZUseSeperateDiscoveredLists
+#if ZUseDynamicArray
+  _discovered_weak_refs_without_queue_arr(),
+  _array_empty(),
+#else // !ZUseDynamicArray
+  _discovered_weak_refs_without_queue_ll(),
+#endif // ZUseDynamicArray
+#endif // ZUseSeperateDiscoveredLists
     _null_queue_handle() {
   _array_empty.set_all(true);
 }
@@ -254,7 +260,7 @@ bool ZReferenceProcessor::try_make_inactive(zaddress reference, ReferenceType ty
   return false;
 }
 
-#ifdef ZUseSeqCodeOptimisations
+#if ZUseSeqCodeOptimisations
 // Try to make a WeakReference without a ReferenceQueue inactive.
 // Returns true if the referent was cleared (i.e. treated as "kept"),
 // false if the reference should be considered dropped.
@@ -284,7 +290,7 @@ void ZReferenceProcessor::discover(zaddress reference, ReferenceType type, zaddr
   log_trace(gc, ref)("Discovered Reference: " PTR_FORMAT " (%s)", untype(reference), reference_type_name(type));
 
   // Update statistics
-  if (type == REF_WEAK && !has_queue) {
+  if (type == REF_WEAK && !has_reference_queue(reference)) {
     _discovered_weak_refs_without_queue_count.get()++;
   }
   else {
@@ -294,15 +300,15 @@ void ZReferenceProcessor::discover(zaddress reference, ReferenceType type, zaddr
   assert(ZHeap::heap()->is_old(reference), "Must be old");
   assert(is_null(reference_discovered(reference)), "Already discovered");
 
-#ifdef ZUseSeperateDiscoveredLists
+#if ZUseSeperateDiscoveredLists
   if (type == REF_WEAK && !has_reference_queue(reference)) {
-#ifdef ZUseDynamicArray
+#if ZUseDynamicArray
     zpointer* const referent_addr = reference_referent_addr_non_vol(reference);
     zaddress* const discovered_addr = reference_discovered_addr(reference);
     const zpointer referent_value = *referent_addr;
 
     // WeakReference with null ReferenceQueue - remember for special processing
-    ZAddressArray& weak_refs_without_queue = _discovered_weak_refs_without_queue.get();
+    ZAddressArray& weak_refs_without_queue = _discovered_weak_refs_without_queue_arr.get();
     weak_refs_without_queue.append(referent_addr,
                                    discovered_addr,
                                    referent,
@@ -355,7 +361,7 @@ bool ZReferenceProcessor::discover_reference(oop reference_obj, ReferenceType ty
   const zaddress reference = to_zaddress(reference_obj);
 
   // Update statistics
-  if (type == REF_WEAK && !has_queue) {
+  if (type == REF_WEAK && !has_reference_queue(reference)) {
     _encountered_weak_refs_without_queue_count.get()++;
   }
   else {
@@ -438,7 +444,7 @@ void ZReferenceProcessor::process_worker_discovered_weak_refs_without_queue(ZAdd
   size_t dropped = 0;
   for (size_t i = 0; i < weak_refs_without_queue.length(); i++) {
     const ZWeakRefData& data = weak_refs_without_queue.at(i);    
-#ifdef ZUseSeqCodeOptimisations
+#if ZUseSeqCodeOptimisations
     *data.discovered_field_addr = zaddress::null; // Mark as dropped
     if (try_make_inactive_fast(data)) {
       log_trace(gc, ref)("\"Enqueued\" Weak Reference without Queue");
@@ -464,10 +470,10 @@ void ZReferenceProcessor::process_worker_discovered_weak_refs_without_queue(ZAdd
   }
   weak_refs_without_queue.clear_and_reserve(dropped);
 }
-
+#if ZUseSeperateDiscoveredLists && !ZUseDynamicArray
 void ZReferenceProcessor::process_worker_discovered_weak_refs_without_queue(zaddress weak_refs_without_queue) {
   for (zaddress current = weak_refs_without_queue; !is_null(current);) {
-#ifdef ZUseSeqCodeOptimisations
+#if ZUseSeqCodeOptimisations
     ZWeakRefData data;
     data.referent_field_addr = reference_referent_addr_non_vol(current);
     data.discovered_field_addr = reference_discovered_addr(current);
@@ -494,12 +500,13 @@ void ZReferenceProcessor::process_worker_discovered_weak_refs_without_queue(zadd
     SuspendibleThreadSet::yield();
   }
 }
+#endif // ZUseSeperateDiscoveredLists && !ZUseDynamicArray
 
 void ZReferenceProcessor::work() {
   SuspendibleThreadSetJoiner sts_joiner;
 
-#ifdef ZUseSeperateDiscoveredLists
-#ifdef ZUseDynamicArray
+#if ZUseSeperateDiscoveredLists
+#if ZUseDynamicArray
   ZPerWorkerIterator<zaddress> iter(&_discovered_list);
   ZPerWorkerIterator<ZAddressArray> iter_weak_refs(&_discovered_weak_refs_without_queue_arr);
   ZPerWorkerIterator<bool> iter_array_empty(&_array_empty);
@@ -557,9 +564,9 @@ void ZReferenceProcessor::verify_empty() const {
   for (const zaddress* head; iter.next(&head);) {
     assert(is_null(*head), "Discovered list not empty");
   }
-#ifdef ZUseSeperateDiscoveredLists
-#ifdef ZUseDynamicArray
-  ZPerWorkerConstIterator<ZAddressArray> iter_weak_refs(&_discovered_weak_refs_without_queue);
+#if ZUseSeperateDiscoveredLists
+#if ZUseDynamicArray
+  ZPerWorkerConstIterator<ZAddressArray> iter_weak_refs(&_discovered_weak_refs_without_queue_arr);
   for (const ZAddressArray* array; iter_weak_refs.next(&array);) {
     assert(array->is_empty(), "Discovered weak refs without queue not empty");
   }

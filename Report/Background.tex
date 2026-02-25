@@ -1,7 +1,7 @@
 \chapter{Background}
 \label{chap:background}
 
-The three optimization approaches laid out in \cref{sec:implementation} rely on several key concepts and design decisions in the Java Virtual Machine's (JVM) garbage collection architecture, the Z Garbage Collector (ZGC), and the Java reference processing pipeline. This chapter provides the necessary background on these topics to understand the motivation and implementation of the optimizations. 
+The three optimisation approaches presented in \cref{chap:introduction} rely on several key concepts and design decisions in the Java Virtual Machine's (JVM) garbage collection architecture, the Z Garbage Collector (ZGC), and the Java reference processing pipeline. This chapter provides the necessary background on these topics to understand the motivation and implementation of the optimisations. 
 
 \section{Garbage Collection in the JVM}
 \label{sec:gc-overview}
@@ -17,7 +17,7 @@ The JVM ships with several garbage collector implementations, each designed with
     \item \textbf{ZGC (Z Garbage Collector)}   A scalable, low-latency collector that performs expensive GC work concurrently with application threads. It targets pause times of only a few milliseconds (largely independent of heap size) and supports heap sizes from 8\,MB to 16\,TB.
 \end{itemize}
 
-This thesis focuses on ZGC, as its low-latency design and concurrent reference processing pipeline can particularly benefit from optimizations that reduce the amount of work done during reference processing.
+This thesis focuses on ZGC, as its low-latency design and concurrent reference processing pipeline can particularly benefit from optimisations that reduce the amount of work done during reference processing.
 
 \subsection{Generational Collection}
 \label{subsec:generational}
@@ -40,8 +40,8 @@ In addition to ordinary (strong) references, Java provides  \emph{reference obje
 \begin{enumerate}
     \item \textbf{SoftReference}   The referent is cleared at the discretion of the GC, typically when memory is low. Commonly used for memory-sensitive caches.
     \item \textbf{WeakReference}   The referent is cleared as soon as it becomes weakly reachable (i.e., no strong or soft references exist to it). Widely used in caching frameworks, canonical mappings, and listener registrations.
-    \item \textbf{FinalReference}   An internal JVM type (not part of the public API) used to implement the \texttt{finalize()} mechanism. Objects with finalizers are wrapped in a \texttt{FinalReference} so the GC can schedule finalization before reclaiming the object. This scheduling is done via a \texttt{ReferenceQueue} which means that FinalReferences always have an associated \texttt{ReferenceQueue}. 
-    \item \textbf{PhantomReference}   The referent is never accessible through the reference; \texttt{get()} always returns \texttt{null}. Used for post-mortem cleanup actions, often to avoid the pitfalls of finalization. Phantom references must be registered with a \texttt{ReferenceQueue} to be useful.
+    \item \textbf{FinalReference}   An internal JVM type (not part of the public API) used to implement the \texttt{finalize()} mechanism. Objects with finalizers are wrapped in a \texttt{FinalReference} so the GC can schedule finalisation before reclaiming the object. This scheduling is done via a \texttt{ReferenceQueue} which means that FinalReferences always have an associated \texttt{ReferenceQueue}. 
+    \item \textbf{PhantomReference}   The referent is never accessible through the reference; \texttt{get()} always returns \texttt{null}. Used for post-mortem cleanup actions, often to avoid the pitfalls of finalisation. Phantom references must be registered with a \texttt{ReferenceQueue} to be useful.
 \end{enumerate}
 
 \begin{sloppypar}
@@ -117,7 +117,7 @@ ZGC achieves these goals through several key techniques:
 
 \paragraph{Barriers.} ZGC uses barriers at every reference load or write. The barrier checks the colour bits of the loaded pointer and, if necessary, applies a fixup (e.g., remapping after relocation or marking for concurrent marking). This is the mechanism that allows ZGC to perform most of its work concurrently with the application.
 
-\paragraph{Concurrent Phases.} A ZGC collection cycle interleaves short stop-the-world pauses (for root scanning and synchronization) with concurrent phases (for marking, reference processing, and relocation). The concurrent phases run alongside application threads, using barriers to maintain consistency.
+\paragraph{Concurrent Phases.} A ZGC collection cycle interleaves short stop-the-world pauses (for root scanning and synchronisation) with concurrent phases (for marking, reference processing, and relocation). The concurrent phases run alongside application threads, using barriers to maintain consistency.
 
 \paragraph{Multiple GC Worker Threads.} ZGC uses multiple GC worker threads to parallelize GC work. Each worker thread maintains its own data structures in many cases to avoid contention.
 
@@ -172,4 +172,4 @@ After a reference's referent has been cleared, the reference must be made availa
     \item The \texttt{ReferenceHandler} thread wakes up, atomically retrieves the pending list, and iterates over it. For each reference, it checks whether \texttt{queue != NULL\_QUEUE}. If the reference has a real queue, it calls \texttt{queue.enqueue(this)}; otherwise it simply advances to the next reference.
 \end{enumerate}
 
-This handoff reveals an inefficiency: references created without a \texttt{ReferenceQueue} are still linked into the pending list, transferred to the \texttt{ReferenceHandler} thread, and iterated over only to be skipped. For workloads where the majority of weak references lack queues, this constitutes unnecessary bookkeeping. This behavior has been reported in an OpenJDK enhancement issue\cite{JDK-8029205}. Avoiding enqueue-path work for references with \texttt{NULL\_QUEUE} is one of the primary optimization target explored in this thesis.
+This handoff reveals an inefficiency: references created without a \texttt{ReferenceQueue} are still linked into the pending list, transferred to the \texttt{ReferenceHandler} thread, and iterated over only to be skipped. For workloads where the majority of weak references lack queues, this constitutes unnecessary bookkeeping. This behavior has been reported in an OpenJDK enhancement issue\cite{JDK-8029205}. Avoiding enqueue-path work for references with \texttt{NULL\_QUEUE} is one of the primary optimisation target explored in this thesis.

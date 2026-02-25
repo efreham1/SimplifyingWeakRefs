@@ -160,6 +160,10 @@ public final class WeakRefGcBenchmark {
                 Thread.sleep(sleepMillis);
             }
         }
+        System.out.printf("Waiting %d ms...%n", sleepMillis*2);
+            if (sleepMillis*2 > 0) {
+                Thread.sleep(sleepMillis*2);
+            }
 
         System.out.printf("Phase 5: Final GC and weak reference check...%n");
         

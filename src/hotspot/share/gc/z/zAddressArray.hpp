@@ -31,8 +31,12 @@
 #include "utilities/globalDefinitions.hpp"
 #include <string.h>
 
+#ifndef ZUseSeqCodeOptimisations
+#define ZUseSeqCodeOptimisations 1
+#endif // ZUseSeqCodeOptimisations
+
 struct ZWeakRefData {
-#ifdef ZUseSeqCodeOptimisations
+#if ZUseSeqCodeOptimisations
   zpointer* referent_field_addr;
   zaddress* discovered_field_addr;
   zaddress referent_addr;
@@ -94,7 +98,7 @@ public:
   }
 
   // Append a new entry
-#ifdef ZUseSeqCodeOptimisations
+#if ZUseSeqCodeOptimisations
   void append(zpointer* referent_field_addr, zaddress* discovered_field_addr, zaddress referent_addr, zpointer referent_field_value) {
     if (_length >= _capacity) {
       grow(_length + 1);

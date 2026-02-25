@@ -1,31 +1,31 @@
 \chapter{Method}
 \label{chap:method}
 
-In order to answer the research questions posed in \cref{sec:research-questions} three orthgonal approaches were implemented to optimize the reference processing of weak references in Z garbage collector (ZGC). These approaches were implemented in ZGC in different combinations and their performance was evaluated using microbenchmarks. These three approaches were as stated in \cref{chap:introduction} the following:
+In order to answer the research questions posed in \cref{sec:research-questions} three orthogonal optimisation approaches were implemented separately for the processing of weak references without a \texttt{ReferenceQueue} in the Z garbage collector (ZGC). These separate implementations were then combined in all possible combinations and had their performance evaluated using microbenchmarks. These three approaches were as presented in \cref{chap:introduction} the following:
 \begin{itemize}
     \item Skipping the enqueue path for references without a \texttt{ReferenceQueue}
     \item Replacing the intrusive linked list with a dynamic array for the discovered list for references without a \texttt{ReferenceQueue}
-    \item Sequential Code Optimizations
+    \item Sequential Code Optimisations
 \end{itemize}
 The rationale and implementation details of these approaches are described in the following sections. The evaluation of the approaches is described in \cref{chap:results}.
 
 \section{Skipping Enqueue Path}
 \label{sec:skipping-enqueue-path}
-As described in \cref{subsec:processing} ZGC enqueues discovered references to the internal pending list regardless of whether they have a \texttt{ReferenceQueue} or not. This is inefficient for weak references without a \texttt{ReferenceQueue} as discussed in \cref{subsec:enqueue}. Because of this, the first optimization approach implemented was to skip the enqueue path for references without a \texttt{ReferenceQueue}. The intended effect of this optimization is to both reduce the amount of work done by the GC threads during reference processing and to reduce the amount of work done by the \texttt{ReferenceHandler} thread when iterating over the pending list.
+As described in \cref{subsec:processing} ZGC enqueues discovered references to the internal pending list regardless of whether they have a \texttt{ReferenceQueue} or not. This is inefficient for weak references without a \texttt{ReferenceQueue} as discussed in \cref{subsec:enqueue}. Because of this, the first optimisation approach implemented was to skip the enqueue path for references without a \texttt{ReferenceQueue}. The intended effect of this optimisation is to both reduce the amount of work done by the GC threads during reference processing and to reduce the amount of work done by the \texttt{ReferenceHandler} thread when iterating over the pending list.
 
 \subsection{Implementation of Null-queue Fast Path}
-In order to skip enqueueing references without a \texttt{ReferenceQueue} the \texttt{ReferenceProcssor} class was modified to check if the queue field of the reference being discovered is equal to the sentinel value \texttt{ReferenceQueue.NULL\_QUEUE} before adding it to the discovered list. If the reference does not have a \texttt{ReferenceQueue} it is added to a separate discovered list for references without a \texttt{ReferenceQueue} instead of being added to the regular discovered list. This separate discovered list is then processed separately by the GC threads and none of its references are enqueued to the pending list for the \texttt{ReferenceHandler} thread. This optimization is controlled by a JVM flag and can be enabled or disabled at runtime.
+In order to skip enqueueing references without a \texttt{ReferenceQueue} the \texttt{ReferenceProcessor} class was modified to check if the queue field of the reference being discovered is equal to the sentinel value \texttt{ReferenceQueue.NULL\_QUEUE} before adding it to the discovered list. If the reference does not have a \texttt{ReferenceQueue} it is added to a separate discovered list for references without a \texttt{ReferenceQueue} instead of being added to the regular discovered list. This separate discovered list is then processed separately by the GC threads and none of its references are enqueued to the pending list for the \texttt{ReferenceHandler} thread. This optimisation is controlled by a JVM flag and can be enabled or disabled at runtime.
 
 \section{Replacing Intrusive Linked List with Dynamic Array}
 \label{sec:replacing-intrusive-linked-list}
-%Rationale and hoped-for effect of this optimization approach
+%Rationale and hoped-for effect of this optimisation approach
 
 \subsection{Implementation of Dynamic Array for Queue-Less WeakReferences}
 
-\section{Sequential Code Optimizations}
-\label{sec:sequential-code-optimizations}
-%Rationale and hoped-for effect of this optimization approach
+\section{Sequential Code Optimisations}
+\label{sec:sequential-code-optimisations}
+%Rationale and hoped-for effect of this optimisation approach
 
-\subsection{Implementation of Sequential Code Optimizations}
+\subsection{Implementation of Sequential Code Optimisations}
 
 \section{Performance Evaluation}
