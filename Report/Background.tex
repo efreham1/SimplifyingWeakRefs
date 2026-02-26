@@ -1,12 +1,12 @@
 \chapter{Background}
 \label{chap:background}
 
-The three optimisation approaches presented in \cref{chap:introduction} rely on several key concepts and design decisions in the Java Virtual Machine's (JVM) garbage collection architecture, the Z Garbage Collector (ZGC), and the Java reference processing pipeline. This chapter provides the necessary background on these topics to understand the motivation and implementation of the optimisations. 
+The three optimisation approaches introduced in \cref{chap:introduction} rely on several key concepts and design decisions in the Java Virtual Machine's (JVM) garbage collection architecture and specifically the Z Garbage Collector (ZGC) and its reference processing pipeline. This chapter provides the necessary background on these topics to understand the motivation and implementation of the optimisations. 
 
 \section{Garbage Collection in the JVM}
 \label{sec:gc-overview}
 
-The Java Virtual Machine (JVM) provides automatic memory management through garbage collection (GC). Rather than requiring the programmer to explicitly allocate and free memory as in languages such as C or C++, the JVM tracks which objects are reachable from the application's root set, comprising of thread stacks, static fields, and JNI references, and reclaims the memory of objects that are no longer reachable.
+The JVM provides automatic memory management through garbage collection (GC). Rather than requiring the programmer to explicitly allocate and free memory as in languages such as C or C++, the JVM tracks which objects are reachable from the application's root set and reclaims the memory of objects that are no longer reachable. The root set consists of all data that is directly accessible to the application, such as local variables on the stack, static fields, and active threads.
 
 The JVM ships with several garbage collector implementations, each designed with different trade-offs between throughput, latency, and memory footprint~\cite{oracle-gc-collectors}. The collectors are:
 
@@ -19,14 +19,31 @@ The JVM ships with several garbage collector implementations, each designed with
 
 This thesis focuses on ZGC, as its low-latency design and concurrent reference processing pipeline can particularly benefit from optimisations that reduce the amount of work done during reference processing.
 
+\subsection{Garbage Collection Phases}
+\label{subsec:gc-phases}
+
+Garbage collection generally occurs multiple times (cycles) during the lifetime of a Java application. Each cycle consists of several distinct phases, each with specific responsibilities. The exact phases and their order can vary between collectors, but a common structure is as follows:
+
+\begin{enumerate}
+    \item \textbf{Mark Phase}   The collector identifies all live objects by traversing from the root set and marking all reachable objects. Dead objects are those that are not marked. This phase may be performed concurrently with the application or during a stop-the-world pause, depending on the collector design.
+    
+    \item \textbf{Reference Processing Phase}   After marking completes, the collector processes \textit{Reference} objects discovered during the mark phase. This phase determines which references have dead referents and prepares them for enqueueing. Like marking, this phase may be concurrent or done during a pause.
+    
+    \item \textbf{Sweep/Reclamation Phase}   The collector reclaims memory occupied by dead objects. Some collectors use a sweep algorithm (scanning the heap and freeing unmarked objects) whilst others use evacuation (copying live objects to new memory regions).
+    
+    \item \textbf{Compaction/Relocation Phase}   Some collectors compact the heap to eliminate fragmentation, moving live objects to consolidate free space. Others relocate objects incrementally as part of the collection process.
+\end{enumerate}
+
+The order and concurrency model of these phases varies significantly between collectors. Serial and Parallel GC typically perform all phases in stop-the-world pauses. G1 performs marking and sweeping mostly concurrently with short pauses for synchronisation. ZGC performs marking, reference processing, and relocation concurrently, using barriers to maintain consistency with concurrent application threads.
+
 \subsection{Generational Collection}
 \label{subsec:generational}
 
-All JVM garbage collectors (Serial, Parallel, G1, and Z) employ \emph{generational collection}, based on the \emph{weak generational hypothesis}: most objects die young~\cite{lieberman81-realtime-gc} and the ones that don't tend to live for a long time. The heap is divided into at least two generations:
+All JVM garbage collectors (Serial, Parallel, G1, and Z) employ \emph{generational collection}, based on the \emph{weak generational hypothesis}: most objects die young and the ones that don't tend to live for a long time.\cite{lieberman81-realtime-gc} To employ this the heap is divided into at least two generations:
 
 \begin{itemize}
     \item The \textbf{young generation}, where newly allocated objects reside. Young generation collections are frequent but fast, since most young objects are short-lived.
-    \item The \textbf{old generation}, where objects that have survived multiple young collections are promoted to. Old generation collections are less frequent but more expensive since live objects are more plentiful.
+    \item The \textbf{old generation}, where objects that have survived multiple young collections are promoted to. Old generation collections are less frequent but more expensive since live objects are more plentiful here.
 \end{itemize}
 
 ZGC adopted generational collection starting with JDK~21. In generational ZGC, the young and old generations can be collected independently and therefore concurrently. This is relevant to reference processing because references in different generations are handled during different collection cycles.
@@ -35,18 +52,16 @@ ZGC adopted generational collection starting with JDK~21. In generational ZGC, t
 \section{Java Reference Types}
 \label{sec:reference-types}
 
-In addition to ordinary (strong) references, Java provides  \emph{reference objects} in the \texttt{java.lang.ref} package that allow applications to refernece objects without preventing their garbage collection. These reference types are:
+In addition to ordinary (strong) references, Java provides  \emph{reference objects} in the \texttt{java.lang.ref} package that allow applications to reference objects without preventing their garbage collection. These reference types are:
 
 \begin{enumerate}
-    \item \textbf{SoftReference}   The referent is cleared at the discretion of the GC, typically when memory is low. Commonly used for memory-sensitive caches.
-    \item \textbf{WeakReference}   The referent is cleared as soon as it becomes weakly reachable (i.e., no strong or soft references exist to it). Widely used in caching frameworks, canonical mappings, and listener registrations.
-    \item \textbf{FinalReference}   An internal JVM type (not part of the public API) used to implement the \texttt{finalize()} mechanism. Objects with finalizers are wrapped in a \texttt{FinalReference} so the GC can schedule finalisation before reclaiming the object. This scheduling is done via a \texttt{ReferenceQueue} which means that FinalReferences always have an associated \texttt{ReferenceQueue}. 
+    \item \textbf{SoftReference}   The referent field is cleared at the discretion of the GC, typically when memory is low. Commonly used for memory-sensitive caches.
+    \item \textbf{WeakReference}   The referent field is cleared as soon as it becomes weakly reachable (i.e., no strong or soft references exist to it). Widely used in caching frameworks, canonical mappings, and listener registrations.
+    \item \textbf{FinalReference}   An internal JVM type (not part of the public API) used to implement the \texttt{finalize()} mechanism. Objects with finalisers are wrapped in a \texttt{FinalReference} so the GC can schedule finalisation before reclaiming the object. This scheduling is done via a \texttt{ReferenceQueue} which means that FinalReferences always have an associated \texttt{ReferenceQueue}. 
     \item \textbf{PhantomReference}   The referent is never accessible through the reference; \texttt{get()} always returns \texttt{null}. Used for post-mortem cleanup actions, often to avoid the pitfalls of finalisation. Phantom references must be registered with a \texttt{ReferenceQueue} to be useful.
 \end{enumerate}
 
-\begin{sloppypar}
-All four types extend the abstract class \texttt{Reference<T>} (in the \texttt{java.lang.ref} package), which defines the key fields and the lifecycle managed by the garbage collector.
-\end{sloppypar}
+All four types extend the abstract class \texttt{Reference<T>} (in the \texttt{java.lang.ref} package), which defines the key fields of the reference object and the API for retrieving the referent, clearing the referent field, and checking if it is enqueued.
 
 \subsection{The Reference Object Lifecycle}
 \label{subsec:ref-lifecycle}
@@ -54,10 +69,10 @@ All four types extend the abstract class \texttt{Reference<T>} (in the \texttt{j
 Each \texttt{Reference} object maintains several fields that track its state:
 
 \begin{itemize}
-    \item \texttt{referent}   The referenced object. The GC may clear this field (set it to \texttt{null}) when the referent becomes eligible for collection according to the reference's type.
-    \item \texttt{queue}   The \texttt{ReferenceQueue} this reference is registered with. If the reference was not created with a queue, this field points to the sentinel object \texttt{ReferenceQueue.NULL\_QUEUE}.
-    \item \texttt{next}   Used as a link pointer when the reference is enqueued in a \texttt{ReferenceQueue}.
-    \item \texttt{discovered}   A field with dual purpose: during GC marking, it serves as a link in the garbage collector's internal \emph{discovered list}; after processing, it is reused as a link in the VM's \emph{pending list} that feeds the \texttt{ReferenceHandler} thread. Due to its first use, the GC can detect whether a reference has already been discovered by checking if this field is \texttt{null}.
+    \item \texttt{referent field}   The referenced object. The GC may clear this field (set it to \texttt{null}) when the referent becomes eligible for collection according to the reference's type.
+    \item \texttt{queue field}   The \texttt{ReferenceQueue} this reference is registered with. If the reference was not created with a queue, this field points to the sentinel object \texttt{ReferenceQueue.NULL\_QUEUE}.
+    \item \texttt{next field}   Used as a link pointer when the reference is enqueued in a \texttt{ReferenceQueue}.
+    \item \texttt{discovered field}   A field with dual purpose: during GC marking, it serves as a link in the garbage collector's internal \emph{discovered list}; after processing, it is reused as a link in the VM's \emph{pending list} that feeds the \texttt{ReferenceHandler} thread. Due to its first use, the GC can detect whether a reference has already been discovered by checking if this field is \texttt{null}.
 \end{itemize}
 
 A reference object transitions through the following states during its lifetime:
@@ -97,7 +112,7 @@ When a \texttt{WeakReference} is created with a \texttt{ReferenceQueue}, the app
 
 The \texttt{ReferenceQueue} is implemented as a synchronized singly-linked list using the \texttt{next} field of the \texttt{Reference} objects. It provides \texttt{poll()} for non-blocking retrieval and \texttt{remove()} for blocking retrieval with an optional timeout. This is the mechanism by which applications can react to the collection of referents, for example to clean up associated resources.
 
-A key insight for this thesis is that \textbf{many real-world uses of \texttt{WeakReference} do not use a \texttt{ReferenceQueue}}. Caching frameworks, \texttt{WeakHashMap}, and similar data structures typically create weak references without queues, relying instead on periodic polling or lazy cleanup. This means the garbage collector expends effort preparing these references for enqueueing (adding them to the pending list) even though the \texttt{ReferenceHandler} thread will immediately skip them.
+A key insight for this thesis is that many real-world uses of \texttt{WeakReference} does not require a \texttt{ReferenceQueue}. Caching frameworks, \texttt{WeakHashMap}, and similar data structures typically create weak references without queues, relying instead on periodic polling or lazy cleanup. This means the garbage collector expends effort preparing these references for enqueueing (adding them to the pending list) even though the \texttt{ReferenceHandler} thread will immediately skip them.
 
 
 \section{The Z Garbage Collector}
@@ -115,7 +130,7 @@ ZGC achieves these goals through several key techniques:
 
 \paragraph{Coloured Pointers.} ZGC embeds metadata in the unused bits of 64-bit object pointers. These \emph{colour bits} encode information about the pointer's current state relative to the GC's phase, for example, whether the pointer has been remapped after relocation, or whether it points to a young or old generation object. This allows the GC to reason about pointer states without loading the object header.
 
-\paragraph{Barriers.} ZGC uses barriers at every reference load or write. The barrier checks the colour bits of the loaded pointer and, if necessary, applies a fixup (e.g., remapping after relocation or marking for concurrent marking). This is the mechanism that allows ZGC to perform most of its work concurrently with the application.
+\paragraph{Barriers.} ZGC uses barriers at every reference load or write. The barrier checks the colour bits of the loaded pointer and, if necessary, applies a fixup (e.g., remapping after relocation). This is the mechanism that allows ZGC to perform most of its work concurrently with the application.
 
 \paragraph{Concurrent Phases.} A ZGC collection cycle interleaves short stop-the-world pauses (for root scanning and synchronisation) with concurrent phases (for marking, reference processing, and relocation). The concurrent phases run alongside application threads, using barriers to maintain consistency.
 
@@ -130,15 +145,15 @@ Reference processing is the mechanism by which the garbage collector handles \te
 \subsection{Discovery}
 \label{subsec:discovery}
 
-During the concurrent marking phase, when the GC encounters a \texttt{Reference} object (i.e., an instance of \texttt{SoftReference}, \texttt{WeakReference}, \texttt{FinalReference}, or \texttt{PhantomReference}), it evaluates whether the reference should be \emph{discovered}, i.e. added to a list for later processing.
+During the concurrent marking phase, when ZGC encounters a \texttt{Reference} object (an instance of \texttt{SoftReference}, \texttt{WeakReference}, \texttt{FinalReference}, or \texttt{PhantomReference}), it evaluates whether the reference should be \emph{discovered}, i.e. added to a list for later processing.
 
 The discovery decision depends on several factors:
 
 \begin{enumerate}
-    \item \textbf{Is the reference active?} Only active references are eligible. For non-\texttt{FinalReference} types, an inactive reference has a \texttt{null} referent. For \texttt{FinalReference}, inactivity is indicated by a non-null \texttt{next} field.
+    \item \textbf{Is the reference active?} Only active references are eligible. For non-\texttt{FinalReference} types, an inactive reference has a \texttt{null} referent field. For \texttt{FinalReference}, inactivity is indicated by a non-null \texttt{next} field.
     \item \textbf{Is the referent still strongly reachable?} If the referent is already marked as strongly live, the reference does not need processing. The garbage collector checks this via its liveness information.
-    \item \textbf{Soft reference policy.} For \texttt{SoftReference} objects, the collector applies a policy (based on available memory and the reference's last access time) to decide whether to keep the referent alive or clear it.
-    \item \textbf{Generational considerations.} In ZGC, only references residing in the old generation are discovered; young-generation references are always treated as strong. This is because young-generation collections are short and the overhead of discovering and processing references would be disproportionate to the benefits, given that most young objects die quickly.
+    \item \textbf{Soft reference policy.} For \texttt{SoftReference} objects, the collector applies a policy (based on available memory and the reference's last access time) to decide whether to keep the referent alive or clear the referent field.
+    \item \textbf{Generational considerations.} In ZGC, only references residing in the old generation are discovered; young-generation references are always treated as strong. This is because reference processing introduces additional delay and uncertainty to the duration of the young-generation collection. So by treating young references as strong, ZGC can complete young collections more predictably which decreases the risk of the application running out of memory during a long young collection. 
 \end{enumerate}
 
 Once a reference is selected for discovery, it is recorded on a \emph{discovered list}. In ZGC each GC worker thread maintains its own discovered-list head, so discovery is implemented as a cheap, non-atomic prepend to a per-worker list. This avoids CAS contention found in shared processors where multiple threads update the same discovered head.
@@ -149,27 +164,27 @@ Once a reference is selected for discovery, it is recorded on a \emph{discovered
 After marking completes, the discovered lists are processed. For each discovered reference, the collector determines the final fate of the referent:
 
 \begin{enumerate}
-    \item If the referent has become \texttt{null} (cleared by the application concurrently), the reference is dropped from the list.
-    \item If the referent is now strongly reachable (e.g. it was marked as alive after the reference's discovery), the reference is dropped and the referent is kept alive.
-    \item If the referent is still unreachable according to the reference's strength, the referent is \textbf{cleared} (set to \texttt{null}), and the reference is prepared for enqueueing.
+    \item If the referent field has become \texttt{null} (cleared by the application concurrently), the reference is dropped from the list.
+    \item If the referent is now strongly reachable (e.g. it was marked as alive after the reference's discovery), the reference is dropped.
+    \item If the referent is still unreachable according to the reference's strength, the referent field is \textbf{cleared} (set to \texttt{null}), and the reference is prepared for enqueueing.
 \end{enumerate}
 
 In ZGC, clearing involves setting the \texttt{referent} field to a coloured null pointer via compare-and-swap (CAS) to ensure thread safety since application threads may be concurrently accessing the reference.
 
-After clearing, the reference is linked onto the pending list for the \texttt{ReferenceHandler} thread. This involves writing the reference's address into the \texttt{discovered} field of the previously processed reference and atomically prepending it to the GC's internal pending list.
+After clearing, the reference is linked onto the thread-local pending list. This involves writing the reference's address into the \texttt{discovered} field of the previously processed reference. Once the thread has processed all references in its discoverd list the thread-local list gets atomically prepended to the ZGC's internal pending list.
 
-Generational interactions are important during processing: when a \texttt{Reference} object is old but its referent is young, the referent is treated as strongly reachable for the duration of the old-collection and must not be cleared. Processing must therefore verify generation membership and, if appropriate, ensure young-generation liveness is preserved (by marking the young referent) so it is not lost between concurrent phases.
+Generational interactions are important during processing: when a \texttt{Reference} object is old but its referent is young, the referent is treated as strongly reachable and the referent field must not be cleared. Processing must therefore verify generation membership and, if appropriate, ensure young-generation liveness is preserved (by marking the young referent).
 
 \subsection{Enqueue}
 \label{subsec:enqueue}
 
-After a reference's referent has been cleared, the reference must be made available to the application. This happens through the \emph{pending list} mechanism:
+After a reference's referent field has been cleared, the reference must be made available to the application if it was created with a \texttt{ReferenceQueue}. This happens through the \emph{pending list} mechanism which feeds the \texttt{ReferenceHandler} thread. The handoff process is as follows:
 
 \begin{enumerate}
-    \item The GC builds an internal pending list by linking cleared references together via their \texttt{discovered} field.
+    \item The GC has built an internal pending list by linking cleared references together via their \texttt{discovered} field.
     \item Under the heap lock, the GC atomically prepends its internal pending list onto the global VM pending list.
     \item The \texttt{ReferenceHandler} daemon thread is notified.
     \item The \texttt{ReferenceHandler} thread wakes up, atomically retrieves the pending list, and iterates over it. For each reference, it checks whether \texttt{queue != NULL\_QUEUE}. If the reference has a real queue, it calls \texttt{queue.enqueue(this)}; otherwise it simply advances to the next reference.
 \end{enumerate}
 
-This handoff reveals an inefficiency: references created without a \texttt{ReferenceQueue} are still linked into the pending list, transferred to the \texttt{ReferenceHandler} thread, and iterated over only to be skipped. For workloads where the majority of weak references lack queues, this constitutes unnecessary bookkeeping. This behavior has been reported in an OpenJDK enhancement issue\cite{JDK-8029205}. Avoiding enqueue-path work for references with \texttt{NULL\_QUEUE} is one of the primary optimisation target explored in this thesis.
+This handoff reveals an inefficiency: references created without a \texttt{ReferenceQueue} are still linked into the pending list, transferred to the \texttt{ReferenceHandler} thread, and iterated over only to be skipped. For workloads where the majority of weak references lack queues, this results in a considerable amount of extra work. This behaviour has been reported in an OpenJDK enhancement issue\cite{JDK-8029205}. Avoiding enqueue-path work for references with \texttt{NULL\_QUEUE} is one of the primary optimisation target explored in this thesis.

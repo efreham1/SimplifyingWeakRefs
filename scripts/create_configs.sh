@@ -9,11 +9,13 @@ OUT_CONF_FILE="$(dirname "$0")/variants.conf"
 MAKE_TARGET="exploded-image"
 
 variants=(
-  "seq_only"
-  "seq_sep"
-  "sep_only"
-  "sep_dyn"
   "none"
+  "gen_opt_only"
+  "sep_only"
+  "dyn_only"
+  "gen_opt_sep"
+  "gen_opt_dyn"
+  "sep_dyn"
   "all"
 )
 
@@ -28,23 +30,27 @@ orig_cxxflags="${CXXFLAGS:-}"
 
 for name in "${variants[@]}"; do
   case "${name}" in
-    seq_only)
-      seq_val=1; sep_val=0; dyn_val=0;;
-    seq_sep)
-      seq_val=1; sep_val=1; dyn_val=0;;
-    sep_only)
-      seq_val=0; sep_val=1; dyn_val=0;;
-    sep_dyn)
-      seq_val=0; sep_val=1; dyn_val=1;;
     none)
-      seq_val=0; sep_val=0; dyn_val=0;;
+      gen_opt_val=0; sep_val=0; dyn_val=0;;
+    gen_opt_only)
+      gen_opt_val=1; sep_val=0; dyn_val=0;;
+    sep_only)
+      gen_opt_val=0; sep_val=1; dyn_val=0;;
+    dyn_only)
+      gen_opt_val=0; sep_val=0; dyn_val=1;;
+    gen_opt_sep)
+      gen_opt_val=1; sep_val=1; dyn_val=0;;
+    gen_opt_dyn)
+      gen_opt_val=1; sep_val=0; dyn_val=1;;
+    sep_dyn)
+      gen_opt_val=0; sep_val=1; dyn_val=1;;
     all)
-      seq_val=1; sep_val=1; dyn_val=1;;
+      gen_opt_val=1; sep_val=1; dyn_val=1;;
     *)
-      seq_val=0; sep_val=0; dyn_val=0;;
+      gen_opt_val=0; sep_val=0; dyn_val=0;;
   esac
 
-  flags="-DZUseSeqCodeOptimisations=${seq_val}"
+  flags="-DZUseGenCodeOptimisations=${gen_opt_val}"
   flags+=" -DZUseSeperateDiscoveredLists=${sep_val}"
   flags+=" -DZUseDynamicArray=${dyn_val}"
 

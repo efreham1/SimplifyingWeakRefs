@@ -30,20 +30,22 @@
 #include "utilities/powerOfTwo.hpp"
 #include "utilities/globalDefinitions.hpp"
 #include <string.h>
-
-#ifndef ZUseSeqCodeOptimisations
-#define ZUseSeqCodeOptimisations 1
-#endif // ZUseSeqCodeOptimisations
+#include "gc/z/zConfFalgs.h"
 
 struct ZWeakRefData {
-#if ZUseSeqCodeOptimisations
+#if ZUseGenCodeOptimisations
   zpointer* referent_field_addr;
   zaddress* discovered_field_addr;
   zaddress referent_addr;
   zpointer referent_field_value;
-#else //!ZUseSeqCodeOptimisations
+#if !ZUseSeperateDiscoveredLists
+  // For the case where we use a dynamic array but not separate discovered lists, we need to store the reference itself in the data struct to be able to mark it as discovered.
   zaddress reference;
-#endif // ZUseSeqCodeOptimisations
+#endif // !ZUseSeperateDiscoveredLists
+#else //!ZUseGenCodeOptimisations
+  zaddress reference;
+#endif // ZUseGenCodeOptimisations
+
 };
 
 // High-performance growable array specifically for storing discovered weak references.
@@ -98,7 +100,7 @@ public:
   }
 
   // Append a new entry
-#if ZUseSeqCodeOptimisations
+#if ZUseGenCodeOptimisations && ZUseSeperateDiscoveredLists
   void append(zpointer* referent_field_addr, zaddress* discovered_field_addr, zaddress referent_addr, zpointer referent_field_value) {
     if (_length >= _capacity) {
       grow(_length + 1);
@@ -109,7 +111,19 @@ public:
     _data[_length].referent_field_value = referent_field_value;
     _length++;
   }
-#else //!ZUseSeqCodeOptimisations
+#elif ZUseGenCodeOptimisations && !ZUseSeperateDiscoveredLists
+  void append(zpointer* referent_field_addr, zaddress* discovered_field_addr, zaddress referent_addr, zpointer referent_field_value, zaddress reference) {
+    if (_length >= _capacity) {
+      grow(_length + 1);
+    }
+    _data[_length].referent_field_addr = referent_field_addr;
+    _data[_length].discovered_field_addr = discovered_field_addr;
+    _data[_length].referent_addr = referent_addr;
+    _data[_length].referent_field_value = referent_field_value;
+    _data[_length].reference = reference;
+    _length++;
+  }
+#else //!ZUseGenCodeOptimisations
   void append(zaddress reference) {
     if (_length >= _capacity) {
       grow(_length + 1);
@@ -117,7 +131,7 @@ public:
     _data[_length].reference = reference;
     _length++;
   }
-#endif // ZUseSeqCodeOptimisations
+#endif // ZUseGenCodeOptimisations
 
   // Get entry at index
   const ZWeakRefData& at(size_t index) const {
@@ -128,6 +142,11 @@ public:
   // Current length
   size_t length() const {
     return _length;
+  }
+
+  // Whether the array is empty
+  bool is_empty() const {
+    return _length == 0;
   }
 
   // Current capacity

@@ -271,9 +271,11 @@ echo ""
 # Define the variants corresponding to builds created by scripts/build_exploded_images_variants.sh
 variants=(
     "none"
-    "seq_only"
-    "seq_sep"
+    "gen_opt_only"
     "sep_only"
+    "dyn_only"
+    "gen_opt_sep"
+    "gen_opt_dyn"
     "sep_dyn"
     "all"
 )

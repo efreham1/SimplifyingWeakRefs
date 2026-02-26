@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
+import java.lang.ref.Reference;
 
 public final class WeakRefGcBenchmark {
 
@@ -118,15 +119,9 @@ public final class WeakRefGcBenchmark {
             Thread.sleep(sleepMillis);
         }
 
-        // Phase 4-*: Repeatedly clear half of remaining strong refs until all are gone
+        // Phase 4-*: Repeatedly clear 20% of strong refs until all are gone
         int subPhase = 1;
         int remainingRefs = objectCount;
-
-        // Phase 3: Dummy write to ensure all objects are touched
-        System.out.println("Phase 3: Touching all strong references...");
-        for (int i = 0; i < objectCount; i++) {
-            strongRefs[i].payload[0] = (byte) (strongRefs[i].id & 0xFF);
-        }
 
         int [] clearOrder = shuffledIndices(objectCount, random);
         int i = 0;
@@ -142,14 +137,6 @@ public final class WeakRefGcBenchmark {
                     clearedThisRound++;
                 }
             }
-            int prev_i = i;
-            for (; i < objectCount; i++) {
-                int idx = clearOrder[i];
-                if (strongRefs[idx] != null) {
-                    strongRefs[idx].payload[0] = (byte) (strongRefs[idx].id & 0xFF);
-                }
-            }
-            i = prev_i;
             
             remainingRefs -= clearedThisRound;
             System.out.printf("Cleared %d strong references, %d remaining%n", clearedThisRound, remainingRefs);
@@ -160,6 +147,8 @@ public final class WeakRefGcBenchmark {
                 Thread.sleep(sleepMillis);
             }
         }
+
+        Reference.reachabilityFence(strongRefs);
         System.out.printf("Waiting %d ms...%n", sleepMillis*2);
             if (sleepMillis*2 > 0) {
                 Thread.sleep(sleepMillis*2);

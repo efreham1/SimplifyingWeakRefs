@@ -1,31 +1,125 @@
 \chapter{Method}
 \label{chap:method}
 
-In order to answer the research questions posed in \cref{sec:research-questions} three orthogonal optimisation approaches were implemented separately for the processing of weak references without a \texttt{ReferenceQueue} in the Z garbage collector (ZGC). These separate implementations were then combined in all possible combinations and had their performance evaluated using microbenchmarks. These three approaches were as presented in \cref{chap:introduction} the following:
+In order to answer the research questions posed in \cref{sec:research-questions} three orthogonal optimisation approaches were implemented separately for the processing of weak references without a \texttt{ReferenceQueue} in the Z garbage collector (ZGC). These separate implementations were then combined in all possible combinations and had their performance evaluated using microbenchmarks. The three approaches were, as introduced in \cref{chap:introduction}, the following:
 \begin{itemize}
-    \item Skipping the enqueue path for references without a \texttt{ReferenceQueue}
-    \item Replacing the intrusive linked list with a dynamic array for the discovered list for references without a \texttt{ReferenceQueue}
-    \item Sequential Code Optimisations
+    \item Skipping the enqueue path for weak references without a \texttt{ReferenceQueue}
+    \item Replacing the intrusive linked list with a dynamic array for the discovered list
+    \item General Code Optimisations
 \end{itemize}
-The rationale and implementation details of these approaches are described in the following sections. The evaluation of the approaches is described in \cref{chap:results}.
+The rationale, implementation details, and performance testing methodology of these approaches are described in the following sections. The evaluation of the approaches is described in \cref{chap:results}.
 
 \section{Skipping Enqueue Path}
 \label{sec:skipping-enqueue-path}
-As described in \cref{subsec:processing} ZGC enqueues discovered references to the internal pending list regardless of whether they have a \texttt{ReferenceQueue} or not. This is inefficient for weak references without a \texttt{ReferenceQueue} as discussed in \cref{subsec:enqueue}. Because of this, the first optimisation approach implemented was to skip the enqueue path for references without a \texttt{ReferenceQueue}. The intended effect of this optimisation is to both reduce the amount of work done by the GC threads during reference processing and to reduce the amount of work done by the \texttt{ReferenceHandler} thread when iterating over the pending list.
+As described in \cref{subsec:processing} ZGC enqueues discovered references to the internal pending list regardless of whether they have a \texttt{ReferenceQueue} or not. This is inefficient for weak references without a \texttt{ReferenceQueue} as discussed in \cref{subsec:enqueue}. Because of this, the reference processing pipeline was changed so that the enqueue path can be skipped for weak references without a \texttt{ReferenceQueue}. The intended effect of this optimisation is to both reduce the amount of work done by the GC threads during reference processing and to reduce the amount of work done by the \texttt{ReferenceHandler} thread when iterating over the pending list.
 
 \subsection{Implementation of Null-queue Fast Path}
-In order to skip enqueueing references without a \texttt{ReferenceQueue} the \texttt{ReferenceProcessor} class was modified to check if the queue field of the reference being discovered is equal to the sentinel value \texttt{ReferenceQueue.NULL\_QUEUE} before adding it to the discovered list. If the reference does not have a \texttt{ReferenceQueue} it is added to a separate discovered list for references without a \texttt{ReferenceQueue} instead of being added to the regular discovered list. This separate discovered list is then processed separately by the GC threads and none of its references are enqueued to the pending list for the \texttt{ReferenceHandler} thread. This optimisation is controlled by a JVM flag and can be enabled or disabled at runtime.
+In order to skip enqueueing weak references without a \texttt{ReferenceQueue} the \texttt{ReferenceProcessor} class was modified to check if the queue field of a weak reference being discovered is equal to the sentinel value \texttt{ReferenceQueue.NULL\_QUEUE} before adding it to the discovered list. If the queue field is equal to \texttt{ReferenceQueue.NULL\_QUEUE} (the weak reference wasn't created with a queue) it is added to a separate discovered list for weak references without a \texttt{ReferenceQueue} instead of being added to the regular discovered list. This separate discovered list is then processed independently by the GC threads and none of its weak references are enqueued to the pending list for the \texttt{ReferenceHandler} thread. Each GC thread maintains its own separate discovered list for weak references without a \texttt{ReferenceQueue} to avoid contention between threads.
+
+The reason for separating the discovered lists instead of simply skipping enqueueing for weak references without a \texttt{ReferenceQueue} is that two unique reference processing functions can then be used for the two lists. One function that includes enqueueing and one that doesn't. This allows for more efficient processing of the weak references without a \texttt{ReferenceQueue} as it avoids unnecessary checks for whether the weak reference has a queue during processing.
 
 \section{Replacing Intrusive Linked List with Dynamic Array}
 \label{sec:replacing-intrusive-linked-list}
-%Rationale and hoped-for effect of this optimisation approach
+When processing the discovered references, ZGC iterates over the discovered list. This list is, as described in \cref{subsec:discovery}, implemented as an intrusive linked list of the discovered references. This iteration over a linked list is inefficient since it has poor cache locality and cannot exploit instruction-level parallelism between iterations. Because of this, the intrusive linked list was replaced with a dynamic array for the discovered list for weak references without a \texttt{ReferenceQueue}. The intended effect of this optimisation is to reduce the amount of time spent loading the next reference to process and thereby allow for more efficient processing of the discovered references through better cache locality and better exploitation of instruction-level parallelism.
 
-\subsection{Implementation of Dynamic Array for Queue-Less WeakReferences}
+\subsection{Implementation of Dynamic Array for Discovered References}
+\label{subsec:dynamic-array-impl}
 
-\section{Sequential Code Optimisations}
-\label{sec:sequential-code-optimisations}
-%Rationale and hoped-for effect of this optimisation approach
+The implemented dynamic array, called \texttt{ZAddressArray}, stores discovered references in a contiguous layout rather than linking them via the \texttt{discovered} field. The array is allocated on the C heap and grows using a power-of-two strategy (with a minimum capacity of 8), using \texttt{memcpy} for bulk copying during expansion rather than element-by-element loops.
 
-\subsection{Implementation of Sequential Code Optimisations}
+Each GC worker thread maintains its own \texttt{ZAddressArray} instance to avoid contention. During discovery, when a reference should be added to a discovery list its data is appended to the worker's array instead of being appended to a linked list. The reference's \texttt{discovered} field is still set (to a self-referencing pointer) to mark the reference as discovered, preventing duplicate discovery.
+
+During processing, the array is iterated sequentially using index-based access. Because the elements are stored contiguously in memory, this iteration benefits from hardware prefetching and improved cache line utilisation compared to following pointers scattered across the heap.
+
+When using both dynamic arrays and separate discovered lists, only the discovered list for weak references without a \texttt{ReferenceQueue} is backed by a \texttt{ZAddressArray}, while the regular discovered list continues to use the linked list.
+
+\section{General Code Optimisations}
+\label{sec:general-code-optimisations}
+
+The standard reference processing path in ZGC uses general-purpose functions designed to handle all reference types uniformly. This generality introduces per-reference overhead that is unnecessary when processing only weak references without a \texttt{ReferenceQueue}, where the reference type is always \texttt{REF\_WEAK} and enqueueing is never required.
+
+The standard function for determining whether a reference's referent should be cleared, performs several operations per reference:
+\begin{enumerate}
+    \item A load barrier to read the referent from the reference object.
+    \item A virtual call to determine the reference type (soft, weak, final, or phantom).
+    \item A compare-and-swap (CAS) operation via a ZGC barrier to atomically set the referent field to a coloured null pointer.
+\end{enumerate}
+
+For weak references without a \texttt{ReferenceQueue}, each of these operations can be simplified or eliminated:
+\begin{itemize}
+    \item The reference type is known to be \texttt{REF\_WEAK} at the call site, eliminating the need for the virtual call to determine the type.
+    \item The only concurrent modification to the referent field that can occur is from the application threads, which can only change it from a live referent to null. This allows the CAS operation to be replaced with a simple store of a coloured null pointer without needing to check for concurrent updates.
+    \item When combined with the dynamic array optimisation, the referent field address and its value can be pre-fetched during discovery and stored in the array entry, avoiding redundant memory loads during processing. This is because during the reference processing phase, the only field that can be modified by another thread is the referent field, and it can only be modified from a live referent to null. This means that all values can be safely pre-fetched as long as the referent field isn't set to a non-null value without any safeguards during processing.
+\end{itemize}
+
+\subsection{Implementation of General Code Optimisations}
+\label{subsec:seq-impl}
+
+The implementation introduces a new function for determining whether a queue-less weak reference's referent should be cleared. This function takes a data struct (either from the dynamic array or constructed on the fly from the linked list) containing the pre-fetched field addresses and values.
+
+The new function checks whether the referent is strongly live via metadata in ZGC's heap management. If the referent is not strongly live and it resides in the old generation, its referent field is cleared using a direct pointer store rather than a CAS. This is okay since, as mentioned previously, the only possible new value is null so the worst-case scenario is that null is overwritten with null. If the referent is still live (either strongly marked or implicitly by residing in the young generation), the referent field is recoloured with the correct pointer metadata bits, this recolouring however has to occur with a CAS so that a null value isn't overwritten with a non-null value. Additionally, if the referent is young and the young generation is currently in its mark phase, the referent is marked to preserve cross-generational liveness.
+
+The \texttt{discovered} field is also cleared using a direct store to the field address rather than through an atomic access function since no other thread modifies this field after discovery.
+
+\section{Build Configurations}
+\label{sec:build-configurations}
+
+The three optimisation approaches are controlled by compile-time preprocessor flags: \texttt{ZUseGenCodeOptimisations} for the general code optimisations, \texttt{ZUseSeperateDiscoveredLists} for the separate discovered list, and \texttt{ZUseDynamicArray} for the dynamic array. Each flag can be independently enabled (1) or disabled (0) via compiler flags passed during the JDK build.
+
+Eight build configurations were created to evaluate all combinations of the three optimisation flags, as shown in \cref{tab:build-configs}. Each configuration produces a separate JDK build with its own binary, allowing direct comparison under identical benchmark conditions.
+
+\begin{table}[htbp]
+\centering
+\caption{Build configurations and their enabled optimisation flags}
+\label{tab:build-configs}
+\begin{tabularx}{\textwidth}{lccX}
+\toprule
+\textbf{Configuration} & \textbf{Gen.\ Opts} & \textbf{Sep.\ Lists} & \textbf{Dyn.\ Array} \\
+\midrule
+\texttt{none}      & \textemdash & \textemdash & \textemdash \\
+\texttt{dyn\_only} & \textemdash  & \textemdash & \checkmark \\
+\texttt{sep\_only} & \textemdash & \checkmark  & \textemdash \\
+\texttt{sep\_dyn}  & \textemdash & \checkmark  & \checkmark  \\
+\texttt{gen\_opt\_only} & \checkmark  & \textemdash & \textemdash \\
+\texttt{gen\_opt\_dyn}  & \checkmark & \textemdash  & \checkmark  \\
+\texttt{gen\_opt\_sep}  & \checkmark  & \checkmark  & \textemdash \\
+\texttt{all}       & \checkmark  & \checkmark  & \checkmark  \\
+\bottomrule
+\end{tabularx}
+\end{table}
 
 \section{Performance Evaluation}
+\label{sec:performance-evaluation}
+
+To evaluate the performance impact of the optimisation approaches, a microbenchmark was developed that exercises the weak reference processing pipeline under controlled conditions. The benchmark and its execution environment are described below.
+
+\subsection{Benchmark Design}
+\label{subsec:benchmark-design}
+
+The benchmark allocates approximately 7.3 million objects, each containing a randomly sized byte array payload (between 509 and 1097 bytes). Each object is held by both a strong reference and a \texttt{WeakReference}. Of the weak references, 5\% are created with a \texttt{ReferenceQueue} and 95\% without, reflecting a workload dominated by queue-less weak references. The allocation order of both strong and weak references is randomised using a Fisher-Yates shuffle to avoid artificial locality patterns.
+
+After allocation, the benchmark proceeds through five rounds of clearing. In each round, approximately 20\% of the strong references are nulled in a randomised order, making the corresponding objects eligible for garbage collection. Between rounds, the benchmark sleeps to allow GC cycles to discover and process the weak references whose referent now is unreachable. After each clearing round, any remaining strong references are touched (written to) to ensure they remain live and are not optimised away.
+
+The benchmark runs three iterations with a five-second cooldown between them to allow the JVM to stabilise. Each iteration performs the full allocation, clearing, and GC cycle sequence independently.
+
+\subsection{Execution Environment}
+\label{subsec:execution-environment}
+
+To ensure reproducible measurements, the benchmark is executed under controlled conditions using a dedicated runner script. The script applies the following isolation measures:
+
+\begin{itemize}
+    \item \textbf{CPU pinning}: The Java process is pinned to a fixed set of CPU cores using \texttt{taskset}. The monitoring and scripting processes run on separate cores to avoid interference.
+    \item \textbf{CPU frequency control}: The CPU governor is set to performance mode at the base clock frequency. Both the minimum and maximum scaling frequencies are locked to the base frequency to prevent frequency scaling from introducing variance.
+    \item \textbf{Process priority}: The Java process is run with elevated priority (\texttt{nice -n -5}) to reduce scheduling interference from other system processes.
+    \item \textbf{Cache clearing}: Filesystem caches are dropped between runs by writing to \texttt{/proc/sys/vm/drop\_caches}.
+    \item \textbf{Cooldown period}: A configurable cooldown period (default 10 seconds) is inserted between variant runs to allow the system to return to a stable state.
+\end{itemize}
+
+The JVM is configured with a fixed 8\,GB heap (\texttt{-Xms8g -Xmx8g}), ZGC enabled (\texttt{-XX:+UseZGC}), and a forced major collection interval of 0.5 seconds (\texttt{-XX:ZCollectionIntervalMajor=0.5}) to ensure frequent GC activity during the benchmark. Tenuring thresholds are set to 1 (\texttt{-XX:InitialTenuringThreshold=1 -XX:MaxTenuringThreshold=1}) to promote objects to the old generation quickly, ensuring that the reference processor discovers them. GC statistics and reference processing logs are enabled via \texttt{-Xlog:gc+stats,gc+ref}.
+
+\subsection{Measurement Methodology}
+\label{subsec:measurement-methodology}
+
+The benchmark is run for 100 outer iterations. Within each outer iteration, all eight variants are run in sequence with environment preparation between each. This interleaved ordering mitigates systematic drift in system conditions across the measurement campaign.
+
+During each run, a memory monitoring script samples the process's resident set size (RSS), GC reserved and committed memory (via JVM Native Memory Tracking), and heap usage at high frequency. The current benchmark phase and iteration are tracked from the benchmark's log output to enable phase-aligned analysis.
