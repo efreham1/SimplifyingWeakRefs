@@ -65,7 +65,7 @@ public final class WeakRefSingleObjectBenchmark {
         System.out.printf("Allocated %d WeakReferences in %.2f seconds%n",
             weakRefCount, allocDuration / 1_000_000_000.0);
 
-        // Phase 3: Hold everything still for a couple of seconds
+        // Phase 3: Sleep for a couple of seconds
         System.out.printf("Phase 3: Sleeping for %d ms (strong ref still held)...%n", sleepMillis);
         if (sleepMillis > 0) {
             Thread.sleep(sleepMillis);
@@ -80,7 +80,7 @@ public final class WeakRefSingleObjectBenchmark {
         // Phase 5: Trigger GC
         System.out.println("Phase 5: Triggering GC...");
         System.gc();
-        Thread.sleep(1000); // Give GC some time to collect stats
+        Thread.sleep(2000); // Give GC some time to collect stats
 
         // Phase 6: Check results
         System.out.println("Phase 6: Checking results...");

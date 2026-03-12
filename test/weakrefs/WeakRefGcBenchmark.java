@@ -113,13 +113,13 @@ public final class WeakRefGcBenchmark {
         System.out.printf("Allocated %d objects in %.2f seconds%n", objectCount, allocDuration / 1_000_000_000.0);
         
 
-        // Phase 3: Hold everything still for a couple of seconds
+        // Phase 2: Sleep for a couple of seconds
         System.out.printf("Phase 2: Sleeping for %d ms...%n", sleepMillis);
         if (sleepMillis > 0) {
             Thread.sleep(sleepMillis);
         }
 
-        // Phase 4-*: Repeatedly clear 20% of strong refs until all are gone
+        // Phase 3-*: Repeatedly clear 20% of strong refs until all are gone
         int subPhase = 1;
         int remainingRefs = objectCount;
 
@@ -127,7 +127,7 @@ public final class WeakRefGcBenchmark {
         int i = 0;
         for (int j = 0 ; j < 5; j++) {
             // Count and clear half of remaining strong refs
-            System.out.printf("Phase 4.%d: Clearing strong references...%n", subPhase++);
+            System.out.printf("Phase 3.%d: Clearing strong references...%n", subPhase++);
             int toClear = objectCount/5+1;
             int clearedThisRound = 0;
             for (; i < objectCount && clearedThisRound < toClear; i++) {
@@ -154,7 +154,7 @@ public final class WeakRefGcBenchmark {
                 Thread.sleep(sleepMillis*2);
             }
 
-        System.out.printf("Phase 5: Final GC and weak reference check...%n");
+        System.out.printf("Phase 4: Final GC and weak reference check...%n");
         
         int aliveWeakRefs = AliveWeakRefs(weakRefs);
         System.out.printf("Final count of alive weak references: %d%n", aliveWeakRefs);

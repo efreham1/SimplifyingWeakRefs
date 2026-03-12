@@ -1,13 +1,13 @@
 \chapter{Introduction}
 \label{chap:introduction}
 
-Java is one of the most widely deployed programming languages in enterprise and server-side computing, where applications routinely manage heaps of tens to hundreds of gigabytes. In these environments, the performance of the Java Virtual Machine's (JVM) garbage collector (GC) directly affects application latency and throughput. The Z Garbage Collector (ZGC) addresses this by performing nearly all garbage collection work concurrently with the application, achieving sub-millisecond pause times regardless of heap size.
+Java is one of the most widely deployed programming languages in enterprise and server-side computing~\cite{wiki-lang-popular-websites}, where applications routinely manage heaps of tens to hundreds of gigabytes. In these environments, the performance of the Java Virtual Machine's (JVM) garbage collector (GC) directly affects application latency and throughput. The Z Garbage Collector (ZGC) addresses this by performing nearly all garbage collection work concurrently with the application, achieving millisecond pause times regardless of heap size~\cite{jep333-zgc}.
 
-However, one aspect of ZGC that has received comparatively little optimisation attention is its processing of \emph{weak references}. Java's \texttt{WeakReference} class allows applications to hold references that do not prevent the referent from being collected, and it is widely used in caching libraries, canonical mappings, and listener registrations. When the garbage collector determines that a weakly referenced object is no longer strongly reachable, it must clear the reference and if the reference was registered with a \texttt{ReferenceQueue}, enqueue it for the application to process.
+However, one aspect of ZGC that has received comparatively little optimisation attention is its processing of \emph{weak references}. Java's \texttt{WeakReference} class allows applications to hold references that do not prevent the referent from being collected, and it is widely used in caching libraries, canonical mappings, and listener registrations. When the garbage collector determines that a weakly referenced object is no longer strongly reachable, it must clear the reference and, if the reference was registered with a \texttt{ReferenceQueue}, enqueue it for the application to process.
 
 The current ZGC reference processing pipeline treats all weak references uniformly: they are linked together in an intrusive linked list, processed, and then handed to a Java-level daemon thread (the \texttt{ReferenceHandler}) for enqueueing. This design introduces overhead that is disproportionate for a specific subset of weak references: those that are not registered with a \texttt{ReferenceQueue}.
 
-This thesis investigates whether targeted modifications to ZGC's reference processing pipeline can reduce this overhead. Three orthogonal optimisation approaches are explored: skipping the enqueue path for references without queues, replacing the intrusive linked list with a cache-friendly dynamic array, and reducing per-reference instruction cost through general code optimisations.
+This inefficiency has been previously identified in the OpenJDK bug tracker as JDK-8029205~\cite{JDK-8029205}, which reports the unnecessary pending-list traversal for references without a \texttt{ReferenceQueue}. However, no implementation addressing this issue has been integrated into the JDK to date. Building on that observation, this thesis investigates whether targeted modifications to ZGC's reference processing pipeline can reduce this overhead. Three orthogonal optimisation approaches are explored: skipping the enqueue path for references without queues, replacing the intrusive linked list with a cache-friendly dynamic array, and reducing per-reference instruction cost through general code optimisations.
 
     \section{Motivation}
     \label{sec:motivation}
@@ -16,7 +16,7 @@ This thesis investigates whether targeted modifications to ZGC's reference proce
 
         The problem is amplified by a mismatch between the API design and its use cases. Java's \texttt{WeakReference} API provides an optional \texttt{ReferenceQueue} parameter, and the garbage collector's pipeline is designed around the assumption that cleared references will always be enqueued. This assumption is still made even if the optional \texttt{ReferenceQueue} parameter was omitted. The result is a pipeline that performs unnecessary work for weak references that lack a \texttt{ReferenceQueue}.
 
-        ZGC's concurrent architecture makes this inefficiency particularly relevant. Because ZGC processes references concurrently with the application, any reduction in per-reference overhead translates directly into less time spent in the reference processing phase. This results in less cpu time consumed by GC threads, ultimately improving application performance.
+        ZGC's concurrent architecture makes this inefficiency particularly relevant. Because ZGC processes references concurrently with the application, any reduction in per-reference overhead translates directly into less time spent in the reference processing phase. This results in less CPU time consumed by GC threads, ultimately improving application performance.
 
     \section{Problem Statement}
     \label{sec:problem-statement}
@@ -29,8 +29,8 @@ This thesis investigates whether targeted modifications to ZGC's reference proce
     \label{sec:research-questions}
         The main research questions that this thesis aims to address are:
         \begin{enumerate}
-            \item \label{rq:design-change} What design changes and optimisations can be made to the processing of weak references without a \texttt{ReferenceQueue} in ZGC to improve the GC's performance?
-            \item \label{rq:design-impact} How do these design changes and optimisations impact the overall performance and memory footprint of ZGC?
+            \item \label{rq:design-change} What design changes and optimisations can be made to the processing of weak references without a \texttt{ReferenceQueue} in ZGC to reduce the wall-clock time spent in the reference processing phase?
+            \item \label{rq:design-impact} How do these design changes and optimisations impact the wall-clock time of reference processing, the total GC cycle time, and the memory footprint (resident set size and GC-internal memory usage) of ZGC?
         \end{enumerate}
 
     \section{Stretch Goals}
@@ -45,4 +45,4 @@ This thesis investigates whether targeted modifications to ZGC's reference proce
     \label{sec:scope}
         This thesis focuses on the reference processing pipeline within ZGC, specifically targeting weak references without a \texttt{ReferenceQueue}. Although the optimisation approaches are described in general terms and the stretch goals consider a wider scope, the primary implementation only targets ZGC's reference processor. Furthermore, some of the optimisations, such as general code optimisations, may have broader applicability beyond just weak references without a \texttt{ReferenceQueue}. However, these broader applications fall outside the scope of this thesis and are not evaluated.
 
-        The correctness of the optimisations is verified through the standard OpenJDK test suite and manual inspection; formal verification is outside the scope of this work. Performance measurements are conducted on a single hardware platform under controlled conditions so therefore may not generalize to all environments.
+        The correctness of the optimisations is verified through the standard OpenJDK test suite and manual inspection; formal verification is outside the scope of this work. Performance measurements are conducted on a single hardware platform under controlled conditions and therefore may not generalise to all environments.
