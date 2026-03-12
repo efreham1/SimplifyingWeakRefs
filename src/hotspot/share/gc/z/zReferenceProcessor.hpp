@@ -28,7 +28,7 @@
 #include "gc/z/zAddress.hpp"
 #include "gc/z/zAddressArray.hpp"
 #include "gc/z/zValue.hpp"
-#include "gc/z/zConfFalgs.h"
+#include "gc/z/zConfFlags.h"
 
 class ConcurrentGCTimer;
 class ReferencePolicy;
@@ -55,17 +55,17 @@ private:
   ZPerWorker<zaddress>      _discovered_list;
   ZContended<zaddress>      _pending_list;
   zaddress                  _pending_list_tail;
-#if ZUseSeperateDiscoveredLists
+#if ZUseSeparateDiscoveredLists
 #if ZUseDynamicArray
   ZPerWorker<ZAddressArray> _discovered_weak_refs_without_queue_arr;
   ZPerWorker<bool>          _array_empty;
 #else // !ZUseDynamicArray
   ZPerWorker<zaddress>      _discovered_weak_refs_without_queue_ll;
 #endif // ZUseDynamicArray
-#elif ZUseDynamicArray // !ZUseSeperateDiscoveredLists && ZUseDynamicArray
+#elif ZUseDynamicArray // !ZUseSeparateDiscoveredLists && ZUseDynamicArray
   ZPerWorker<ZAddressArray> _discovered_all_refs_arr;
   ZPerWorker<bool>          _all_refs_array_empty;
-#endif // ZUseSeperateDiscoveredLists
+#endif // ZUseSeparateDiscoveredLists
   OopHandle                 _null_queue_handle;
 
   bool is_inactive(zaddress reference, oop referent, ReferenceType type) const;
@@ -83,15 +83,13 @@ private:
   void verify_empty() const;
 
   void process_worker_discovered_list(zaddress discovered_list);
-#if ZUseSeperateDiscoveredLists
-#if ZUseDynamicArray
+#if ZUseSeparateDiscoveredLists && ZUseDynamicArray
   void process_worker_discovered_weak_refs_without_queue(ZAddressArray& weak_refs_without_queue);
-#else // !ZUseDynamicArray
+#elif ZUseSeparateDiscoveredLists && !ZUseDynamicArray
   void process_worker_discovered_weak_refs_without_queue(zaddress weak_refs_without_queue);
-#endif // ZUseDynamicArray
-#elif ZUseDynamicArray // !ZUseSeperateDiscoveredLists && ZUseDynamicArray
+#elif !ZUseSeparateDiscoveredLists && ZUseDynamicArray
   void process_worker_discovered_all_refs(ZAddressArray& all_refs);
-#endif // ZUseSeperateDiscoveredLists
+#endif // ZUseSeparateDiscoveredLists && ZUseDynamicArray
   void work();
   void collect_statistics();
 

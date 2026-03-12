@@ -233,99 +233,97 @@ def extract_phases_with_iteration(data_list):
     return phase_marks
 
 
-def plot_metric_histograms(on_metrics, off_metrics, metric_names, run_id=1):
-    """Plot histograms comparing ON vs OFF distributions for specific metrics."""
-    
-    # Ensure output directory exists
+def plot_metric_boxplots(variants_all_metrics, variants, metric_names, run_id=1):
+    """Plot boxplots comparing all variant configs for each metric.
+
+    Each metric gets its own subplot. Within each subplot there is one box per
+    variant config so distributions across the full set of runs can be compared
+    at a glance.
+    """
     Path('images').mkdir(parents=True, exist_ok=True)
-    
-    # Filter to only the requested metrics
-    metrics_to_plot = []
-    for metric_name in metric_names:
-        if metric_name in on_metrics or metric_name in off_metrics:
-            metrics_to_plot.append(metric_name)
-    
+
+    DISPLAY_NAMES = {
+        "none": "Baseline",
+        "gen_opt_only": "Gen-Opt",
+        "sep_only": "Sep",
+        "dyn_only": "Dyn",
+        "gen_opt_sep": "Gen-Opt\n+Sep",
+        "gen_opt_dyn": "Gen-Opt\n+Dyn",
+        "sep_dyn": "Sep+Dyn",
+        "all": "All",
+    }
+
+    # Keep only metrics that have data in at least one variant
+    metrics_to_plot = [
+        m for m in metric_names
+        if any(m in variants_all_metrics.get(v, {}) for v in variants)
+    ]
+
     if not metrics_to_plot:
-        print("Warning: None of the requested metrics found in data")
+        print("Warning: none of the requested metrics found in data")
         return
-    
-    # Create subplots - 2 columns, multiple rows as needed
+
     n_metrics = len(metrics_to_plot)
-    n_cols = 2
+    n_cols = min(3, n_metrics)
     n_rows = (n_metrics + n_cols - 1) // n_cols
-    
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(14, 4 * n_rows))
+
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(6 * n_cols, 5 * n_rows))
     if n_rows == 1 and n_cols == 1:
         axes = np.array([[axes]])
     elif n_rows == 1:
         axes = axes.reshape(1, -1)
     elif n_cols == 1:
         axes = axes.reshape(-1, 1)
-    
+
+    # Distinct colours for up to 8 variants
+    colors = [plt.cm.tab10(i / max(len(variants) - 1, 1)) for i in range(len(variants))]
+
     for idx, metric_name in enumerate(metrics_to_plot):
         row = idx // n_cols
         col = idx % n_cols
         ax = axes[row, col]
-        
-        on_values = on_metrics.get(metric_name, {}).get("avg", [])
-        off_values = off_metrics.get(metric_name, {}).get("avg", [])
-        units = on_metrics.get(metric_name, {}).get("units", "")
-        if not units:
-            units = off_metrics.get(metric_name, {}).get("units", "")
-        
-        # Determine bin range to cover both datasets
-        all_values = []
-        if on_values:
-            all_values.extend(on_values)
-        if off_values:
-            all_values.extend(off_values)
-        
-        if not all_values:
-            ax.text(0.5, 0.5, 'No data', ha='center', va='center')
-            ax.set_title(metric_name[:40], fontsize=10, fontweight='bold')
+
+        data_per_variant = []
+        labels = []
+        for variant in variants:
+            values = variants_all_metrics.get(variant, {}).get(metric_name, {}).get("avg", [])
+            data_per_variant.append(values if values else [])
+            labels.append(DISPLAY_NAMES.get(variant, variant))
+
+        # Remove variants with no data so the plot is not cluttered with empty boxes
+        non_empty = [(d, l, c) for d, l, c in zip(data_per_variant, labels, colors) if d]
+        if not non_empty:
+            ax.text(0.5, 0.5, 'No data', ha='center', va='center', transform=ax.transAxes)
+            ax.set_title(metric_name[:55], fontsize=10, fontweight='bold')
             continue
-        
-        # Create bins
-        min_val = min(all_values)
-        max_val = max(all_values)
-        bins = np.linspace(min_val, max_val, 20)
-        
-        # Plot histograms
-        if on_values:
-            ax.hist(on_values, bins=bins, alpha=0.6, label=f'GA ON (n={len(on_values)})', 
-                   color='blue', edgecolor='black', linewidth=0.5)
-        if off_values:
-            ax.hist(off_values, bins=bins, alpha=0.6, label=f'GA OFF (n={len(off_values)})', 
-                   color='red', edgecolor='black', linewidth=0.5)
-        
-        # Add mean lines
-        if on_values:
-            on_mean = np.mean(on_values)
-            ax.axvline(on_mean, color='blue', linestyle='--', linewidth=2, 
-                      label=f'ON mean: {on_mean:.2f}')
-        if off_values:
-            off_mean = np.mean(off_values)
-            ax.axvline(off_mean, color='red', linestyle='--', linewidth=2,
-                      label=f'OFF mean: {off_mean:.2f}')
-        
-        # Formatting
-        metric_display = metric_name if len(metric_name) <= 50 else metric_name[:47] + "..."
-        ax.set_title(metric_display, fontsize=10, fontweight='bold')
-        ax.set_xlabel(f'Value ({units})', fontsize=9)
-        ax.set_ylabel('Frequency', fontsize=9)
-        ax.legend(fontsize=8)
-        ax.grid(True, alpha=0.3)
-    
-    # Hide unused subplots
+        data_filtered, labels_filtered, colors_filtered = zip(*non_empty)
+
+        bp = ax.boxplot(data_filtered, labels=labels_filtered, patch_artist=True, notch=False)
+        for patch, color in zip(bp['boxes'], colors_filtered):
+            patch.set_facecolor(color)
+            patch.set_alpha(0.7)
+
+        units = next(
+            (variants_all_metrics.get(v, {}).get(metric_name, {}).get("units", "")
+             for v in variants
+             if variants_all_metrics.get(v, {}).get(metric_name, {}).get("units")),
+            ""
+        )
+
+        ax.set_title(metric_name[:55], fontsize=10, fontweight='bold')
+        ax.set_ylabel(f"Value ({units})" if units else "Value", fontsize=9)
+        ax.tick_params(axis='x', labelsize=8, rotation=15)
+        ax.grid(True, alpha=0.3, axis='y')
+
+    # Add sample-count annotation to the last used subplot
     for idx in range(n_metrics, n_rows * n_cols):
-        row = idx // n_cols
-        col = idx % n_cols
-        axes[row, col].axis('off')
-    
+        axes[idx // n_cols][idx % n_cols].axis('off')
+
+    plt.suptitle("GC Metrics Comparison Across Configurations", fontsize=14, fontweight='bold')
     plt.tight_layout()
-    output_file = f'images/metric_histograms_{run_id}.png'
+    output_file = f'images/metric_boxplots_{run_id}.png'
     plt.savefig(output_file, dpi=150, bbox_inches='tight')
-    print(f"Metric histograms saved to: {output_file}")
+    print(f"Metric boxplots saved to: {output_file}")
     plt.close()
 
 
@@ -659,254 +657,221 @@ def aggregate_gc_metrics(file_list):
     return all_metrics, agg
 
 
+def plot_continuous_monitoring_multi(variants_continuous, run_id=1):
+    """Plot mean RSS, GC-auxiliary, and heap usage over time for N variant configs.
+
+    Each variant is drawn as a distinct colour. Shaded bands show ±1 std dev.
+    """
+    Path('images').mkdir(parents=True, exist_ok=True)
+
+    DISPLAY_NAMES = {
+        "none": "Baseline",
+        "gen_opt_only": "Gen-Opt",
+        "sep_only": "Sep",
+        "dyn_only": "Dyn",
+        "gen_opt_sep": "Gen-Opt+Sep",
+        "gen_opt_dyn": "Gen-Opt+Dyn",
+        "sep_dyn": "Sep+Dyn",
+        "all": "All",
+    }
+
+    if not variants_continuous:
+        print("No continuous monitoring data to plot")
+        return
+
+    variant_list = list(variants_continuous.keys())
+    colors = [plt.cm.tab10(i / max(len(variant_list) - 1, 1)) for i in range(len(variant_list))]
+
+    fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(14, 12), sharex=True)
+
+    for variant, color in zip(variant_list, colors):
+        data = variants_continuous[variant]
+        if not data:
+            continue
+        label = DISPLAY_NAMES.get(variant, variant)
+        times = [(d['timestamp_ms'] - data[0]['timestamp_ms']) / 1000.0 for d in data]
+        rss   = [d['rss_kb'] / 1024.0 for d in data]
+        rss_s = [d.get('rss_std_kb', 0) / 1024.0 for d in data]
+        gc    = [d['gc_committed_kb'] / 1024.0 for d in data]
+        gc_s  = [d.get('gc_std_kb', 0) / 1024.0 for d in data]
+        heap  = [d.get('heap_kb', 0) / 1024.0 for d in data]
+        heap_s = [d.get('heap_std_kb', 0) / 1024.0 for d in data]
+
+        ax1.plot(times, rss, linewidth=1.5, label=label, color=color, alpha=0.85)
+        ax1.fill_between(times, [r - s for r, s in zip(rss, rss_s)],
+                         [r + s for r, s in zip(rss, rss_s)], color=color, alpha=0.15, linewidth=0)
+
+        ax2.plot(times, gc, linewidth=1.5, label=label, color=color, alpha=0.85)
+        ax2.fill_between(times, [g - s for g, s in zip(gc, gc_s)],
+                         [g + s for g, s in zip(gc, gc_s)], color=color, alpha=0.15, linewidth=0)
+
+        ax3.plot(times, heap, linewidth=1.5, label=label, color=color, alpha=0.85)
+        ax3.fill_between(times, [h - s for h, s in zip(heap, heap_s)],
+                         [h + s for h, s in zip(heap, heap_s)], color=color, alpha=0.15, linewidth=0)
+
+    ax1.set_ylabel('Total Process RSS (MB)', fontsize=12)
+    ax1.set_title('Total Process Memory (Mean \u00b1 Std Dev)', fontsize=13, fontweight='bold')
+    ax1.legend(fontsize=10)
+    ax1.grid(True, alpha=0.3)
+
+    ax2.set_ylabel('GC Auxiliary Memory (MB)', fontsize=12)
+    ax2.set_title('GC Auxiliary Memory (Mean \u00b1 Std Dev)', fontsize=13, fontweight='bold')
+    ax2.legend(fontsize=10)
+    ax2.grid(True, alpha=0.3)
+
+    ax3.set_xlabel('Time (seconds)', fontsize=12)
+    ax3.set_ylabel('Java Heap (MB)', fontsize=12)
+    ax3.set_title('Java Heap Usage (Mean \u00b1 Std Dev)', fontsize=13, fontweight='bold')
+    ax3.legend(fontsize=10)
+    ax3.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    output_file = f'images/continuous_memory_multi_{run_id}.png'
+    plt.savefig(output_file, dpi=150, bbox_inches='tight')
+    print(f"Continuous monitoring plot saved to: {output_file}")
+    plt.close()
+
+
 def main():
     # Parse command line arguments
-    run_id = 1  # Default ID
+    run_id = 1
     if len(sys.argv) > 1:
         if sys.argv[1] == "--id" and len(sys.argv) > 2:
             run_id = sys.argv[2]
         elif sys.argv[1].startswith("--id="):
             run_id = sys.argv[1].split("=")[1]
-    
-    # Find all monitor and log files for ON/OFF with the specified ID
-    on_monitor_files = sorted(glob.glob(f"output/monitor_ON_*_{run_id}.csv"))
-    off_monitor_files = sorted(glob.glob(f"output/monitor_OFF_*_{run_id}.csv"))
-    on_log_files = sorted(glob.glob(f"output/run_ON_*_{run_id}.log"))
-    off_log_files = sorted(glob.glob(f"output/run_OFF_*_{run_id}.log"))
-    
-    if not on_monitor_files or not off_monitor_files or not on_log_files or not off_log_files:
-        print("Error: Could not find all required output files")
-        print(f"  output/monitor_ON_*_{run_id}.csv, output/monitor_OFF_*_{run_id}.csv")
-        print(f"  output/run_ON_*_{run_id}.log, output/run_OFF_*_{run_id}.log")
-        print("\nMake sure you have run the benchmark script first:")
-        print(f"  sudo -E bash run_benchmark_iterations.sh [--id {run_id}]")
+
+    # Auto-detect benchmark name from output files for this run_id
+    candidate_files = glob.glob(f"output/run_*_*_run*_{run_id}.log")
+    benchmark_name = "gc"  # default
+    if candidate_files:
+        m = re.match(r'output/run_([^_]+)_', candidate_files[0])
+        if m:
+            benchmark_name = m.group(1)
+    use_max = benchmark_name == "single"
+
+    # Canonical variant order (matches scripts/run_benchmark_iterations.sh)
+    VARIANTS_ORDERED = [
+        "none", "gen_opt_only", "sep_only", "dyn_only",
+        "gen_opt_sep", "gen_opt_dyn", "sep_dyn", "all",
+    ]
+
+    # Discover which variants actually produced output files for this run_id
+    variants_log_files = {}
+    variants_monitor_files = {}
+    for variant in VARIANTS_ORDERED:
+        log_files = sorted(glob.glob(f"output/run_{benchmark_name}_{variant}_*_{run_id}.log"))
+        monitor_files = sorted(glob.glob(f"output/monitor_{benchmark_name}_{variant}_*_{run_id}.csv"))
+        if log_files:
+            variants_log_files[variant] = log_files
+        if monitor_files:
+            variants_monitor_files[variant] = monitor_files
+
+    if not variants_log_files:
+        print(f"Error: no log files found in output/ for run id '{run_id}'")
+        print("Make sure you have run:")
+        print("  sudo -E bash scripts/run_benchmark_iterations.sh")
         return 1
-    
-    # Extract run numbers to validate consistency
-    on_runs_raw = [extract_run_num(f) for f in on_monitor_files]
-    off_runs_raw = [extract_run_num(f) for f in off_monitor_files]
-    
-    on_runs = sorted([i for i in on_runs_raw if i is not None])
-    off_runs = sorted([i for i in off_runs_raw if i is not None])
-    
-    print("\n" + "=" * 100)
-    print(" " * 35 + "BENCHMARK ANALYSIS REPORT")
-    print("=" * 100 + "\n")
-    
-    # Display run information
-    print(f"GA ON  - Found {len(on_monitor_files)} monitor files and {len(on_log_files)} log files from runs: {on_runs}")
-    print(f"GA OFF - Found {len(off_monitor_files)} monitor files and {len(off_log_files)} log files from runs: {off_runs}")
-    
-    # Check consistency
-    if on_runs != off_runs:
-        print(f"\n⚠ Warning: Runs don't match!")
-        print(f"  ON runs:  {on_runs}")
-        print(f"  OFF runs: {off_runs}")
-    else:
-        print(f"✓ Runs match: {on_runs}")
-    
+
+    present = [v for v in VARIANTS_ORDERED if v in variants_log_files]
+
+    print("\n" + "=" * 80)
+    print(f"{'BENCHMARK ANALYSIS REPORT':^80}")
+    print("=" * 80 + "\n")
+    print(f"Run ID    : {run_id}")
+    print(f"Benchmark : {benchmark_name}{'  (using max values)' if use_max else ''}")
+    print(f"Variants found: {len(present)}")
+    for v in present:
+        n_log = len(variants_log_files[v])
+        n_mon = len(variants_monitor_files.get(v, []))
+        print(f"  {v:<20}: {n_log} log files, {n_mon} monitor files")
     print()
-    
-    # Parse and aggregate GC metrics from all run logs (across all runs)
-    print("Parsing and aggregating GC metrics from all runs...")
-    on_gc_all, on_gc_agg = aggregate_gc_metrics(on_log_files)
-    off_gc_all, off_gc_agg = aggregate_gc_metrics(off_log_files)
-    print(f"  Found {len(on_gc_agg)} metrics in ON runs")
-    print(f"  Found {len(off_gc_agg)} metrics in OFF runs")
-    
-    # Display GC metrics comparison table
-    if on_gc_agg or off_gc_agg:
-        print("\n" + "-" * 170)
-        print(" " * 50 + "GC METRICS COMPARISON (Averages ± Std Dev over all runs)")
-        print("-" * 170)
-        
-        header = f"{'Metric':<50} {'Unit':>8} {'ON Avg':>18} {'ON Max':>18} {'OFF Avg':>18} {'OFF Max':>18} {'AvgDiff%':>12} {'MaxDiff%':>12}"
-        print(header)
-        print("-" * 170)
-        
-        # Get all unique metric names, sorted
-        all_metrics = sorted(set(on_gc_agg.keys()) | set(off_gc_agg.keys()))
-        
-        for metric in all_metrics:
-            on_avg = on_gc_agg.get(metric, {}).get("avg", None)
-            on_max = on_gc_agg.get(metric, {}).get("max", None)
-            on_avg_std = on_gc_agg.get(metric, {}).get("avg_std", None)
-            on_max_std = on_gc_agg.get(metric, {}).get("max_std", None)
-            off_avg = off_gc_agg.get(metric, {}).get("avg", None)
-            off_max = off_gc_agg.get(metric, {}).get("max", None)
-            off_avg_std = off_gc_agg.get(metric, {}).get("avg_std", None)
-            off_max_std = off_gc_agg.get(metric, {}).get("max_std", None)
-            
-            # Format with ± std dev
-            on_avg_str = f"{on_avg:.2f}±{on_avg_std:.2f}" if on_avg is not None and on_avg_std is not None else "n/a"
-            on_max_str = f"{on_max:.2f}±{on_max_std:.2f}" if on_max is not None and on_max_std is not None else "n/a"
-            off_avg_str = f"{off_avg:.2f}±{off_avg_std:.2f}" if off_avg is not None and off_avg_std is not None else "n/a"
-            off_max_str = f"{off_max:.2f}±{off_max_std:.2f}" if off_max is not None and off_max_std is not None else "n/a"
-            
-            # Get units
-            units = on_gc_agg.get(metric, {}).get("units", "")
-            if not units:
-                units = off_gc_agg.get(metric, {}).get("units", "")
-            units_str = units if units else "-"
-            
-            # Cap metric name at 50 characters
-            metric_display = metric[:50]
-            
-            # Calculate diff percentages (OFF - ON) / ON * 100
-            if on_avg is not None and off_avg is not None and on_avg != 0:
-                avg_diff_pct = (off_avg - on_avg) / on_avg * 100
-                avg_diff_str = f"{avg_diff_pct:+.2f}"
-            else:
-                avg_diff_str = "n/a"
-            
-            if on_max is not None and off_max is not None and on_max != 0:
-                max_diff_pct = (off_max - on_max) / on_max * 100
-                max_diff_str = f"{max_diff_pct:+.2f}"
-            else:
-                max_diff_str = "n/a"
-            
-            row = f"{metric_display:<50} {units_str:>8} {on_avg_str:>18} {on_max_str:>18} {off_avg_str:>18} {off_max_str:>18} {avg_diff_str:>12} {max_diff_str:>12}"
-            print(row)
-        
-        print("-" * 170)
+
+    # Aggregate GC metrics per variant
+    print("Parsing and aggregating GC metrics...")
+    variants_all_metrics = {}
+    variants_agg_metrics = {}
+    for variant in present:
+        all_m, agg_m = aggregate_gc_metrics(variants_log_files[variant])
+        # For single-object benchmark use max values as the primary statistic
+        if use_max:
+            for metric_data in all_m.values():
+                metric_data["avg"] = metric_data["max"][:]
+            for metric_data in agg_m.values():
+                metric_data["avg"] = metric_data["max"]
+                metric_data["avg_std"] = metric_data["max_std"]
+        variants_all_metrics[variant] = all_m
+        variants_agg_metrics[variant] = agg_m
+        n_metrics = len(agg_m)
+        n_samples = max((len(v2.get("avg", [])) for v2 in all_m.values()), default=0)
+        print(f"  {variant:<20}: {n_metrics} metrics, {n_samples} samples per metric")
+    print()
+
+    # Print summary comparison table
+    all_metric_names = sorted(set().union(*(m.keys() for m in variants_agg_metrics.values())))
+    if all_metric_names:
+        col_w = 14
+        sep = "-" * (58 + col_w * len(present))
+        print(sep)
+        print(f"{'GC METRICS SUMMARY (mean over all runs)':^{len(sep)}}")
+        print(sep)
+        header_parts = [f"{'Metric':<50}", f"{'Unit':>6}"]
+        for v in present:
+            header_parts.append(f"{v:>{col_w}}")
+        print("  ".join(header_parts))
+        print(sep)
+        for metric in all_metric_names:
+            units = next(
+                (variants_agg_metrics[v].get(metric, {}).get("units", "")
+                 for v in present if variants_agg_metrics[v].get(metric, {}).get("units")),
+                ""
+            )
+            row_parts = [f"{metric[:50]:<50}", f"{units:>6}"]
+            for v in present:
+                avg = variants_agg_metrics[v].get(metric, {}).get("avg", None)
+                std = variants_agg_metrics[v].get(metric, {}).get("avg_std", None)
+                if avg is not None and std is not None:
+                    cell = f"{avg:.1f}\u00b1{std:.1f}"
+                    row_parts.append(f"{cell:>{col_w}}")
+                else:
+                    row_parts.append(f"{'n/a':>{col_w}}")
+            print("  ".join(row_parts))
+        print(sep)
         print()
-        
-        # Find metrics with statistically significant differences (outside std dev ranges)
-        # Only check Avg values, calculate conservative percentage (smallest absolute difference)
-        significant_diffs = []
-        
-        for metric in all_metrics:
-            on_avg = on_gc_agg.get(metric, {}).get("avg", None)
-            on_avg_std = on_gc_agg.get(metric, {}).get("avg_std", None)
-            off_avg = off_gc_agg.get(metric, {}).get("avg", None)
-            off_avg_std = off_gc_agg.get(metric, {}).get("avg_std", None)
-            
-            # Get units
-            units = on_gc_agg.get(metric, {}).get("units", "")
-            if not units:
-                units = off_gc_agg.get(metric, {}).get("units", "")
-            
-            # Check Avg: ranges don't overlap means significant difference
-            if (on_avg is not None and off_avg is not None and 
-                on_avg_std is not None and off_avg_std is not None):
-                on_avg_lower = on_avg - on_avg_std
-                on_avg_upper = on_avg + on_avg_std
-                off_avg_lower = off_avg - off_avg_std
-                off_avg_upper = off_avg + off_avg_std
-                
-                # Check if ranges don't overlap
-                if off_avg_lower > on_avg_upper or on_avg_lower > off_avg_upper:
-                    # Calculate conservative percentage: always add std to ON, subtract std from OFF
-                    # This gives the smallest absolute percentage difference
-                    on_adjusted = on_avg_upper  # ON + std
-                    off_adjusted = off_avg_lower  # OFF - std
-                    
-                    if on_adjusted > 0:
-                        conservative_pct = (off_adjusted - on_adjusted) / on_adjusted * 100
-                    else:
-                        conservative_pct = float('inf')
-                    
-                    if abs(conservative_pct) != float('inf'):
-                        significant_diffs.append({
-                            'metric': metric,
-                            'units': units,
-                            'on_val': on_avg,
-                            'on_std': on_avg_std,
-                            'off_val': off_avg,
-                            'off_std': off_avg_std,
-                            'conservative_pct': conservative_pct
-                        })
-        
-        # Display statistically significant differences
-        if significant_diffs:
-            print("\n" + "-" * 150)
-            print(" " * 30 + "STATISTICALLY SIGNIFICANT DIFFERENCES - Avg Values (Outside Std Dev Ranges)")
-            print("-" * 150)
-            print(f"{'Metric':<60} {'Unit':>8} {'ON Value':>18} {'OFF Value':>18} {'Conservative %':>15}")
-            print("-" * 150)
-            
-            # Sort by absolute conservative percentage (descending)
-            significant_diffs.sort(key=lambda x: abs(x['conservative_pct']), reverse=True)
-            
-            for diff in significant_diffs:
-                metric_display = diff['metric'][:60]
-                on_str = f"{diff['on_val']:.2f}±{diff['on_std']:.2f}"
-                off_str = f"{diff['off_val']:.2f}±{diff['off_std']:.2f}"
-                pct_str = f"{diff['conservative_pct']:+.2f}"
-                units_str = diff['units'] if diff['units'] else "-"
-                
-                row = f"{metric_display:<60} {units_str:>8} {on_str:>18} {off_str:>18} {pct_str:>15}"
-                print(row)
-            
-            print("-" * 150)
-            print(f"\nFound {len(significant_diffs)} metric(s) with statistically significant differences")
-            print("Note: Conservative % = ((OFF - OFF_std) - (ON + ON_std)) / (ON + ON_std) × 100")
-            print()
-        else:
-            print("\n✓ No statistically significant differences found (all ranges overlap within std dev)")
-            print()
-    
-    # Parse continuous monitoring data and aggregate across outer runs
-    print("Aggregating continuous monitoring data...")
-    on_continuous = []
-    off_continuous = []
-    
-    if on_monitor_files:
-        on_continuous = aggregate_monitor_files(on_monitor_files)
-        print(f"  ON:  Aggregated {len(on_continuous)} continuous samples")
-    
-    if off_monitor_files:
-        off_continuous = aggregate_monitor_files(off_monitor_files)
-        print(f"  OFF: Aggregated {len(off_continuous)} continuous samples")
-    
-    # # Debug: Show what phases are in each monitor file
-    # print("\nPhase information from monitor files:")
-    # for f in on_monitor_files:
-    #     phases = extract_phases_from_monitor_file(f)
-    #     # Filter out empty iterations to match what's actually plotted
-    #     phases = {k: v for k, v in phases.items() if k[1]}  # k = (phase, iteration)
-    #     run_num = extract_run_num(f)
-    #     if phases:
-    #         phase_strs = [f"{phase} [{iter_str}]" for phase, iter_str in sorted(phases.keys())]
-    #         print(f"  ON run{run_num}: {', '.join(phase_strs)}")
-    #     else:
-    #         print(f"  ON run{run_num}: (no phases)")
-    # for f in off_monitor_files:
-    #     phases = extract_phases_from_monitor_file(f)
-    #     # Filter out empty iterations to match what's actually plotted
-    #     phases = {k: v for k, v in phases.items() if k[1]}  # k = (phase, iteration)
-    #     run_num = extract_run_num(f)
-    #     if phases:
-    #         phase_strs = [f"{phase} [{iter_str}]" for phase, iter_str in sorted(phases.keys())]
-    #         print(f"  OFF run{run_num}: {', '.join(phase_strs)}")
-    #     else:
-    #         print(f"  OFF run{run_num}: (no phases)")
-    
-    # Plot continuous monitoring data if available
-    if on_continuous or off_continuous:
-        print("\nGenerating continuous monitoring plot...")
-        plot_continuous_monitoring(on_continuous, off_continuous, on_monitor_files, off_monitor_files, run_id)
-        print("✓ Plot generated successfully!")
-    else:
-        print("Warning: No continuous monitoring data to plot")
-        return 1
-    
-    # Generate histograms for specific metrics
-    print("\nGenerating metric histograms...")
-    metrics_to_histogram = [
+
+    # Generate boxplots for the key GC metrics
+    metrics_to_plot = [
         "Major Collection: Major Collection",
         "Old Generation: Old Generation",
         "Old Subphase: Concurrent Mark Follow",
         "Old Subphase: Concurrent References Process",
+        "Old Phase: Concurrent Process Non-Strong",
         "Young Generation: Young Generation",
-        "Young Subphase: Concurrent Mark Follow"
+        "Young Subphase: Concurrent Mark Follow",
     ]
-    plot_metric_histograms(on_gc_all, off_gc_all, metrics_to_histogram, run_id)
-    print("✓ Histograms generated successfully!")
-    
-    print("\n" + "=" * 100)
+    print("Generating metric boxplots...")
+    plot_metric_boxplots(variants_all_metrics, present, metrics_to_plot, run_id)
+    print("\u2713 Boxplots generated successfully!")
+
+    # Continuous monitoring: aggregate and plot all variants
+    if variants_monitor_files:
+        print("\nAggregating continuous monitoring data...")
+        variants_continuous = {}
+        for variant in present:
+            mon_files = variants_monitor_files.get(variant, [])
+            if mon_files:
+                cont = aggregate_monitor_files(mon_files)
+                if cont:
+                    variants_continuous[variant] = cont
+                    print(f"  {variant:<20}: {len(cont)} samples")
+
+        if variants_continuous:
+            print("Generating continuous monitoring plot...")
+            plot_continuous_monitoring_multi(variants_continuous, run_id)
+            print("\u2713 Continuous monitoring plot generated!")
+
+    print("\n" + "=" * 80)
     print()
-    
     return 0
 
 

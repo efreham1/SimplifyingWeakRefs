@@ -8,7 +8,11 @@ set -e
 JAVA_BIN="./build/linux-x86_64-server-release/jdk/bin/java"
 JCMD_BIN="./build/linux-x86_64-server-release/jdk/bin/jcmd"
 COMMON_JVM_OPTS="${COMMON_JVM_OPTS:--Xms8g -Xmx8g -XX:+UseZGC -Xlog:gc+stats,gc+ref -XX:InitialTenuringThreshold=1 -XX:MaxTenuringThreshold=1 -XX:ZCollectionIntervalMajor=0.5 -XX:+ZCollectionIntervalOnly -XX:NativeMemoryTracking=summary}"
-BENCHMARK_CLASS="test/weakrefs/WeakRefGcBenchmark.java"
+SINGLE_JVM_OPTS="${SINGLE_JVM_OPTS:--Xms7g -Xmx7g -XX:+UseZGC -Xlog:gc+stats,gc+ref -XX:InitialTenuringThreshold=1 -XX:MaxTenuringThreshold=1 -XX:NativeMemoryTracking=summary}"
+# Available benchmarks:
+#   gc     -> WeakRefGcBenchmark          (many objects, each has its own WeakRef)
+#   single -> WeakRefSingleObjectBenchmark (many WeakRefs all pointing at one object)
+BENCHMARK_NAME="${BENCHMARK_NAME:-gc}"
 OUTER_ITERATIONS=100
 CPU_CORES="${CPU_CORES:-0-11}"
 MONITOR_CPU_CORES="${MONITOR_CPU_CORES:-12-19}"
@@ -56,6 +60,14 @@ while [ $# -gt 0 ]; do
             RUN_ID="$2"
             shift 2
             ;;
+        --benchmark|-b)
+            BENCHMARK_NAME="$2"
+            shift 2
+            ;;
+        --cooldown|-c)
+            COOLDOWN_SECONDS="$2"
+            shift 2
+            ;;
         *)
             if [ -z "$OUTER_ITERATIONS" ] || [ "$OUTER_ITERATIONS" = "100" ]; then
                 OUTER_ITERATIONS=$1
@@ -67,8 +79,23 @@ while [ $# -gt 0 ]; do
     esac
 done
 
+# Resolve benchmark name to class file path
+case "$BENCHMARK_NAME" in
+    gc|weakref)
+        BENCHMARK_CLASS="test/weakrefs/WeakRefGcBenchmark.java"
+        ;;
+    single)
+        BENCHMARK_CLASS="test/weakrefs/WeakRefSingleObjectBenchmark.java"
+        ;;
+    *)
+        # Allow passing a full path directly
+        BENCHMARK_CLASS="$BENCHMARK_NAME"
+        ;;
+esac
+
 print_header "WEAKREF GC BENCHMARK"
 echo -e "${BOLD}Running:${NC} $OUTER_ITERATIONS runs × 3 iterations"
+echo -e "${BOLD}Benchmark:${NC} $BENCHMARK_CLASS"
 echo -e "${BOLD}Run ID:${NC} $RUN_ID"
 echo -e "${BOLD}CPU cores:${NC} $CPU_CORES"
 echo -e "${BOLD}Cooldown:${NC} ${COOLDOWN_SECONDS}s between GA configs"
@@ -172,15 +199,20 @@ run_single() {
     local total_runs=$3      # total number of runs
 
     # Create separate log and monitor files for each run with run number tag and execution ID
-    local log_file="output/run_${label}_run${run}_${RUN_ID}.log"
-    local monitor_log="output/monitor_${label}_run${run}_${RUN_ID}.csv"
+    local log_file="output/run_${BENCHMARK_NAME}_${label}_run${run}_${RUN_ID}.log"
+    local monitor_log="output/monitor_${BENCHMARK_NAME}_${label}_run${run}_${RUN_ID}.csv"
 
     printf "${CYAN}▶${NC} Run %d/%d (GA %s) - Starting...${NC}\r" "$run" "$total_runs" "$label"
     echo ""
     echo "  Logging to: $log_file"
     echo "  Memory monitoring to: $monitor_log"
     
-    JAVA_OPTS="$COMMON_JVM_OPTS"
+    if [ "$BENCHMARK_NAME" = "single" ]; then
+        # Single-object benchmark triggers GC via System.gc(); uses its own opts (no ZGC timer, 7g heap)
+        JAVA_OPTS="$SINGLE_JVM_OPTS"
+    else
+        JAVA_OPTS="$COMMON_JVM_OPTS"
+    fi
 
     # Start Java process in background
     (
@@ -271,13 +303,13 @@ echo ""
 # Define the variants corresponding to builds created by scripts/build_exploded_images_variants.sh
 variants=(
     "none"
+    "all"
     "gen_opt_only"
     "sep_only"
     "dyn_only"
     "gen_opt_sep"
     "gen_opt_dyn"
     "sep_dyn"
-    "all"
 )
 
 overall_status=0
@@ -316,8 +348,8 @@ print_header "BENCHMARK COMPLETE"
 echo -e "${BOLD}All benchmark runs completed successfully!${NC}"
 echo ""
 echo -e "${GREEN}Output Summary:${NC}"
-echo "  • Benchmark logs:     output/run_<variant>_run*_${RUN_ID}.log"
-echo "  • Memory monitoring:  output/monitor_<variant>_run*_${RUN_ID}.csv"
+echo "  • Benchmark logs:     output/run_${BENCHMARK_NAME}_<variant>_run*_${RUN_ID}.log"
+echo "  • Memory monitoring:  output/monitor_${BENCHMARK_NAME}_<variant>_run*_${RUN_ID}.csv"
 echo ""
 echo -e "${CYAN}Next Steps:${NC}"
 echo "  To analyze and compare results, run:"

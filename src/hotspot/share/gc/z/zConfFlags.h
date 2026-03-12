@@ -2,9 +2,9 @@
 #define ZUseGenCodeOptimisations 1
 #endif // ZUseGenCodeOptimisations
 
-#ifndef ZUseSeperateDiscoveredLists
-#define ZUseSeperateDiscoveredLists 1
-#endif // ZUseSeperateDiscoveredLists
+#ifndef ZUseSeparateDiscoveredLists
+#define ZUseSeparateDiscoveredLists 1
+#endif // ZUseSeparateDiscoveredLists
 
 #ifndef ZUseDynamicArray
 #define ZUseDynamicArray 1

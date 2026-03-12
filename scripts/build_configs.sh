@@ -59,9 +59,6 @@ if [ ${#build_list[@]} -eq 0 ]; then
   exit 1
 fi
 
-orig_cflags="${CFLAGS:-}"
-orig_cxxflags="${CXXFLAGS:-}"
-
 for conf in "${build_list[@]}"; do
   # Find mapping index
   idx=-1
@@ -78,18 +75,13 @@ for conf in "${build_list[@]}"; do
   echo "=== Building: ${conf} ==="
   echo "Flags: ${flags}"
 
-  export CFLAGS="${flags} ${orig_cflags}"
-  export CXXFLAGS="${flags} ${orig_cxxflags}"
-
-  echo "Running: make CONF=${conf} ${MAKE_TARGET} JOBS=${JOBS}"
-  make CONF="${conf}" ${MAKE_TARGET} JOBS="${JOBS}"
+  echo "Running: make CONF=${conf} JVM_EXTRA_CFLAGS='${flags}' ${MAKE_TARGET} JOBS=${JOBS}"
+  make CONF="${conf}" \
+    JVM_EXTRA_CFLAGS="${flags}" \
+    ${MAKE_TARGET} JOBS="${JOBS}"
 
   echo "Finished build: build/${conf}"
 done
-
-# Restore original flags
-export CFLAGS="${orig_cflags}"
-export CXXFLAGS="${orig_cxxflags}"
 
 echo
 echo "All requested builds complete."

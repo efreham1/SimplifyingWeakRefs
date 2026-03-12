@@ -51,7 +51,7 @@ for name in "${variants[@]}"; do
   esac
 
   flags="-DZUseGenCodeOptimisations=${gen_opt_val}"
-  flags+=" -DZUseSeperateDiscoveredLists=${sep_val}"
+  flags+=" -DZUseSeparateDiscoveredLists=${sep_val}"
   flags+=" -DZUseDynamicArray=${dyn_val}"
 
   conf_name="${name}-linux-x86_64-server-release"
