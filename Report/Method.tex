@@ -96,12 +96,12 @@ To evaluate the performance impact of the optimisation approaches, two microbenc
 \subsection{Benchmark Design}
 \label{subsec:benchmark-design}
 
-Two synthetic microbenchmarks were developed to evaluate the optimisation approaches. The first is a synthetic benchmark that isolates the reference processing cost, and the second is a slightly more realistic benchmark that introduces additional variability.
+Two synthetic microbenchmarks were developed to evaluate the optimisation approaches. The first benchmark isolates the reference processing cost, and the second is a slightly more realistic benchmark that introduces additional variability.
 
 \subsubsection{Single-Object Benchmark}
-\label{subsubsec:synthetic-benchmark}
+\label{subsubsec:single-object-benchmark}
 
-The Single-Object benchmark (\texttt{WeakRefSingleObjectBenchmark}) allocates 10 million \texttt{WeakReference} objects that all point to a single target object. The weak references are stored in a shuffled order to reflect realistic allocation patterns where references and other objects are interleaved in memory. None of the weak references are created with a \texttt{ReferenceQueue}. After a brief holding period, the single strong reference to the target object is released and a GC cycle is triggered. Because all weak references become clearable simultaneously in a single GC cycle, this benchmark maximises the per-cycle reference processing load and isolates the cost of the processing pipeline itself.
+The Single-Object benchmark (\texttt{WeakRefSingleObjectBenchmark}) allocates 10 million \texttt{WeakReference} objects that all point to a single target object. The weak references are stored in a shuffled order to reflect realistic allocation patterns where references and other objects are interleaved in memory. None of the weak references are created with a \texttt{ReferenceQueue}. After a brief holding period, the single strong reference to the target object is released and a GC cycle is triggered manually. Because all weak references become clearable simultaneously in a single GC cycle, this benchmark maximises the per-cycle reference processing load and isolates the cost of the processing pipeline itself.
 
 \subsubsection{Multi-Object Benchmark}
 \label{subsubsec:multi-object-benchmark}
@@ -115,21 +115,23 @@ The benchmark runs three iterations with a five-second cooldown between them to 
 \subsection{Execution Environment}
 \label{subsec:execution-environment}
 
-To ensure reproducible measurements, the benchmark is executed under controlled conditions using a dedicated runner script. The script applies the following isolation measures:
+To ensure reproducible measurements, the benchmarks were executed under controlled conditions using a dedicated runner script. The script applies the following isolation measures:
 
 \begin{itemize}
-    \item \textbf{CPU pinning}: The Java process is pinned to a fixed set of CPU cores using \texttt{taskset}. The monitoring and scripting processes run on separate cores to avoid interference.
+    \item \textbf{CPU pinning}: The Java process was pinned to a fixed set of CPU cores using \texttt{taskset}. Meanwhile, the monitoring and scripting processes ran on separate cores to avoid interference.
     \item \textbf{CPU frequency control}: The CPU governor is set to performance mode at the base clock frequency. Both the minimum and maximum scaling frequencies are locked to the base frequency to prevent frequency scaling from introducing variance.
     \item \textbf{Process priority}: The Java process is run with elevated priority (\texttt{nice -n -5}) to reduce scheduling interference from other system processes.
     \item \textbf{Cache clearing}: Filesystem caches are dropped between runs by writing to \texttt{/proc/sys/vm/drop\_caches}.
     \item \textbf{Cooldown period}: A configurable cooldown period (default 10 seconds) is inserted between variant runs to allow the system to return to a stable state.
 \end{itemize}
 
-The JVM is configured with a fixed 8\,GB heap (\texttt{-Xms8g -Xmx8g}), ZGC enabled (\texttt{-XX:+UseZGC}), and a forced major collection interval of 0.5 seconds (\texttt{-XX:ZCollectionIntervalMajor=0.5}) to ensure frequent GC activity during the benchmark. Tenuring thresholds are set to 1 (\texttt{-XX:InitialTenuringThreshold=1 -XX:MaxTenuringThreshold=1}) to promote objects to the old generation quickly, ensuring that the reference processor discovers them. GC statistics and reference processing logs are enabled via \texttt{-Xlog:gc+stats,gc+ref}.
+For the single-object benchmark, the JVM was configured with a fixed 7\,GB heap and ZGC enabled. Tenuring thresholds are set to 1 to promote the target object to the old generation quickly, ensuring that the reference processor discovers it. GC statistics and reference processing logs were enabled to collect the results from.
+
+For the multi-object benchmark the JVM was configured with a fixed 8\,GB heap, ZGC enabled, and a forced major collection interval of 0.5 seconds to ensure frequent GC activity during the benchmark. Tenuring thresholds are set to 1 to promote objects to the old generation quickly, ensuring that the reference processor discovers them. This is necessary since ZGC doesn't perform reference processing in the young generation. GC statistics and reference processing logs were enabled to collect the results from.
 
 \subsection{Measurement Methodology}
 \label{subsec:measurement-methodology}
 
-The benchmark is run for 100 outer iterations. Within each outer iteration, all eight variants are run in sequence with environment preparation between each. This interleaved ordering mitigates systematic drift in system conditions across the measurement campaign.
+Each benchmark was run for 100 iterations. Within each iteration, all eight variants are run in sequence with environment preparation between each. This interleaved ordering mitigates systematic drift in system conditions across the measurements affecting one variant more than others.
 
-During each run, a memory monitoring script samples the process's resident set size (RSS), GC reserved and committed memory (via JVM Native Memory Tracking), and heap usage at high frequency. The current benchmark phase and iteration are tracked from the benchmark's log output to enable phase-aligned analysis.
+During each run, a memory monitoring script samples the process's resident set size (RSS), GC reserved and committed memory (via JVM Native Memory Tracking), and heap usage at high frequency. The current benchmark phase is tracked and, for the multi-object benchmark the inner iteration is tracked as well. This tracking is done from the benchmark's log output to enable phase-aligned analysis.
