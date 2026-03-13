@@ -134,4 +134,41 @@ For the multi-object benchmark the JVM was configured with a fixed 8\,GB heap, Z
 
 Each benchmark was run for 100 iterations. Within each iteration, all eight variants are run in sequence with environment preparation between each. This interleaved ordering mitigates systematic drift in system conditions across the measurements affecting one variant more than others.
 
-During each run, a memory monitoring script samples the process's resident set size (RSS), GC reserved and committed memory (via JVM Native Memory Tracking), and heap usage at high frequency. The current benchmark phase is tracked and, for the multi-object benchmark the inner iteration is tracked as well. This tracking is done from the benchmark's log output to enable phase-aligned analysis.
+During each run, a memory monitoring script samples memory metrics from the process at high frequency. Additionally, the current benchmark phase is tracked and for the multi-object benchmark the inner iteration is tracked as well. This tracking is done from the benchmark's log file to enable phase-aligned analysis. See \cref{tab:memory-monitoring-metrics} for the memory metrics collected.
+
+In addition to the continuous memory samples, GC statistics are parsed from the log files of each run log. For each GC metric, the parser extracts the Total Avg/Max pair and unit reported by ZGC. For the single-object benchmark, Max is used as the primary value for comparison; for the multi-object benchmark, Avg is used. See \cref{tab:gc-log-metrics} for the GC log metrics collected.
+
+\begin{table}[t]
+\centering
+\caption[Continuous monitoring metrics in the measurement pipeline]{Continuous monitoring metrics used in the measurement pipeline.}
+\label{tab:memory-monitoring-metrics}
+\begin{tabularx}{\textwidth}{@{}XlX@{}}
+\toprule
+\textbf{Metric} & \textbf{Units} & \textbf{Description} \\
+\midrule
+Timestamp & ms & Sample timestamp used to align and aggregate runs over time. \\
+RSS & kB & Process resident set size (RSS), representing total physical memory in use by the JVM process. \\
+GC Committed Memory & kB & GC-related memory currently committed by the JVM (actually backed memory from Native Memory Tracking). \\
+Java Heap & kB & Java heap usage sampled from \texttt{jcmd GC.heap\_info}. \\
+Phase & label & Benchmark phase label emitted by the benchmark and used for phase-aligned analysis. \\
+Iteration & label & Inner-iteration identifier (multi-object benchmark) used to align repeated phase sequences. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\begin{table}[t]
+\centering
+\caption[GC log metrics in the measurement pipeline]{GC log metrics used in the measurement pipeline.}
+\label{tab:gc-log-metrics}
+\begin{tabularx}{\textwidth}{@{}XlX@{}}
+\toprule
+\textbf{Metric} & \textbf{Units} & \textbf{Description} \\
+\midrule
+Major Collection & ms & End-to-end duration of major collections reported by GC statistics. \\
+Old Generation & ms & Total time spent in old-generation collection work. \\
+Old Subphase: Concurrent Mark Follow & ms & Time spent in old-generation concurrent mark-follow processing. \\
+Old Subphase: Concurrent References Process & ms & Time spent in concurrent reference processing in old-generation collection. \\
+Young Subphase: Concurrent Mark Follow & ms & Time spent in young-generation concurrent mark-follow processing. \\
+\bottomrule
+\end{tabularx}
+\end{table}
