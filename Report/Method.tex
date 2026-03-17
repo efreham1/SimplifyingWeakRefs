@@ -5,9 +5,10 @@ In order to answer the research questions posed in \cref{sec:research-questions}
 \begin{itemize}
     \item Skipping the enqueue path for weak references without a \texttt{ReferenceQueue}
     \item Replacing the intrusive linked list with a dynamic array for the discovered list
-    \item General Code Optimisations
+    \item Optimised Clear Path
 \end{itemize}
 The rationale, implementation details, and performance testing methodology of these approaches are described in the following sections. The evaluation of the approaches is described in \cref{chap:results}.
+The complete changed source code for the implemented optimisations is provided in \cref{app:changed-source-code}.
 
 \section{Skipping Enqueue Path}
 \label{sec:skipping-enqueue-path}
@@ -17,6 +18,33 @@ As described in \cref{subsec:processing}, ZGC enqueues discovered references to 
 In order to skip enqueueing weak references without a \texttt{ReferenceQueue} the \texttt{ReferenceProcessor} class was modified to check if the queue field of a weak reference being discovered is equal to the sentinel value \texttt{ReferenceQueue.NULL\_QUEUE} before adding it to the discovered list. If the queue field is equal to \texttt{ReferenceQueue.NULL\_QUEUE} (the weak reference was not created with a queue), it is added to a separate discovered list for weak references without a \texttt{ReferenceQueue} instead of being added to the regular discovered list. This separate discovered list is then processed independently by the GC threads and none of its weak references are enqueued to the pending list for the \texttt{ReferenceHandler} thread. Each GC thread maintains its own separate discovered list for weak references without a \texttt{ReferenceQueue} to avoid contention between threads.
 
 The reason for separating the discovered lists instead of simply skipping enqueueing for weak references without a \texttt{ReferenceQueue} is that two unique reference processing functions can then be used for the two lists: one that includes enqueueing and one that does not. This allows for more efficient processing of the weak references without a \texttt{ReferenceQueue}, as it avoids unnecessary checks for whether the weak reference has a queue during processing.
+
+This discovery-time split is summarised in \cref{lst:null-queue-fast-path}.
+
+\begin{listing}[t]
+\begin{lstlisting}[language=C++]
+bool discover_reference(oop ref_obj, ReferenceType type) {
+    zaddress ref = to_zaddress(ref_obj);
+
+    zpointer* referent_field = reference_referent_addr(ref);
+    zaddress referent = load_barrier(referent_field);
+    if (!should_discover(ref, type, referent)) {
+        return false;
+    }
+
+    if (type == REF_WEAK && !has_reference_queue(ref)) {
+        weak_no_queue_list_per_worker.append(ref);
+    } else {
+        discovered_list_per_worker.append(ref);
+    }
+
+    mark_discovered(ref);
+    return true;
+}
+\end{lstlisting}
+\caption[Queue-less weak discovery split]{Pseudocode of the null-queue fast path during discovery. Queue-less weak references are routed to a separate discovered list and processed by a no-enqueue pipeline. The corresponding implementation excerpts are provided in \cref{app:refproc-impl-source}.}
+\label{lst:null-queue-fast-path}
+\end{listing}
 
 \section{Replacing Intrusive Linked List with Dynamic Array}
 \label{sec:replacing-intrusive-linked-list}
@@ -33,8 +61,39 @@ During processing, the array is iterated sequentially using index-based access. 
 
 When using both dynamic arrays and separate discovered lists, only the discovered list for weak references without a \texttt{ReferenceQueue} is backed by a \texttt{ZAddressArray}, while the regular discovered list continues to use the linked list.
 
-\section{General Code Optimisations}
-\label{sec:general-code-optimisations}
+The resulting discovery and processing flow is summarised in \cref{lst:dynamic-array-processing}.
+
+\begin{listing}[htbp]
+\begin{lstlisting}[language=C++]
+void discover_reference(oop ref_obj, ReferenceType type) {
+    //...
+    ZWeakRefData data;
+    data.set_from_ref(ref); 
+    worker_array.append(data)
+    //...
+}
+
+void process_worker_discovered_weak_refs_without_queue(ZAddressArray& arr) {
+    size_t dropped = 0;
+    for (size_t i = 0; i < arr.length(); i++) {
+        const ZWeakRefData& data = arr.at(i);
+        data.mark_not_discovered();
+
+        if (try_make_inactive(data)) {
+            cleared_weak_no_queue_count++;
+        } else {
+            dropped++;
+        }
+    }
+    arr.clear_and_reserve(dropped);
+}
+\end{lstlisting}
+\caption[Dynamic-array weak processing]{Pseudocode for the \texttt{ZAddressArray}-backed queue-less weak-reference path. Discovery appends pre-fetched fields and processing scans the array sequentially. The corresponding source code is provided in \cref{app:dynamic-array-source,app:refproc-impl-source}.}
+\label{lst:dynamic-array-processing}
+\end{listing}
+
+\section{Optimised Clear Path}
+\label{sec:optimised-clear-path}
 
 The standard reference processing path in ZGC uses general-purpose functions designed to handle all reference types uniformly. This generality introduces per-reference overhead that is unnecessary when processing only weak references without a \texttt{ReferenceQueue}, where the reference type is always \texttt{REF\_WEAK} and enqueueing is never required.
 
@@ -46,13 +105,13 @@ The standard function for determining whether a reference's referent should be c
 \end{enumerate}
 
 For weak references without a \texttt{ReferenceQueue}, each of these operations can be simplified or eliminated:
-\begin{itemize}
+\begin{enumerate}
+    \item When combined with the dynamic array optimisation, the referent field address and its value can be loaded during discovery and stored in the array entry, avoiding redundant memory loads during processing. This pre-loading is safe as long as the referent field is not set to a non-null value without any safeguards during processing. Since the referent can only be concurrently modified to null, which happens when an application thread clears the reference.
     \item The reference type is known to be \texttt{REF\_WEAK} at the call site, eliminating the need for the virtual call to determine the type.
-    \item The only concurrent modification to the referent field that can occur is from the application threads, which can only change it from a live referent to null. This allows the CAS operation to be replaced with a simple store of a coloured null pointer without needing to check for concurrent updates.
-    \item When combined with the dynamic array optimisation, the referent field address and its value can be pre-fetched during discovery and stored in the array entry, avoiding redundant memory loads during processing. This is because during the reference processing phase, the only field that can be modified by another thread is the referent field, and it can only be modified from a live referent to null. This means that all values can be safely pre-fetched as long as the referent field is not set to a non-null value without any safeguards during processing.
-\end{itemize}
+    \item Since the only concurrent modification to the referent field that can occur is from an application thread setting the referent to null. The CAS operation to be replaced with a simple store of a coloured null pointer without needing to check for concurrent updates.
+\end{enumerate}
 
-\subsection{Implementation of General Code Optimisations}
+\subsection{Implementation of Optimised Clear Path}
 \label{subsec:seq-impl}
 
 The implementation introduces a new function for determining whether a queue-less weak reference's referent should be cleared. This function takes a data struct (either from the dynamic array or constructed on the fly from the linked list) containing the pre-fetched field addresses and values.
@@ -61,10 +120,46 @@ The new function checks whether the referent is strongly live via metadata in ZG
 
 The \texttt{discovered} field is also cleared using a direct store to the field address rather than through an atomic access function, since no other thread modifies this field after discovery.
 
+This specialised inactive-check path is summarised in \cref{lst:gen-opt-fast-inactive}.
+
+\begin{listing}[htbp]
+\begin{lstlisting}[language=C++]
+bool try_make_inactive_fast(const ZWeakRefData& data) {
+    // if used with the dynamic array
+    zaddress referent = data.referent_addr;
+
+    // if used with the linked list
+    zaddress referent = load_barrier(data.referent_field_addr);
+
+    // Young referents are implicitly kept alive by generational rules.
+    if (is_young(referent)) {
+        if (young_mark_is_active()) {
+            mark_young_root(referent);
+        }
+        return false; // keep as active
+    }
+
+    // Old referent: clear only if not strongly live.
+    if (!is_strongly_live(referent)) {
+        *data.referent_field_addr = to_zpointer(zaddress::null);
+        return true; // became inactive
+    }
+
+    // Still live: recolour pointer metadata, but do not overwrite null.
+    zpointer observed = data.referent_field_value;
+    zpointer recoloured = remap_with_good_metadata(referent);
+    cas_referent_if_non_null(data.referent_field_addr, observed, recoloured);
+    return false;
+}
+\end{lstlisting}
+\caption[Optimised-clear-path fast inactive check]{Pseudocode for the specialised queue-less weak-reference inactive check. The old-generation clear path uses direct stores, while recolouring uses CAS to avoid null-to-non-null races. The corresponding implementation excerpts are provided in \cref{app:refproc-impl-source}.}
+\label{lst:gen-opt-fast-inactive}
+\end{listing}
+
 \section{Build Configurations}
 \label{sec:build-configurations}
 
-The three optimisation approaches are controlled by compile-time preprocessor flags: \texttt{ZUseGenCodeOptimisations} for the general code optimisations, \texttt{ZUseSeperateDiscoveredLists} for the separate discovered list, and \texttt{ZUseDynamicArray} for the dynamic array. Each flag can be independently enabled (1) or disabled (0) via compiler flags passed during the JDK build.
+The three optimisation approaches are controlled by compile-time preprocessor flags: \texttt{ZUseOptimisedClearPath} for the optimised clear path, \texttt{ZUseSeparateDiscoveredLists} for the separate discovered list, and \texttt{ZUseDynamicArray} for the dynamic array. Each flag can be independently enabled (1) or disabled (0) via compiler flags passed during the JDK build.
 
 Eight build configurations were created to evaluate all combinations of the three optimisation flags, as shown in \cref{tab:build-configs}. Each configuration produces a separate JDK build with its own binary, allowing direct comparison under identical benchmark conditions.
 
@@ -74,15 +169,15 @@ Eight build configurations were created to evaluate all combinations of the thre
 \label{tab:build-configs}
 \begin{tabularx}{\textwidth}{lccX}
 \toprule
-\textbf{Configuration} & \textbf{Gen.\ Opts} & \textbf{Sep.\ Lists} & \textbf{Dyn.\ Array} \\
+\textbf{Configuration} & \textbf{Clear\ Path} & \textbf{Sep.\ Lists} & \textbf{Dyn.\ Array} \\
 \midrule
 \texttt{none}      & \textemdash & \textemdash & \textemdash \\
 \texttt{dyn\_only} & \textemdash  & \textemdash & \checkmark \\
 \texttt{sep\_only} & \textemdash & \checkmark  & \textemdash \\
 \texttt{sep\_dyn}  & \textemdash & \checkmark  & \checkmark  \\
-\texttt{gen\_opt\_only} & \checkmark  & \textemdash & \textemdash \\
-\texttt{gen\_opt\_dyn}  & \checkmark & \textemdash  & \checkmark  \\
-\texttt{gen\_opt\_sep}  & \checkmark  & \checkmark  & \textemdash \\
+\texttt{clear\_path\_only} & \checkmark  & \textemdash & \textemdash \\
+\texttt{clear\_path\_dyn}  & \checkmark & \textemdash  & \checkmark  \\
+\texttt{clear\_path\_sep}  & \checkmark  & \checkmark  & \textemdash \\
 \texttt{all}       & \checkmark  & \checkmark  & \checkmark  \\
 \bottomrule
 \end{tabularx}

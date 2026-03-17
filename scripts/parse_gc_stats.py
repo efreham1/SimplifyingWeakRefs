@@ -244,11 +244,11 @@ def plot_metric_boxplots(variants_all_metrics, variants, metric_names, run_id=1)
 
     DISPLAY_NAMES = {
         "none": "Baseline",
-        "gen_opt_only": "Gen-Opt",
+        "clear_path_only": "Clear Path",
         "sep_only": "Sep",
         "dyn_only": "Dyn",
-        "gen_opt_sep": "Gen-Opt\n+Sep",
-        "gen_opt_dyn": "Gen-Opt\n+Dyn",
+        "clear_path_sep": "Clear Path\n+Sep",
+        "clear_path_dyn": "Clear Path\n+Dyn",
         "sep_dyn": "Sep+Dyn",
         "all": "All",
     }
@@ -666,11 +666,11 @@ def plot_continuous_monitoring_multi(variants_continuous, run_id=1):
 
     DISPLAY_NAMES = {
         "none": "Baseline",
-        "gen_opt_only": "Gen-Opt",
+        "clear_path_only": "Optimised Clear Path",
         "sep_only": "Sep",
         "dyn_only": "Dyn",
-        "gen_opt_sep": "Gen-Opt+Sep",
-        "gen_opt_dyn": "Gen-Opt+Dyn",
+        "clear_path_sep": "Optimised Clear Path+Sep",
+        "clear_path_dyn": "Optimised Clear Path+Dyn",
         "sep_dyn": "Sep+Dyn",
         "all": "All",
     }
@@ -752,8 +752,8 @@ def main():
 
     # Canonical variant order (matches scripts/run_benchmark_iterations.sh)
     VARIANTS_ORDERED = [
-        "none", "gen_opt_only", "sep_only", "dyn_only",
-        "gen_opt_sep", "gen_opt_dyn", "sep_dyn", "all",
+        "none", "clear_path_only", "sep_only", "dyn_only",
+        "clear_path_sep", "clear_path_dyn", "sep_dyn", "all",
     ]
 
     # Discover which variants actually produced output files for this run_id

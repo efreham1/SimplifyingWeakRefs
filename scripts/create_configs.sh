@@ -10,11 +10,11 @@ MAKE_TARGET="exploded-image"
 
 variants=(
   "none"
-  "gen_opt_only"
+  "clear_path_only"
   "sep_only"
   "dyn_only"
-  "gen_opt_sep"
-  "gen_opt_dyn"
+  "clear_path_sep"
+  "clear_path_dyn"
   "sep_dyn"
   "all"
 )
@@ -31,26 +31,26 @@ orig_cxxflags="${CXXFLAGS:-}"
 for name in "${variants[@]}"; do
   case "${name}" in
     none)
-      gen_opt_val=0; sep_val=0; dyn_val=0;;
-    gen_opt_only)
-      gen_opt_val=1; sep_val=0; dyn_val=0;;
+      clear_path_val=0; sep_val=0; dyn_val=0;;
+    clear_path_only)
+      clear_path_val=1; sep_val=0; dyn_val=0;;
     sep_only)
-      gen_opt_val=0; sep_val=1; dyn_val=0;;
+      clear_path_val=0; sep_val=1; dyn_val=0;;
     dyn_only)
-      gen_opt_val=0; sep_val=0; dyn_val=1;;
-    gen_opt_sep)
-      gen_opt_val=1; sep_val=1; dyn_val=0;;
-    gen_opt_dyn)
-      gen_opt_val=1; sep_val=0; dyn_val=1;;
+      clear_path_val=0; sep_val=0; dyn_val=1;;
+    clear_path_sep)
+      clear_path_val=1; sep_val=1; dyn_val=0;;
+    clear_path_dyn)
+      clear_path_val=1; sep_val=0; dyn_val=1;;
     sep_dyn)
-      gen_opt_val=0; sep_val=1; dyn_val=1;;
+      clear_path_val=0; sep_val=1; dyn_val=1;;
     all)
-      gen_opt_val=1; sep_val=1; dyn_val=1;;
+      clear_path_val=1; sep_val=1; dyn_val=1;;
     *)
-      gen_opt_val=0; sep_val=0; dyn_val=0;;
+      clear_path_val=0; sep_val=0; dyn_val=0;;
   esac
 
-  flags="-DZUseGenCodeOptimisations=${gen_opt_val}"
+  flags="-DZUseOptimisedClearPath=${clear_path_val}"
   flags+=" -DZUseSeparateDiscoveredLists=${sep_val}"
   flags+=" -DZUseDynamicArray=${dyn_val}"
 

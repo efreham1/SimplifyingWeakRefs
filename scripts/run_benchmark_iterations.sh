@@ -304,11 +304,11 @@ echo ""
 variants=(
     "none"
     "all"
-    "gen_opt_only"
+    "clear_path_only"
     "sep_only"
     "dyn_only"
-    "gen_opt_sep"
-    "gen_opt_dyn"
+    "clear_path_sep"
+    "clear_path_dyn"
     "sep_dyn"
 )
 

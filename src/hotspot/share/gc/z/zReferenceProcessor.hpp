@@ -74,9 +74,9 @@ private:
 
   bool should_discover(zaddress reference, ReferenceType type, oop referent) const;
   bool try_make_inactive(zaddress reference, ReferenceType type) const;
-#if ZUseGenCodeOptimisations
+#if ZUseOptimisedClearPath
   bool try_make_inactive_fast(const ZWeakRefData& data);
-#endif // ZUseGenCodeOptimisations
+#endif // ZUseOptimisedClearPath
 
   void discover(zaddress reference, ReferenceType type, zaddress referent);
   

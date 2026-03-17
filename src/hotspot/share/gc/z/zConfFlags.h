@@ -1,6 +1,6 @@
-#ifndef ZUseGenCodeOptimisations
-#define ZUseGenCodeOptimisations 1
-#endif // ZUseGenCodeOptimisations
+#ifndef ZUseOptimisedClearPath
+#define ZUseOptimisedClearPath 1
+#endif // ZUseOptimisedClearPath
 
 #ifndef ZUseSeparateDiscoveredLists
 #define ZUseSeparateDiscoveredLists 1

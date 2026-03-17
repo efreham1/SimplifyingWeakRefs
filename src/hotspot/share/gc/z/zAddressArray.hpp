@@ -33,7 +33,7 @@
 #include "gc/z/zConfFlags.h"
 
 struct ZWeakRefData {
-#if ZUseGenCodeOptimisations
+#if ZUseOptimisedClearPath
   zpointer* referent_field_addr;
   zaddress* discovered_field_addr;
   zaddress referent_addr;
@@ -42,9 +42,9 @@ struct ZWeakRefData {
   // For the case where we use a dynamic array but not separate discovered lists, we need to store the reference itself in the data struct to be able to mark it as discovered.
   zaddress reference;
 #endif // !ZUseSeparateDiscoveredLists
-#else //!ZUseGenCodeOptimisations
+#else //!ZUseOptimisedClearPath
   zaddress reference;
-#endif // ZUseGenCodeOptimisations
+#endif // ZUseOptimisedClearPath
 
 };
 
@@ -100,7 +100,7 @@ public:
   }
 
   // Append a new entry
-#if ZUseGenCodeOptimisations && ZUseSeparateDiscoveredLists
+#if ZUseOptimisedClearPath && ZUseSeparateDiscoveredLists
   void append(zpointer* referent_field_addr, zaddress* discovered_field_addr, zaddress referent_addr, zpointer referent_field_value) {
     if (_length >= _capacity) {
       grow(_length + 1);
@@ -111,7 +111,7 @@ public:
     _data[_length].referent_field_value = referent_field_value;
     _length++;
   }
-#elif ZUseGenCodeOptimisations && !ZUseSeparateDiscoveredLists
+#elif ZUseOptimisedClearPath && !ZUseSeparateDiscoveredLists
   void append(zpointer* referent_field_addr, zaddress* discovered_field_addr, zaddress referent_addr, zpointer referent_field_value, zaddress reference) {
     if (_length >= _capacity) {
       grow(_length + 1);
@@ -123,7 +123,7 @@ public:
     _data[_length].reference = reference;
     _length++;
   }
-#else //!ZUseGenCodeOptimisations
+#else //!ZUseOptimisedClearPath
   void append(zaddress reference) {
     if (_length >= _capacity) {
       grow(_length + 1);
@@ -131,7 +131,7 @@ public:
     _data[_length].reference = reference;
     _length++;
   }
-#endif // ZUseGenCodeOptimisations
+#endif // ZUseOptimisedClearPath
 
   // Get entry at index
   const ZWeakRefData& at(size_t index) const {

@@ -83,14 +83,14 @@ static zpointer reference_referent(zaddress reference) {
   return ZBarrier::load_atomic(reference_referent_addr(reference));
 }
 
-#if (ZUseDynamicArray && ZUseGenCodeOptimisations) || (ZUseSeparateDiscoveredLists && !ZUseDynamicArray && ZUseGenCodeOptimisations) || ZUseGenCodeOptimisations
+#if (ZUseDynamicArray && ZUseOptimisedClearPath) || (ZUseSeparateDiscoveredLists && !ZUseDynamicArray && ZUseOptimisedClearPath) || ZUseOptimisedClearPath
 static zaddress* reference_discovered_addr(zaddress reference) {
   return (zaddress*)java_lang_ref_Reference::discovered_addr_raw(to_oop(reference));
 }
 static zpointer* reference_referent_addr_non_vol(zaddress reference) {
   return (zpointer*)java_lang_ref_Reference::referent_addr_raw(to_oop(reference));
 }
-#endif // ZUseGenCodeOptimisations || ZUseDynamicArray
+#endif // ZUseOptimisedClearPath || ZUseDynamicArray
 
 static zaddress reference_discovered(zaddress reference) {
   return to_zaddress(java_lang_ref_Reference::discovered(to_oop(reference)));
@@ -158,7 +158,7 @@ ZReferenceProcessor::ZReferenceProcessor(ZWorkers* workers)
   _all_refs_array_empty.set_all(true);
 #endif
 
-  log_info(gc, ref)("Reference Processor created, Macros: ZUseSeparateDiscoveredLists=%d, ZUseDynamicArray=%d, ZUseGenCodeOptimisations=%d", ZUseSeparateDiscoveredLists, ZUseDynamicArray, ZUseGenCodeOptimisations);
+  log_info(gc, ref)("Reference Processor created, Macros: ZUseSeparateDiscoveredLists=%d, ZUseDynamicArray=%d, ZUseOptimisedClearPath=%d", ZUseSeparateDiscoveredLists, ZUseDynamicArray, ZUseOptimisedClearPath);
 }
 
 void ZReferenceProcessor::set_soft_reference_policy(bool clear_all_soft_references) {
@@ -270,7 +270,7 @@ bool ZReferenceProcessor::try_make_inactive(zaddress reference, ReferenceType ty
   return false;
 }
 
-#if ZUseGenCodeOptimisations
+#if ZUseOptimisedClearPath
 // Try to make a WeakReference without a ReferenceQueue inactive.
 // Returns true if the referent was cleared (i.e. treated as "kept"),
 // false if the reference should be considered dropped.
@@ -295,7 +295,7 @@ bool ZReferenceProcessor::try_make_inactive_fast(const ZWeakRefData& data) {
     return false;
   }
 }
-#endif // ZUseGenCodeOptimisations
+#endif // ZUseOptimisedClearPath
 
 void ZReferenceProcessor::discover(zaddress reference, ReferenceType type, zaddress referent) {
   log_trace(gc, ref)("Discovered Reference: " PTR_FORMAT " (%s)", untype(reference), reference_type_name(type));
@@ -313,7 +313,7 @@ void ZReferenceProcessor::discover(zaddress reference, ReferenceType type, zaddr
 
 #if ZUseSeparateDiscoveredLists
   if (type == REF_WEAK && !has_reference_queue(reference)) {
-#if ZUseDynamicArray && ZUseGenCodeOptimisations
+#if ZUseDynamicArray && ZUseOptimisedClearPath
     zpointer* const referent_addr = reference_referent_addr_non_vol(reference);
     zaddress* const discovered_addr = reference_discovered_addr(reference);
     const zpointer referent_value = *referent_addr;
@@ -326,7 +326,7 @@ void ZReferenceProcessor::discover(zaddress reference, ReferenceType type, zaddr
                                    referent_value);
     _array_empty.set(false);
     reference_set_discovered(reference, reference); // mark as discovered
-#elif ZUseDynamicArray && !ZUseGenCodeOptimisations
+#elif ZUseDynamicArray && !ZUseOptimisedClearPath
     // WeakReference with null ReferenceQueue - remember for special processing
     ZAddressArray& weak_refs_without_queue = _discovered_weak_refs_without_queue_arr.get();
     weak_refs_without_queue.append(reference);
@@ -363,14 +363,14 @@ void ZReferenceProcessor::discover(zaddress reference, ReferenceType type, zaddr
   // Add all reference types to a single dynamic array for processing
   {
     ZAddressArray& all_refs = _discovered_all_refs_arr.get();
-#if ZUseGenCodeOptimisations
+#if ZUseOptimisedClearPath
     zpointer* const referent_field = reference_referent_addr_non_vol(reference);
     zaddress* const discovered_field = reference_discovered_addr(reference);
     const zpointer referent_value = *referent_field;
     all_refs.append(referent_field, discovered_field, referent, referent_value, reference);
-#else // !ZUseGenCodeOptimisations
+#else // !ZUseOptimisedClearPath
     all_refs.append(reference);
-#endif // ZUseGenCodeOptimisations
+#endif // ZUseOptimisedClearPath
     _all_refs_array_empty.set(false);
     reference_set_discovered(reference, reference); // mark as discovered
   }
@@ -440,7 +440,7 @@ void ZReferenceProcessor::process_worker_discovered_list(zaddress discovered_lis
     const ReferenceType type = reference_type(reference);
     const zaddress next = reference_discovered(reference);
   
-    #if ZUseGenCodeOptimisations
+    #if ZUseOptimisedClearPath
     if (type == REF_WEAK && !has_reference_queue(reference)) {
       ZWeakRefData data;
       data.referent_field_addr = reference_referent_addr_non_vol(reference);
@@ -461,7 +461,7 @@ void ZReferenceProcessor::process_worker_discovered_list(zaddress discovered_lis
         log_trace(gc, ref)("Dropped Weak Reference without Queue: " PTR_FORMAT, untype(reference));
       }
     } else {
-    #endif // ZUseGenCodeOptimisations
+    #endif // ZUseOptimisedClearPath
     reference_set_discovered(reference, zaddress::null);
     if (try_make_inactive(reference, type)) {
       // Keep reference
@@ -479,9 +479,9 @@ void ZReferenceProcessor::process_worker_discovered_list(zaddress discovered_lis
       // Drop reference
       log_trace(gc, ref)("Dropped Reference: " PTR_FORMAT " (%s)", untype(reference), reference_type_name(type));
     }
-    #if ZUseGenCodeOptimisations
+    #if ZUseOptimisedClearPath
     }
-    #endif // ZUseGenCodeOptimisations
+    #endif // ZUseOptimisedClearPath
 
     reference = next;
     SuspendibleThreadSet::yield();
@@ -509,7 +509,7 @@ void ZReferenceProcessor::process_worker_discovered_weak_refs_without_queue(ZAdd
   size_t dropped = 0;
   for (size_t i = 0; i < weak_refs_without_queue.length(); i++) {
     const ZWeakRefData& data = weak_refs_without_queue.at(i);    
-#if ZUseGenCodeOptimisations
+#if ZUseOptimisedClearPath
     *data.discovered_field_addr = zaddress::null; // Mark as dropped
     if (try_make_inactive_fast(data)) {
       log_trace(gc, ref)("\"Enqueued\" Weak Reference without Queue");
@@ -519,7 +519,7 @@ void ZReferenceProcessor::process_worker_discovered_weak_refs_without_queue(ZAdd
       log_trace(gc, ref)("Dropped Weak Reference without Queue");
       dropped++;
     }
-#else //!ZUseGenCodeOptimisations
+#else //!ZUseOptimisedClearPath
     zaddress reference = data.reference;
     reference_set_discovered(reference, zaddress::null); // Mark as dropped
     if (try_make_inactive(reference, reference_type(reference))) {
@@ -530,7 +530,7 @@ void ZReferenceProcessor::process_worker_discovered_weak_refs_without_queue(ZAdd
       log_trace(gc, ref)("Dropped Weak Reference without Queue");
       dropped++;
     }
-#endif // ZUseGenCodeOptimisations
+#endif // ZUseOptimisedClearPath
     SuspendibleThreadSet::yield();
   }
   weak_refs_without_queue.clear_and_reserve(dropped);
@@ -539,7 +539,7 @@ void ZReferenceProcessor::process_worker_discovered_weak_refs_without_queue(ZAdd
 void ZReferenceProcessor::process_worker_discovered_weak_refs_without_queue(zaddress weak_refs_without_queue) {
   for (zaddress current = weak_refs_without_queue; !is_null(current);) {
     zaddress next = reference_discovered(current);
-#if ZUseGenCodeOptimisations
+#if ZUseOptimisedClearPath
     ZWeakRefData data;
     data.referent_field_addr = reference_referent_addr_non_vol(current);
     data.discovered_field_addr = reference_discovered_addr(current);
@@ -553,7 +553,7 @@ void ZReferenceProcessor::process_worker_discovered_weak_refs_without_queue(zadd
     } else {
       log_trace(gc, ref)("Dropped Weak Reference without Queue");
     }
-#else //!ZUseGenCodeOptimisations
+#else //!ZUseOptimisedClearPath
     reference_set_discovered(current, zaddress::null); // Mark as dropped
     if (try_make_inactive(current, reference_type(current))) {
       log_trace(gc, ref)("\"Enqueued\" Weak Reference without Queue");
@@ -562,7 +562,7 @@ void ZReferenceProcessor::process_worker_discovered_weak_refs_without_queue(zadd
     } else {
       log_trace(gc, ref)("Dropped Weak Reference without Queue");
     }
-#endif // ZUseGenCodeOptimisations
+#endif // ZUseOptimisedClearPath
     current = next;
     SuspendibleThreadSet::yield();
   }
@@ -580,7 +580,7 @@ void ZReferenceProcessor::process_worker_discovered_all_refs(ZAddressArray& all_
     const bool is_weak_no_queue = (type == REF_WEAK && !has_reference_queue(reference));
 
     if (is_weak_no_queue) {
-#if ZUseGenCodeOptimisations
+#if ZUseOptimisedClearPath
       *data.discovered_field_addr = zaddress::null;
       if (try_make_inactive_fast(data)) {
         log_trace(gc, ref)("\"Enqueued\" Weak Reference without Queue");
@@ -589,7 +589,7 @@ void ZReferenceProcessor::process_worker_discovered_all_refs(ZAddressArray& all_
         log_trace(gc, ref)("Dropped Weak Reference without Queue");
         dropped++;
       }
-#else // !ZUseGenCodeOptimisations
+#else // !ZUseOptimisedClearPath
       reference_set_discovered(reference, zaddress::null);
       if (try_make_inactive(reference, type)) {
         log_trace(gc, ref)("\"Enqueued\" Weak Reference without Queue");
@@ -598,7 +598,7 @@ void ZReferenceProcessor::process_worker_discovered_all_refs(ZAddressArray& all_
         log_trace(gc, ref)("Dropped Weak Reference without Queue");
         dropped++;
       }
-#endif // ZUseGenCodeOptimisations
+#endif // ZUseOptimisedClearPath
     } else {
       reference_set_discovered(reference, zaddress::null);
       if (try_make_inactive(reference, type)) {
