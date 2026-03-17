@@ -150,11 +150,11 @@ public final class WeakRefGcBenchmark {
 
         Reference.reachabilityFence(strongRefs);
         System.out.printf("Waiting %d ms...%n", sleepMillis*2);
-            if (sleepMillis*2 > 0) {
-                Thread.sleep(sleepMillis*2);
-            }
+        if (sleepMillis*2 > 0) {
+            Thread.sleep(sleepMillis*2);
+        }
 
-        System.out.printf("Phase 4: Final GC and weak reference check...%n");
+        System.out.printf("Phase 4: Final weak reference checks...%n");
         
         int aliveWeakRefs = AliveWeakRefs(weakRefs);
         System.out.printf("Final count of alive weak references: %d%n", aliveWeakRefs);

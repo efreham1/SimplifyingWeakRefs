@@ -440,15 +440,16 @@ void ZReferenceProcessor::process_worker_discovered_list(zaddress discovered_lis
     const ReferenceType type = reference_type(reference);
     const zaddress next = reference_discovered(reference);
   
-    #if ZUseOptimisedClearPath
+    #if ZUseOptimisedClearPath && !ZUseSeparateDiscoveredLists && !ZUseDynamicArray
     if (type == REF_WEAK && !has_reference_queue(reference)) {
       ZWeakRefData data;
       data.referent_field_addr = reference_referent_addr_non_vol(reference);
       data.discovered_field_addr = reference_discovered_addr(reference);
       data.referent_field_value = *data.referent_field_addr;
       data.referent_addr = ZBarrier::load_barrier_on_oop_field(reference_referent_addr(reference));
+      oop referent = to_oop(data.referent_addr);
       *data.discovered_field_addr = zaddress::null; // Mark as processed
-      if (try_make_inactive_fast(data)) {
+      if (!is_inactive(reference, referent, REF_WEAK) && try_make_inactive_fast(data)) {
         // Keep reference
         log_trace(gc, ref)("Enqueued Weak Reference without Queue: " PTR_FORMAT, untype(reference));
 
@@ -461,7 +462,7 @@ void ZReferenceProcessor::process_worker_discovered_list(zaddress discovered_lis
         log_trace(gc, ref)("Dropped Weak Reference without Queue: " PTR_FORMAT, untype(reference));
       }
     } else {
-    #endif // ZUseOptimisedClearPath
+    #endif // ZUseOptimisedClearPath && !ZUseSeparateDiscoveredLists && !ZUseDynamicArray
     reference_set_discovered(reference, zaddress::null);
     if (try_make_inactive(reference, type)) {
       // Keep reference
@@ -479,9 +480,9 @@ void ZReferenceProcessor::process_worker_discovered_list(zaddress discovered_lis
       // Drop reference
       log_trace(gc, ref)("Dropped Reference: " PTR_FORMAT " (%s)", untype(reference), reference_type_name(type));
     }
-    #if ZUseOptimisedClearPath
+    #if ZUseOptimisedClearPath && !ZUseSeparateDiscoveredLists && !ZUseDynamicArray
     }
-    #endif // ZUseOptimisedClearPath
+    #endif // ZUseOptimisedClearPath && !ZUseSeparateDiscoveredLists && !ZUseDynamicArray
 
     reference = next;
     SuspendibleThreadSet::yield();

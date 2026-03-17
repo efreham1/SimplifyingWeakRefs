@@ -41,7 +41,6 @@ public final class WeakRefSingleObjectBenchmark {
             
         System.out.printf("%n=== Iteration 1 ===%n");
 
-        ReferenceQueue<BigObject> queue   = new ReferenceQueue<>();
         @SuppressWarnings("unchecked")
         WeakReference<BigObject>[] weakRefs = new WeakReference[weakRefCount];
         Random random = new Random(0x5eedcafeL);
@@ -86,12 +85,6 @@ public final class WeakRefSingleObjectBenchmark {
         System.out.println("Phase 6: Checking results...");
         int aliveCount = countAlive(weakRefs);
         System.out.printf("Alive weak references after GC: %d / %d%n", aliveCount, weakRefCount);
-
-        int queuedCount = 0;
-        while (queue.poll() != null) {
-            queuedCount++;
-        }
-        System.out.printf("References enqueued in ReferenceQueue: %d%n", queuedCount);
     }
     private static int[] shuffledIndices(int count, Random random) {
         int[] indices = new int[count];
