@@ -44,6 +44,7 @@ import java.awt.Rectangle;
 import java.awt.RenderingHints;
 import java.awt.Shape;
 import java.awt.Toolkit;
+import java.awt.event.FocusEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseEvent;
@@ -92,7 +93,6 @@ import javax.swing.tree.TreeModel;
 import javax.swing.tree.TreePath;
 
 import sun.awt.AWTAccessor;
-import sun.awt.AppContext;
 import sun.awt.SunToolkit;
 import sun.font.FontDesignMetrics;
 import sun.font.FontUtilities;
@@ -796,7 +796,7 @@ public class SwingUtilities2 {
      */
     public static void adjustFocus(JComponent c) {
         if (!c.hasFocus() && c.isRequestFocusEnabled()) {
-            c.requestFocus();
+            c.requestFocus(FocusEvent.Cause.MOUSE_EVENT);
         }
     }
 
@@ -1241,21 +1241,12 @@ public class SwingUtilities2 {
         return null;
     }
 
-    private static final Object APP_CONTEXT_FRC_CACHE_KEY = new Object();
+    private static final Map<Object, FontRenderContext> cache = new HashMap<>();
 
     private static FontRenderContext getFRCFromCache(AffineTransform tx,
                                                      Object aaHint) {
         if (tx == null && aaHint == null) {
             return null;
-        }
-
-        @SuppressWarnings("unchecked")
-        Map<Object, FontRenderContext> cache = (Map<Object, FontRenderContext>)
-                AppContext.getAppContext().get(APP_CONTEXT_FRC_CACHE_KEY);
-
-        if (cache == null) {
-            cache = new HashMap<>();
-            AppContext.getAppContext().put(APP_CONTEXT_FRC_CACHE_KEY, cache);
         }
 
         Object key = (tx == null)
@@ -1656,7 +1647,7 @@ public class SwingUtilities2 {
                 FocusTraversalPolicy policy = container.getFocusTraversalPolicy();
                 Component comp = policy.getDefaultComponent(container);
                 if (comp!=null) {
-                    comp.requestFocus();
+                    comp.requestFocus(FocusEvent.Cause.TRAVERSAL);
                     return comp;
                 }
             }
@@ -1666,13 +1657,13 @@ public class SwingUtilities2 {
                 Component comp = policy.getComponentAfter(rootAncestor, container);
 
                 if (comp!=null && SwingUtilities.isDescendingFrom(comp, container)) {
-                    comp.requestFocus();
+                    comp.requestFocus(FocusEvent.Cause.TRAVERSAL);
                     return comp;
                 }
             }
         }
         if (component.isFocusable()) {
-            component.requestFocus();
+            component.requestFocus(FocusEvent.Cause.TRAVERSAL);
             return component;
         }
         return null;
