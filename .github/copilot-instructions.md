@@ -113,3 +113,12 @@ See `I_do_this.txt` for current task list and `considerations.txt` for critical 
 - Weak reference processing: `grep -r "REF_WEAK" src/hotspot/share/gc/`
 - Enqueue operations: `grep -r "enqueue" src/hotspot/share/gc/shared/referenceProcessor.cpp`
 - ZGC without-queue handling: `grep -r "without_queue" src/hotspot/share/gc/z/`
+
+
+## Rules for writing code
+- Do not suggest code that has been deleted in recent edits.
+- Do not suggest code that has been moved in recent edits.
+
+## Rules for writing text
+- Do not use M-dashes (---)
+- Use British English spelling (e.g., "optimisation" instead of "optimization")

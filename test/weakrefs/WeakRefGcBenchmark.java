@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
+import java.lang.ref.Reference;
 
 public final class WeakRefGcBenchmark {
 
@@ -112,41 +113,28 @@ public final class WeakRefGcBenchmark {
         System.out.printf("Allocated %d objects in %.2f seconds%n", objectCount, allocDuration / 1_000_000_000.0);
         
 
-        // Phase 3: Hold everything still for a couple of seconds
+        // Phase 2: Sleep for a couple of seconds
         System.out.printf("Phase 2: Sleeping for %d ms...%n", sleepMillis);
         if (sleepMillis > 0) {
             Thread.sleep(sleepMillis);
         }
 
-        // Phase 4-*: Repeatedly clear half of remaining strong refs until all are gone
+        // Phase 3-*: Repeatedly clear 20% of strong refs until all are gone
         int subPhase = 1;
         int remainingRefs = objectCount;
 
-        // Phase 3: Dummy write to ensure all objects are touched
-        System.out.println("Phase 3: Touching all strong references...");
-        for (int i = 0; i < objectCount; i++) {
-            strongRefs[i].payload[0] = (byte) (strongRefs[i].id & 0xFF);
-        }
-
         int [] clearOrder = shuffledIndices(objectCount, random);
-        
+        int i = 0;
         for (int j = 0 ; j < 5; j++) {
             // Count and clear half of remaining strong refs
-            System.out.printf("Phase 4-%d: Clearing half of remaining strong references...%n", subPhase++);
-            int toClear = (int)Math.ceil(objectCount/5);
+            System.out.printf("Phase 3.%d: Clearing strong references...%n", subPhase++);
+            int toClear = objectCount/5+1;
             int clearedThisRound = 0;
-            int i = 0;
             for (; i < objectCount && clearedThisRound < toClear; i++) {
                 int idx = clearOrder[i];
                 if (strongRefs[idx] != null) {
                     strongRefs[idx] = null;
                     clearedThisRound++;
-                }
-            }
-            for (; i < objectCount; i++) {
-                int idx = clearOrder[i];
-                if (strongRefs[idx] != null) {
-                    strongRefs[idx].payload[0] = (byte) (strongRefs[idx].id & 0xFF);
                 }
             }
             
@@ -160,7 +148,13 @@ public final class WeakRefGcBenchmark {
             }
         }
 
-        System.out.printf("Phase 5: Final GC and weak reference check...%n");
+        Reference.reachabilityFence(strongRefs);
+        System.out.printf("Waiting %d ms...%n", sleepMillis*2);
+        if (sleepMillis*2 > 0) {
+            Thread.sleep(sleepMillis*2);
+        }
+
+        System.out.printf("Phase 4: Final weak reference checks...%n");
         
         int aliveWeakRefs = AliveWeakRefs(weakRefs);
         System.out.printf("Final count of alive weak references: %d%n", aliveWeakRefs);
@@ -171,7 +165,7 @@ public final class WeakRefGcBenchmark {
             queuedCount++;
         }
         System.out.printf("References enqueued in ReferenceQueue: %d%n", queuedCount);
-        for (int i = 0; i < objectCount; i++) {
+        for (i = 0; i < objectCount; i++) {
             if (strongRefs[i] != null) {
                 System.out.printf("Error: strongRefs[%d] is not cleared!%n", i);
             }

@@ -28,6 +28,7 @@
 #include "gc/z/zAddress.hpp"
 #include "gc/z/zAddressArray.hpp"
 #include "gc/z/zValue.hpp"
+#include "gc/z/zConfFlags.h"
 
 class ConcurrentGCTimer;
 class ReferencePolicy;
@@ -42,21 +43,30 @@ private:
   static const size_t ReferenceTypeCount = REF_PHANTOM + 1;
   typedef size_t Counters[ReferenceTypeCount];
 
-  ZWorkers* const      _workers;
-  ReferencePolicy*     _soft_reference_policy;
-  bool                 _uses_clear_all_soft_reference_policy;
-  ZPerWorker<Counters> _encountered_count;
-  ZPerWorker<Counters> _discovered_count;
-  ZPerWorker<Counters> _enqueued_count;
-  ZPerWorker<size_t>   _encountered_weak_refs_without_queue_count;
-  ZPerWorker<size_t>   _discovered_weak_refs_without_queue_count;
-  ZPerWorker<size_t>   _cleared_weak_refs_without_queue_count;
-  ZPerWorker<zaddress> _discovered_list;
-  ZContended<zaddress> _pending_list;
-  zaddress             _pending_list_tail;
-  ZPerWorker<ZAddressArray> _discovered_weak_refs_without_queue;
-  ZPerWorker<bool>     _array_empty;
-  OopHandle            _null_queue_handle;
+  ZWorkers* const           _workers;
+  ReferencePolicy*          _soft_reference_policy;
+  bool                      _uses_clear_all_soft_reference_policy;
+  ZPerWorker<Counters>      _encountered_count;
+  ZPerWorker<Counters>      _discovered_count;
+  ZPerWorker<Counters>      _enqueued_count;
+  ZPerWorker<size_t>        _encountered_weak_refs_without_queue_count;
+  ZPerWorker<size_t>        _discovered_weak_refs_without_queue_count;
+  ZPerWorker<size_t>        _cleared_weak_refs_without_queue_count;
+  ZPerWorker<zaddress>      _discovered_list;
+  ZContended<zaddress>      _pending_list;
+  zaddress                  _pending_list_tail;
+#if ZUseSeparateDiscoveredLists
+#if ZUseDynamicArray
+  ZPerWorker<ZAddressArray> _discovered_weak_refs_without_queue_arr;
+  ZPerWorker<bool>          _array_empty;
+#else // !ZUseDynamicArray
+  ZPerWorker<zaddress>      _discovered_weak_refs_without_queue_ll;
+#endif // ZUseDynamicArray
+#elif ZUseDynamicArray // !ZUseSeparateDiscoveredLists && ZUseDynamicArray
+  ZPerWorker<ZAddressArray> _discovered_all_refs_arr;
+  ZPerWorker<bool>          _all_refs_array_empty;
+#endif // ZUseSeparateDiscoveredLists
+  OopHandle                 _null_queue_handle;
 
   bool is_inactive(zaddress reference, oop referent, ReferenceType type) const;
   bool is_strongly_live(oop referent) const;
@@ -64,13 +74,22 @@ private:
 
   bool should_discover(zaddress reference, ReferenceType type, oop referent) const;
   bool try_make_inactive(zaddress reference, ReferenceType type) const;
+#if ZUseOptimisedClearPath
+  bool try_make_inactive_fast(const ZWeakRefData& data);
+#endif // ZUseOptimisedClearPath
 
   void discover(zaddress reference, ReferenceType type, zaddress referent);
   
   void verify_empty() const;
 
   void process_worker_discovered_list(zaddress discovered_list);
+#if ZUseSeparateDiscoveredLists && ZUseDynamicArray
   void process_worker_discovered_weak_refs_without_queue(ZAddressArray& weak_refs_without_queue);
+#elif ZUseSeparateDiscoveredLists && !ZUseDynamicArray
+  void process_worker_discovered_weak_refs_without_queue(zaddress weak_refs_without_queue);
+#elif !ZUseSeparateDiscoveredLists && ZUseDynamicArray
+  void process_worker_discovered_all_refs(ZAddressArray& all_refs);
+#endif // ZUseSeparateDiscoveredLists && ZUseDynamicArray
   void work();
   void collect_statistics();
 

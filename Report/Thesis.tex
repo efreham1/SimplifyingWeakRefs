@@ -8,6 +8,8 @@
 
 \documentclass{UUThesisTemplate}
 
+\usepackage{fix-cm}
+
 % Package to determine whether XeTeX is used
 \usepackage{ifxetex}
 
@@ -20,7 +22,7 @@
 	\usepackage{fontspec}
 	\setmainfont{TeX Gyre Termes}
 	\setsansfont{TeX Gyre Heros}
-	\setmonofont{TeX Gyre Cursor}
+	\setmonofont[HyphenChar=45]{TeX Gyre Cursor}
 \else
 	% Plain LaTeX specific packages and settings
 	% Language, diacritics and hyphenation
@@ -36,12 +38,44 @@
 	\usepackage{graphicx}
 \fi
 
+% Micro-typography: improves justification and reduces underfull \hbox warnings
+\usepackage{microtype}
+
 % Graphics path for figures
 \graphicspath{{figures/}{images/}}
+
+% Allow hyphenation and line breaks in monospace (\texttt) text
+\ifxetex
+	% For XeTeX: redefine \texttt to allow hyphenation
+	\renewcommand{\texttt}[1]{{\ttfamily\hyphenchar\font=45\relax #1}}
+\else
+	\usepackage[htt]{hyphenat}
+\fi
+
+% Allow TeX to stretch whitespace to avoid overfull hboxes
+% Increase emergency stretch slightly to help with tight lines
+\setlength{\emergencystretch}{5em}
+
+% Tolerance and hyphenation penalties: make hyphenation and stretching
+% slightly more acceptable to avoid underfull \hbox warnings.
+\tolerance=1000
+\hyphenpenalty=500
+\exhyphenpenalty=500
+
+% Allow uneven bottom pages to avoid underfull \vbox warnings
+% (keeps full justification but does not force vertical stretching)
+\raggedbottom
 
 % Code listings for Java/C++ code (essential for CS thesis)
 \usepackage{listings}
 \usepackage{xcolor}
+\usepackage{float}
+
+% Define listing as a float type
+\floatstyle{plain}
+\newfloat{listing}{htbp}{lol}
+\floatname{listing}{Listing}
+\newcommand{\listoflistings}{\listof{listing}{List of Listings}}
 
 % Configure listings for Java code
 \lstset{
@@ -75,6 +109,13 @@
 \usepackage{booktabs}
 \usepackage{tabularx}
 
+% Symbols (checkmark etc.)
+\usepackage{amssymb}
+
+% Diagrams
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,calc,fit}
+
 % Document links and bookmarks (modern configuration)
 \usepackage{hyperref}
 \hypersetup{
@@ -82,14 +123,31 @@
 	linkcolor=black,
 	citecolor=blue,
 	urlcolor=blue,
-	pdftitle={Optimizing Weak Reference Processing in the JVM Z Garbage Collector},
+	pdftitle={Optimising Weak Reference Processing in the JVM Z Garbage Collector},
 	pdfauthor={Fredrik Hammarberg},
 	pdfsubject={Master's Thesis in Computer Science},
-	pdfkeywords={Java, JVM, Garbage Collection, ZGC, Weak References, Performance Optimization}
+	pdfkeywords={Java, JVM, Garbage Collection, ZGC, Weak References, Performance Optimisation}
 } 
 
+% Improve PDF bookmarks and avoid rerunfilecheck warnings
+% (Load after hyperref and before cleveref)
+\usepackage{bookmark}
+
+
 % Better cross-referencing (must be loaded AFTER hyperref)
-\usepackage{cleveref}
+\usepackage[capitalise,nameinlink]{cleveref}
+
+% Capitalized reference names for all environments
+\crefname{section}{Section}{Sections}
+\Crefname{section}{Section}{Sections}
+\crefname{chapter}{Chapter}{Chapters}
+\Crefname{chapter}{Chapter}{Chapters}
+\crefname{figure}{Figure}{Figures}
+\Crefname{figure}{Figure}{Figures}
+\crefname{table}{Table}{Tables}
+\Crefname{table}{Table}{Tables}
+\crefname{listing}{Listing}{Listings}
+\Crefname{listing}{Listing}{Listings}
 
 % Numbering of headings down to the subsection level
 \numberingdepth{subsection}
@@ -99,8 +157,8 @@
 
 
 % Define thesis metadata
-\title{Optimizing Weak Reference Processing in the JVM Z Garbage Collector}
-\subtitle{A Performance Analysis and Optimization of the ZGC Reference Processing Pipeline}
+\title{Optimising Weak Reference Processing in the JVM Z Garbage Collector}
+\subtitle{A Performance Analysis and Optimisation of the ZGC Reference Processing Pipeline}
 \author{Fredrik Hammarberg}
 \authorshort{Hammarberg, F.}
 \date{June 2026}
@@ -136,11 +194,13 @@
     \chapter*{Acknowledgments}
     \addcontentsline{toc}{chapter}{Acknowledgments}
     
-    I would like to express my sincere gratitude to my supervisor for their guidance and support throughout this thesis work. Their expertise in JVM internals and garbage collection algorithms has been invaluable in shaping this research.
+    I would like to express my sincere gratitude to my supervisor for his guidance and support throughout this thesis work. It is through his help, encouragement, and expertise that I was able to learn so much about the JVM and bring this thesis to completion.
     
-    Special thanks to the Department of Information Technology at Uppsala University for providing the resources and environment necessary to conduct this research.
+	I would also like to thank my subject reviewer for his valuable academic guidance and thoughtful feedback, which helped strengthen the structure and quality of this thesis.
     
-    Finally, I would like to thank my family and friends for their patience and encouragement throughout my studies.
+	Additionally, I would like to thank the Department of Information Technology at Uppsala University for providing the resources necessary to conduct the performance evaluations and experiments described in this thesis.
+
+	Lastly, I would also like to thank my colleagues at Oracle for their insights and feedback on my work throughout the development process. Without their help, I would not have been able to achieve the results presented in this thesis.
     
     \vspace{1cm}
     
@@ -158,8 +218,10 @@
     % Lists of tables and figures
     \listoftables
     \listoffigures
+	\listoflistings
 
 \mainmatter
+\setcounter{page}{1}
     % Main thesis chapters
     \input{Introduction}
     \input{Background}
@@ -168,12 +230,17 @@
     \input{Discussion}
     \input{Conclusion}
 
-
+	
+	
 \backmatter
     % References
     % Using ieeetr style (modern, suitable for CS)
     % Alternative: alpha, abbrv, or acm
     \bibliographystyle{ieeetr}
     \bibliography{References}
+	
+	% Appendices
+	\appendix
+	\input{Appendices}
 
 \end{document}

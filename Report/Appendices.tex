@@ -1,0 +1,81 @@
+\chapter{Changed Source Code}
+\label{app:changed-source-code}
+
+This appendix lists the complete source files changed to implement the weak-reference processing optimisations evaluated in this thesis. For readability and to keep the thesis build stable, representative changed regions are included below.
+
+Full changed source files:
+\begin{itemize}
+		\item \texttt{src/hotspot/share/gc/z/zConfFlags.h}
+		\item \texttt{src/hotspot/share/gc/z/zAddressArray.hpp}
+		\item \texttt{src/hotspot/share/gc/z/zReferenceProcessor.hpp}
+		\item \texttt{src/hotspot/share/gc/z/zReferenceProcessor.cpp}
+\end{itemize}
+
+\section{Configuration Flags}
+\label{app:conf-flags}
+
+\noindent\textbf{File:} \texttt{src/hotspot/share/gc/z/zConfFlags.h}
+
+\lstinputlisting[
+	nolol,
+	language=C++
+]{../src/hotspot/share/gc/z/zConfFlags.h}
+
+\section{Dynamic-array Data Structure}
+\label{app:dynamic-array-source}
+
+\noindent\textbf{File:} \texttt{src/hotspot/share/gc/z/zAddressArray.hpp}
+
+\lstinputlisting[
+	nolol,
+	language=C++
+]{../src/hotspot/share/gc/z/zAddressArray.hpp}
+
+\section{Reference Processor Interface}
+\label{app:refproc-interface-source}
+
+\noindent\textbf{File:} \texttt{src/hotspot/share/gc/z/zReferenceProcessor.hpp}
+
+\lstinputlisting[
+	nolol,
+	language=C++
+]{../src/hotspot/share/gc/z/zReferenceProcessor.hpp}
+
+\section{Reference Processor Implementation (Excerpts)}
+\label{app:refproc-impl-source}
+
+\noindent\textbf{Excerpt:} \texttt{src/hotspot/share/gc/z/zReferenceProcessor.cpp} (constructor and per-worker storage setup)
+
+\lstinputlisting[
+	nolol,
+	language=C++,
+	firstline=120,
+	lastline=190
+]{../src/hotspot/share/gc/z/zReferenceProcessor.cpp}
+
+\noindent\textbf{Excerpt:} \texttt{src/hotspot/share/gc/z/zReferenceProcessor.cpp} (discovery path with queue-less weak-reference routing)
+
+\lstinputlisting[
+	nolol,
+	language=C++,
+	firstline=300,
+	lastline=390
+]{../src/hotspot/share/gc/z/zReferenceProcessor.cpp}
+
+\noindent\textbf{Excerpt:} \texttt{src/hotspot/share/gc/z/zReferenceProcessor.cpp} (processing paths for separate lists and dynamic-array variants)
+
+\lstinputlisting[
+	nolol,
+	language=C++,
+	firstline=500,
+	lastline=705
+]{../src/hotspot/share/gc/z/zReferenceProcessor.cpp}
+
+\noindent\textbf{Excerpt:} \texttt{src/hotspot/share/gc/z/zReferenceProcessor.cpp} (queue sentinel initialisation and queue checks)
+
+\lstinputlisting[
+	nolol,
+	language=C++,
+	firstline=920,
+	lastline=980
+]{../src/hotspot/share/gc/z/zReferenceProcessor.cpp}

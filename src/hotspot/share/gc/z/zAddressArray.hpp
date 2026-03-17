@@ -30,12 +30,22 @@
 #include "utilities/powerOfTwo.hpp"
 #include "utilities/globalDefinitions.hpp"
 #include <string.h>
+#include "gc/z/zConfFlags.h"
 
 struct ZWeakRefData {
+#if ZUseOptimisedClearPath
   zpointer* referent_field_addr;
   zaddress* discovered_field_addr;
   zaddress referent_addr;
   zpointer referent_field_value;
+#if !ZUseSeparateDiscoveredLists
+  // For the case where we use a dynamic array but not separate discovered lists, we need to store the reference itself in the data struct to be able to mark it as discovered.
+  zaddress reference;
+#endif // !ZUseSeparateDiscoveredLists
+#else //!ZUseOptimisedClearPath
+  zaddress reference;
+#endif // ZUseOptimisedClearPath
+
 };
 
 // High-performance growable array specifically for storing discovered weak references.
@@ -90,6 +100,7 @@ public:
   }
 
   // Append a new entry
+#if ZUseOptimisedClearPath && ZUseSeparateDiscoveredLists
   void append(zpointer* referent_field_addr, zaddress* discovered_field_addr, zaddress referent_addr, zpointer referent_field_value) {
     if (_length >= _capacity) {
       grow(_length + 1);
@@ -100,6 +111,27 @@ public:
     _data[_length].referent_field_value = referent_field_value;
     _length++;
   }
+#elif ZUseOptimisedClearPath && !ZUseSeparateDiscoveredLists
+  void append(zpointer* referent_field_addr, zaddress* discovered_field_addr, zaddress referent_addr, zpointer referent_field_value, zaddress reference) {
+    if (_length >= _capacity) {
+      grow(_length + 1);
+    }
+    _data[_length].referent_field_addr = referent_field_addr;
+    _data[_length].discovered_field_addr = discovered_field_addr;
+    _data[_length].referent_addr = referent_addr;
+    _data[_length].referent_field_value = referent_field_value;
+    _data[_length].reference = reference;
+    _length++;
+  }
+#else //!ZUseOptimisedClearPath
+  void append(zaddress reference) {
+    if (_length >= _capacity) {
+      grow(_length + 1);
+    }
+    _data[_length].reference = reference;
+    _length++;
+  }
+#endif // ZUseOptimisedClearPath
 
   // Get entry at index
   const ZWeakRefData& at(size_t index) const {
@@ -107,27 +139,14 @@ public:
     return _data[index];
   }
 
-  // Get referent field address at index
-  zpointer* referent_field_addr_at(size_t index) const {
-    assert(index >= 0 && index < _length, "index out of bounds: %d (length: %d)", index, _length);
-    return _data[index].referent_field_addr;
-  }
-
-  // Get discovered field address at index
-  zaddress* discovered_field_addr_at(size_t index) const {
-    assert(index >= 0 && index < _length, "index out of bounds: %d (length: %d)", index, _length);
-    return _data[index].discovered_field_addr;
-  }
-
-  // Get referent address at index
-  zaddress referent_addr_at(size_t index) const {
-    assert(index >= 0 && index < _length, "index out of bounds: %d (length: %d)", index, _length);
-    return _data[index].referent_addr;
-  }
-
   // Current length
   size_t length() const {
     return _length;
+  }
+
+  // Whether the array is empty
+  bool is_empty() const {
+    return _length == 0;
   }
 
   // Current capacity
