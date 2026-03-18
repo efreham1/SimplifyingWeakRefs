@@ -196,6 +196,23 @@ void TemplateTable::patch_bytecode(Bytecodes::Code bc, Register bc_reg,
       __ jcc(Assembler::zero, L_patch_done);  // don't patch
     }
     break;
+  case Bytecodes::_fast_agetfield:
+    {
+      // We skip bytecode quickening for getfield instructions when
+      // the field is weak
+      if (UseZGC) {
+        assert(byte_no == -1, "sanity");
+        assert(load_bc_into_bc_reg, "we use bc_reg as temp");
+        __ load_field_entry(temp_reg, bc_reg);
+        __ load_unsigned_byte(temp_reg, Address(temp_reg, in_bytes(ResolvedFieldEntry::flags_offset())));
+        __ testb(temp_reg, 1 << ResolvedFieldEntry::is_weak_shift);
+        __ jcc(Assembler::notZero, L_patch_done);  // don't patch
+      }
+      if (load_bc_into_bc_reg) {
+        __ movl(bc_reg, bc);
+      }
+    }
+    break;
   default:
     assert(byte_no == -1, "sanity");
     // the pair bytecodes have already done the load.
@@ -2540,7 +2557,7 @@ void TemplateTable::getfield_or_static(int byte_no, bool is_static, RewriteContr
 
   const Address field(obj, off, Address::times_1, 0*wordSize);
 
-  Label Done, notByte, notBool, notInt, notShort, notChar, notLong, notFloat, notObj;
+  Label Done, notByte, notBool, notInt, notShort, notChar, notLong, notFloat, notObj, strongOopLoad;
 
   // Make sure we don't need to mask edx after the above shift
   assert(btos == 0, "change code, btos != 0");
@@ -2574,6 +2591,17 @@ void TemplateTable::getfield_or_static(int byte_no, bool is_static, RewriteContr
   __ cmpl(tos_state, atos);
   __ jcc(Assembler::notEqual, notObj);
   // atos
+  if (UseZGC) {
+    __ testb(flags, 1 << ResolvedFieldEntry::is_weak_shift);
+    __ jcc(Assembler::zero, strongOopLoad);
+    do_oop_load(_masm, field, rax, ON_WEAK_OOP_REF);
+    __ push(atos);
+    if (!is_static && rc == may_rewrite) {
+      patch_bytecode(Bytecodes::_fast_agetfield, bc, rbx);
+    }
+    __ jmp(Done);
+    __ bind(strongOopLoad);
+  }
   do_oop_load(_masm, field, rax);
   __ push(atos);
   if (!is_static && rc == may_rewrite) {

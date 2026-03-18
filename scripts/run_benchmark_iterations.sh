@@ -2,7 +2,7 @@
 
 set -e
 
-# Script to run WeakRefGcBenchmark multiple times and aggregate results
+# Script to run weak reference benchmarks multiple times and aggregate results
 
 # Default values
 JAVA_BIN="./build/linux-x86_64-server-release/jdk/bin/java"
@@ -10,8 +10,10 @@ JCMD_BIN="./build/linux-x86_64-server-release/jdk/bin/jcmd"
 COMMON_JVM_OPTS="${COMMON_JVM_OPTS:--Xms8g -Xmx8g -XX:+UseZGC -Xlog:gc+stats,gc+ref -XX:InitialTenuringThreshold=1 -XX:MaxTenuringThreshold=1 -XX:ZCollectionIntervalMajor=0.5 -XX:+ZCollectionIntervalOnly -XX:NativeMemoryTracking=summary}"
 SINGLE_JVM_OPTS="${SINGLE_JVM_OPTS:--Xms7g -Xmx7g -XX:+UseZGC -Xlog:gc+stats,gc+ref -XX:InitialTenuringThreshold=1 -XX:MaxTenuringThreshold=1 -XX:NativeMemoryTracking=summary}"
 # Available benchmarks:
-#   gc     -> WeakRefGcBenchmark          (many objects, each has its own WeakRef)
-#   single -> WeakRefSingleObjectBenchmark (many WeakRefs all pointing at one object)
+#   gc            -> WeakRefMultiObjectBenchmark     (many objects, each has its own WeakRef)
+#   field         -> WeakFieldMultiObjectBenchmark   (many objects, each has its own @weak field)
+#   single        -> WeakRefSingleObjectBenchmark    (many WeakRefs all pointing at one object)
+#   field-single  -> WeakFieldSingleObjectBenchmark  (many @weak fields all pointing at one object)
 BENCHMARK_NAME="${BENCHMARK_NAME:-gc}"
 OUTER_ITERATIONS=100
 CPU_CORES="${CPU_CORES:-0-11}"
@@ -82,10 +84,16 @@ done
 # Resolve benchmark name to class file path
 case "$BENCHMARK_NAME" in
     gc|weakref)
-        BENCHMARK_CLASS="test/weakrefs/WeakRefGcBenchmark.java"
+        BENCHMARK_CLASS="test/weakrefs/WeakRefMultiObjectBenchmark.java"
+        ;;
+    field|weakfield)
+        BENCHMARK_CLASS="test/weakrefs/WeakFieldMultiObjectBenchmark.java"
         ;;
     single)
         BENCHMARK_CLASS="test/weakrefs/WeakRefSingleObjectBenchmark.java"
+        ;;
+    field-single|single-field)
+        BENCHMARK_CLASS="test/weakrefs/WeakFieldSingleObjectBenchmark.java"
         ;;
     *)
         # Allow passing a full path directly

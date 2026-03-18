@@ -3,11 +3,13 @@ set -euo pipefail
 
 # build_configs.sh
 # Builds configurations created by scripts/create_configs.sh
-# Usage: ./scripts/build_configs.sh [all|conf_name ...]
+# Usage: ./scripts/build_configs.sh --debug-level release|fastdebug [everything|variant|conf_name ...]
 
 MAPPING_FILE="$(dirname "$0")/variants.conf"
 MAKE_TARGET="exploded-image"
 JOBS="$(nproc)"
+DEBUG_LEVEL=""
+DEBUG_LEVEL_SET=false
 
 if [ ! -f "${MAPPING_FILE}" ]; then
   echo "Missing mapping file: ${MAPPING_FILE}" 1>&2
@@ -27,31 +29,95 @@ while IFS='|' read -r conf flags; do
   flags_arr+=("$flags")
 done < <(grep -vE '^\s*#' "${MAPPING_FILE}")
 
-# If args given, build only those; otherwise build all from mapping file
-requested=("${@}")
+# Parse args
+requested=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --debug-level)
+      DEBUG_LEVEL="${2:-}"
+      DEBUG_LEVEL_SET=true
+      shift 2
+      ;;
+    everything)
+      requested=("everything")
+      shift
+      ;;
+    *)
+      requested+=("$1")
+      shift
+      ;;
+  esac
+done
+
+if [ "${DEBUG_LEVEL_SET}" = false ]; then
+  echo "Missing required option: --debug-level release|fastdebug" 1>&2
+  echo "Usage: ./scripts/build_configs.sh --debug-level release|fastdebug [all|variant|conf_name ...]" 1>&2
+  exit 1
+fi
+
+case "${DEBUG_LEVEL}" in
+  release|fastdebug)
+    ;;
+  *)
+    echo "Invalid --debug-level value: ${DEBUG_LEVEL}" 1>&2
+    echo "Allowed values: release, fastdebug" 1>&2
+    exit 1
+    ;;
+esac
 
 build_list=()
+declare -A seen
+
+append_if_allowed() {
+  local conf="$1"
+  if [ "${DEBUG_LEVEL}" = "release" ] && [[ "${conf}" != *"-release" ]]; then
+    return
+  fi
+  if [ "${DEBUG_LEVEL}" = "fastdebug" ] && [[ "${conf}" != *"-fastdebug" ]]; then
+    return
+  fi
+  if [ -z "${seen[$conf]+x}" ]; then
+    build_list+=("${conf}")
+    seen["$conf"]=1
+  fi
+}
+
 if [ ${#requested[@]} -gt 0 ]; then
-  if [ "${requested[0]}" = "all" ]; then
-    build_list=("${confs[@]}")
+  if [ "${requested[0]}" = "everything" ]; then
+    for conf in "${confs[@]}"; do
+      append_if_allowed "${conf}"
+    done
   else
     for r in "${requested[@]}"; do
-      # Accept either conf_name or short variant name
       matched=false
+
+      # Exact config name match
       for i in "${!confs[@]}"; do
-        if [ "${confs[$i]}" = "$r" ] || [[ "${confs[$i]}" == *"$r"* ]]; then
-          build_list+=("${confs[$i]}")
+        if [ "${confs[$i]}" = "$r" ]; then
+          append_if_allowed "${confs[$i]}"
           matched=true
-          break
         fi
       done
+
+      # Variant-name match: <variant>-linux-x86_64-server-<level>
+      if [ "$matched" = false ]; then
+        for i in "${!confs[@]}"; do
+          if [[ "${confs[$i]}" == "${r}-linux-x86_64-server-"* ]]; then
+            append_if_allowed "${confs[$i]}"
+            matched=true
+          fi
+        done
+      fi
+
       if [ "$matched" = false ]; then
         echo "Warning: requested config '$r' not found in ${MAPPING_FILE}" 1>&2
       fi
     done
   fi
 else
-  build_list=("${confs[@]}")
+  for conf in "${confs[@]}"; do
+    append_if_allowed "${conf}"
+  done
 fi
 
 if [ ${#build_list[@]} -eq 0 ]; then

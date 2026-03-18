@@ -4,9 +4,13 @@ set -euo pipefail
 # create_configs.sh
 # Creates per-variant CONF directories using configure --with-conf-name
 # and writes a variants mapping file at scripts/variants.conf
+#
+# Usage:
+#   ./scripts/create_configs.sh
 
 OUT_CONF_FILE="$(dirname "$0")/variants.conf"
 MAKE_TARGET="exploded-image"
+debug_levels=("release" "fastdebug")
 
 variants=(
   "none"
@@ -19,6 +23,8 @@ variants=(
   "all"
 )
 
+selected_variants=("${variants[@]}")
+
 # Write header for mapping file
 cat > "${OUT_CONF_FILE}" <<EOF
 # conf_name|flags
@@ -28,7 +34,7 @@ EOF
 orig_cflags="${CFLAGS:-}"
 orig_cxxflags="${CXXFLAGS:-}"
 
-for name in "${variants[@]}"; do
+for name in "${selected_variants[@]}"; do
   case "${name}" in
     none)
       clear_path_val=0; sep_val=0; dyn_val=0;;
@@ -54,21 +60,23 @@ for name in "${variants[@]}"; do
   flags+=" -DZUseSeparateDiscoveredLists=${sep_val}"
   flags+=" -DZUseDynamicArray=${dyn_val}"
 
-  conf_name="${name}-linux-x86_64-server-release"
+  for level in "${debug_levels[@]}"; do
+    conf_name="${name}-linux-x86_64-server-${level}"
 
-  echo
-  echo "=== Preparing config: ${conf_name} ==="
-  echo "Flags: ${flags}"
+    echo
+    echo "=== Preparing config: ${conf_name} ==="
+    echo "Flags: ${flags}"
 
-  if [ ! -d "build/${conf_name}" ]; then
-    echo "Running: bash configure --with-conf-name=${conf_name}"
-    bash configure --with-conf-name="${conf_name}"
-  else
-    echo "Skipping configure; build/${conf_name} already exists"
-  fi
+    if [ ! -d "build/${conf_name}" ]; then
+      echo "Running: bash configure --with-conf-name=${conf_name} --with-debug-level=${level}"
+      bash configure --with-conf-name="${conf_name}" --with-debug-level="${level}"
+    else
+      echo "Skipping configure; build/${conf_name} already exists"
+    fi
 
-  # Save mapping line in variants.conf: conf_name|flags
-  printf "%s|%s\n" "${conf_name}" "${flags}" >> "${OUT_CONF_FILE}"
+    # Save mapping line in variants.conf: conf_name|flags
+    printf "%s|%s\n" "${conf_name}" "${flags}" >> "${OUT_CONF_FILE}"
+  done
 
 done
 

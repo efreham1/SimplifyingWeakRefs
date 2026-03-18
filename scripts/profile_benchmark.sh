@@ -2,13 +2,13 @@
 
 set -e
 
-# Script to profile WeakRefGcBenchmark once with perf and generate a function-level report
+# Script to profile the multi-object weak reference benchmark once with perf and generate a function-level report
 
 # Default values
 JAVA_BIN="./build/linux-x86_64-server-release/jdk/bin/java"
 JCMD_BIN="./build/linux-x86_64-server-release/jdk/bin/jcmd"
 COMMON_JVM_OPTS="${COMMON_JVM_OPTS:--Xms10g -Xmx10g -XX:+UseZGC -Xlog:gc+stats,gc+ref -XX:InitialTenuringThreshold=1 -XX:MaxTenuringThreshold=1 -XX:ZCollectionIntervalMajor=0.5 -XX:+ZCollectionIntervalOnly -XX:+UnlockDiagnosticVMOptions -XX:NativeMemoryTracking=summary}"
-BENCHMARK_CLASS="test/weakrefs/WeakRefGcBenchmark.java"
+BENCHMARK_CLASS="test/weakrefs/WeakRefMultiObjectBenchmark.java"
 CPU_CORES="${CPU_CORES:-0-11}"
 MONITOR_CPU_CORES="${MONITOR_CPU_CORES:-12-19}"
 COOLDOWN_SECONDS="${COOLDOWN_SECONDS:-10}"
@@ -184,7 +184,7 @@ trap restore_cpu_governor EXIT
 prepare_environment
 
 print_header "PROFILING WITH PERF"
-print_step "Running WeakRefGcBenchmark with perf record..."
+print_step "Running WeakRefMultiObjectBenchmark with perf record..."
 echo "Profile data: $PROFILE_DATA"
 echo "Report output: $PROFILE_REPORT"
 echo ""

@@ -36,6 +36,7 @@
 #include "compiler/compilerDefinitions.inline.hpp"
 #include "compiler/compilerOracle.hpp"
 #include "gc/shared/barrierSet.hpp"
+#include "gc/shared/gc_globals.hpp"
 #include "gc/shared/c1/barrierSetC1.hpp"
 #include "oops/klass.inline.hpp"
 #include "oops/methodCounters.hpp"
@@ -1593,6 +1594,9 @@ void LIRGenerator::do_StoreField(StoreField* x) {
   DecoratorSet decorators = IN_HEAP;
   if (is_volatile) {
     decorators |= MO_SEQ_CST;
+  }
+  if (UseZGC && field_type == T_OBJECT && x->field()->is_weak()) {
+    decorators |= ON_WEAK_OOP_REF;
   }
   if (needs_patching) {
     decorators |= C1_NEEDS_PATCHING;
