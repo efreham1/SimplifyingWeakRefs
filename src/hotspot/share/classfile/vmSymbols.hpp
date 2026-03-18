@@ -288,6 +288,8 @@ class SerializeClosure;
   template(parameter_annotations_name,                "parameterAnnotations")                     \
   template(annotation_default_name,                   "annotationDefault")                        \
   template(reflect_ConstantPool,                      "jdk/internal/reflect/ConstantPool")        \
+  template(java_lang_ref_ReferenceQueue,             "java/lang/ref/ReferenceQueue")             \
+  template(java_lang_ref_ReferenceQueue_NULL_QUEUE_name, "NULL_QUEUE")                           \
   template(base_name,                                 "base")                                     \
   /* Type Annotations (JDK 8 and above) */                                                        \
   template(type_annotations_name,                     "typeAnnotations")                          \
@@ -299,6 +301,7 @@ class SerializeClosure;
   template(jdk_internal_misc_Scoped_signature,               "Ljdk/internal/misc/ScopedMemoryAccess$Scoped;") \
   template(jdk_internal_vm_annotation_IntrinsicCandidate_signature, "Ljdk/internal/vm/annotation/IntrinsicCandidate;") \
   template(jdk_internal_vm_annotation_Stable_signature,      "Ljdk/internal/vm/annotation/Stable;") \
+  template(java_lang_ref_weak_signature,                        "Ljava/lang/ref/weak;") \
   template(jdk_internal_vm_annotation_TrustFinalFields_signature, "Ljdk/internal/vm/annotation/TrustFinalFields;") \
                                                                                                   \
   template(jdk_internal_vm_annotation_ChangesCurrentThread_signature,  "Ljdk/internal/vm/annotation/ChangesCurrentThread;")  \

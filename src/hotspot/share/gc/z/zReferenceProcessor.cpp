@@ -41,6 +41,7 @@
 #include "runtime/atomicAccess.hpp"
 #include "runtime/mutexLocker.hpp"
 #include "runtime/os.hpp"
+#include "runtime/thread.hpp"
 #include "utilities/ticks.hpp"
 
 #include "classfile/symbolTable.hpp"
@@ -81,6 +82,10 @@ static volatile zpointer* reference_referent_addr(zaddress reference) {
 
 static zpointer reference_referent(zaddress reference) {
   return ZBarrier::load_atomic(reference_referent_addr(reference));
+}
+
+static volatile zpointer* reference_queue_addr(zaddress reference) {
+  return (volatile zpointer*)to_oop(reference)->field_addr<zpointer>(java_lang_ref_Reference::queue_offset());
 }
 
 #if (ZUseDynamicArray && ZUseOptimisedClearPath) || (ZUseSeparateDiscoveredLists && !ZUseDynamicArray && ZUseOptimisedClearPath) || ZUseOptimisedClearPath
@@ -511,7 +516,8 @@ void ZReferenceProcessor::process_worker_discovered_weak_refs_without_queue(ZAdd
   for (size_t i = 0; i < weak_refs_without_queue.length(); i++) {
     const ZWeakRefData& data = weak_refs_without_queue.at(i);    
 #if ZUseOptimisedClearPath
-    *data.discovered_field_addr = zaddress::null; // Mark as dropped
+    // discovered is an oop field and must use a coloured null representation.
+    *((zpointer*)data.discovered_field_addr) = color_null(); // Mark as dropped
     if (try_make_inactive_fast(data)) {
       log_trace(gc, ref)("\"Enqueued\" Weak Reference without Queue");
       // Update statistics
@@ -546,7 +552,8 @@ void ZReferenceProcessor::process_worker_discovered_weak_refs_without_queue(zadd
     data.discovered_field_addr = reference_discovered_addr(current);
     data.referent_field_value = *data.referent_field_addr;
     data.referent_addr = ZBarrier::load_barrier_on_oop_field(reference_referent_addr(current));
-    *data.discovered_field_addr = zaddress::null; // Mark as dropped
+    // discovered is an oop field and must use a coloured null representation.
+    *((zpointer*)data.discovered_field_addr) = color_null(); // Mark as dropped
     if (try_make_inactive_fast(data)) {
       log_trace(gc, ref)("\"Enqueued\" Weak Reference without Queue");
       // Update statistics
@@ -582,7 +589,8 @@ void ZReferenceProcessor::process_worker_discovered_all_refs(ZAddressArray& all_
 
     if (is_weak_no_queue) {
 #if ZUseOptimisedClearPath
-      *data.discovered_field_addr = zaddress::null;
+      // discovered is an oop field and must use a coloured null representation.
+      *((zpointer*)data.discovered_field_addr) = color_null();
       if (try_make_inactive_fast(data)) {
         log_trace(gc, ref)("\"Enqueued\" Weak Reference without Queue");
         _cleared_weak_refs_without_queue_count.get()++;
@@ -928,23 +936,53 @@ void ZReferenceProcessor::enqueue_references() {
 }
 
 inline bool ZReferenceProcessor::has_reference_queue(zaddress reference) {
-  oop ref_queue = to_oop(reference)->obj_field_access<AS_NO_KEEPALIVE>(java_lang_ref_Reference::queue_offset());
+  if (_null_queue_handle.is_empty()) {
+    // If NULL_QUEUE is not available yet, conservatively treat all references
+    // as having a queue and avoid the weak-without-queue fast path.
+    log_debug(gc, ref)("ReferenceQueue.NULL_QUEUE not available, treating a reference as having a queue");
+    return true;
+  }
+
+  const zaddress ref_queue_addr_value = ZBarrier::load_barrier_on_oop_field(reference_queue_addr(reference));
+  const oop ref_queue = to_oop(ref_queue_addr_value);
   bool result = ref_queue != _null_queue_handle.resolve();
   return result;
 }
 
 void ZReferenceProcessor::initialize_null_queue_handle() {
-  EXCEPTION_MARK;
-  TempNewSymbol class_name = SymbolTable::new_symbol("java/lang/ref/ReferenceQueue");
-  Klass* k = SystemDictionary::resolve_or_fail(class_name, true, CHECK);
+  SuspendibleThreadSetJoiner sts_joiner(!Thread::current()->is_suspendible_thread());
+
+  if (!_null_queue_handle.is_empty()) {
+    return;
+  }
+
+  Klass* k = SystemDictionary::find_instance_klass(Thread::current(),
+                                                   vmSymbols::java_lang_ref_ReferenceQueue(),
+                                                   Handle());
+  if (k == nullptr) {
+    log_warning(gc, ref)("ReferenceQueue class not found, cannot use fast path for weak references without queue");
+    return;
+  }
+
   InstanceKlass* ik = InstanceKlass::cast(k);
-  ik->initialize(CHECK);
+  if (!ik->is_linked() || !ik->is_initialized()) {
+    log_warning(gc, ref)("ReferenceQueue class not fully initialized, cannot use fast path for weak references without queue");
+    return;
+  }
+
   fieldDescriptor fd;
-  bool found = ik->find_local_field(SymbolTable::new_symbol("NULL_QUEUE"),
+  bool found = ik->find_local_field(vmSymbols::java_lang_ref_ReferenceQueue_NULL_QUEUE_name(),
                                     vmSymbols::referencequeue_signature(), &fd);
   assert(found && fd.is_static(), "ReferenceQueue.NULL_QUEUE missing");
+
   oop null_q = ik->java_mirror()->obj_field(fd.offset());
+  if (null_q == nullptr) {
+    log_warning(gc, ref)("ReferenceQueue.NULL_QUEUE is null, cannot use fast path for weak references without queue");
+    return;
+  }
+
   _null_queue_handle = OopHandle(Universe::vm_global(), null_q);
+  log_info(gc, ref)("Initialized NULL_QUEUE handle for ReferenceProcessor");
 }
 
 void ZReferenceProcessor::prepare() {

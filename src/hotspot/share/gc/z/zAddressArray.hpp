@@ -67,7 +67,7 @@ private:
   size_t           _capacity;
 
   void expand_to(size_t new_capacity) {
-    assert(new_capacity > _capacity, "expected growth but %d <= %d", new_capacity, _capacity);
+    assert(new_capacity > _capacity, "expected growth but %ld <= %ld", new_capacity, _capacity);
     
     ZWeakRefData* new_data = (ZWeakRefData*)AllocateHeap(new_capacity * sizeof(ZWeakRefData), mtGC);
     
@@ -135,7 +135,7 @@ public:
 
   // Get entry at index
   const ZWeakRefData& at(size_t index) const {
-    assert(index >= 0 && index < _length, "index out of bounds: %d (length: %d)", index, _length);
+    assert(index < _length, "index out of bounds: %ld (length: %ld)", index, _length);
     return _data[index];
   }
 
@@ -155,6 +155,16 @@ public:
   }
 
   void clear_and_reserve(size_t new_capacity) {
+    if (new_capacity == 0) {
+      // Special case for clearing to empty - free memory and reset
+       if (_data != nullptr) {
+         FreeHeap(_data);
+         _data = nullptr;
+       }
+       _length = 0;
+       _capacity = 0;
+       return;
+    }
     _length = 0;
     if (_data != nullptr) {
       FreeHeap(_data);
