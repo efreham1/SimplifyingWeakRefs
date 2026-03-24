@@ -1,7 +1,55 @@
 \chapter{Results}
 \label{chap:results}
-In order to evaluate the effectiveness of the implemented optimisations, the two synthetic benchmarks described in \cref{subsec:benchmark-design} were executed as outlined in \cref{subsec:execution-environment} and the metrics listed in \cref{subsec:measurement-methodology} were collected.
 
-The memory metrics, namely the average of the resident set size (RSS), GC committed memory, and Java heap size were measured and compared between the baseline and optimised implementations. The results of these measurements are presented in ...
+This chapter presents the empirical evaluation of the implemented ZGC weak-reference optimisations and the exploratory weak-field mechanism described in \cref{chap:method}.
 
-The performance metrics, namely the average duration of major collections, old generation collections, old generation mark and follow, old generation reference processing, and young generation mark and follow were also measured and compared between the baseline and optimised implementations. The results of these measurements are presented in ...
+\section{Compared Configurations}
+\label{sec:results-configurations}
+
+For \texttt{WeakReference}-based processing, the comparison covers the baseline (\texttt{none}) and all seven non-empty combinations of the three optimisation flags (clear path, separate lists, dynamic array). In addition, a dedicated \texttt{weak\_fields} configuration is included, where weak-field benchmark classes are executed in the same harness and analysed with the same tooling.
+
+This configuration set allows two complementary comparisons:
+\begin{itemize}
+	\item \textbf{Intra-model comparison} among \texttt{WeakReference} variants to isolate the impact of each optimisation and their interactions.
+	\item \textbf{Inter-model comparison} between optimised \texttt{WeakReference} processing and weak-field representation to evaluate structural overhead trade-offs.
+\end{itemize}
+
+\section{Measured Metrics}
+\label{sec:results-metrics}
+
+The primary performance metrics are the GC timing statistics extracted from ZGC logs, including major collection time, old-generation collection time, concurrent mark-follow subphases, and concurrent reference-processing subphases. Memory behaviour is characterised using continuous samples of RSS, GC committed memory, and Java heap usage.
+
+Following the methodology in \cref{subsec:measurement-methodology}, single-object benchmark comparisons use the per-run maximum values as primary statistics, while multi-object comparisons use per-run averages. This choice reflects the fact that single-object runs are designed to create concentrated peak load in one collection event, whereas multi-object runs distribute work over repeated phases.
+
+\section{Presentation of Results}
+\label{sec:results-presentation}
+
+\Cref{fig:metric-boxplots-single,fig:metric-boxplots-multi} show box plots of the GC timing metrics for the single-object and multi-object benchmarks. They summarise the distribution of per-run maxima for the single-object benchmark and per-run averages for the multi-object benchmark, allowing comparison of both central tendency and variability. \Cref{fig:continuous-memory-single,fig:continuous-memory-multi} show representative continuous-memory traces for the same benchmark families, illustrating how memory usage evolves over time and across GC phases.
+
+\begin{figure}
+	\centering
+	\includegraphics[width=\textwidth]{metric_boxplots_1.png}
+	\caption[GC metric box plots (single-object)]{Box plots of GC metrics across evaluated configurations for the single-object benchmark.}
+	\label{fig:metric-boxplots-single}
+\end{figure}
+
+\begin{figure}
+	\centering
+	\includegraphics[width=\textwidth]{metric_boxplots_2.png}
+	\caption[GC metric box plots (multi-object)]{Box plots of GC metrics across evaluated configurations for the multi-object benchmark.}
+	\label{fig:metric-boxplots-multi}
+\end{figure}
+
+\begin{figure}
+	\centering
+	\includegraphics[width=\textwidth]{continuous_memory_multi_1.png}
+	\caption[Continuous memory trace (single-object)]{Continuous memory trace for the single-object benchmark.}
+	\label{fig:continuous-memory-single}
+\end{figure}
+
+\begin{figure}
+	\centering
+	\includegraphics[width=\textwidth]{continuous_memory_multi_2.png}
+	\caption[Continuous memory trace (multi-object)]{Continuous memory trace for the multi-object benchmark.}
+	\label{fig:continuous-memory-multi}
+\end{figure}
