@@ -58,6 +58,7 @@
 #include "oops/objArrayOop.inline.hpp"
 #include "oops/oop.inline.hpp"
 #include "runtime/continuation.hpp"
+#include "runtime/fieldDescriptor.hpp"
 #include "runtime/handshake.hpp"
 #include "runtime/javaThread.hpp"
 #include "runtime/prefetch.inline.hpp"
@@ -271,6 +272,10 @@ void ZMark::follow_partial_array(ZMarkStackEntry entry, bool finalizable) {
 template <bool finalizable, ZGenerationIdOptional generation>
 class ZMarkBarrierFollowOopClosure : public OopIterateClosure {
 private:
+  const InstanceKlass* _current_instance_klass;
+  uintptr_t            _current_obj_start;
+  uintptr_t            _current_obj_end;
+
   static int claim_value() {
     return finalizable ? ClassLoaderData::_claim_finalizable
                        : ClassLoaderData::_claim_strong;
@@ -289,14 +294,60 @@ private:
     return ZGeneration::old()->is_phase_mark();
   }
 
+  bool is_weak_annotated_field(oop* p) const {
+    if (_current_instance_klass == nullptr) {
+      return false;
+    }
+
+    const uintptr_t addr = (uintptr_t)p;
+    if (addr < _current_obj_start || addr >= _current_obj_end) {
+      return false;
+    }
+
+    const int offset = (int)(addr - _current_obj_start);
+    fieldDescriptor fd;
+    if (!_current_instance_klass->find_field_from_offset(offset, false /* is_static */, &fd)) {
+      return false;
+    }
+
+    return fd.is_weak();
+  }
+
   const bool _visit_metadata;
 
 public:
   ZMarkBarrierFollowOopClosure()
     : OopIterateClosure(discoverer()),
+      _current_instance_klass(nullptr),
+      _current_obj_start(0),
+      _current_obj_end(0),
       _visit_metadata(visit_metadata()) {}
 
+  void set_iteration_object(oop obj) {
+    if (obj->klass()->is_instance_klass()) {
+      _current_instance_klass = InstanceKlass::cast(obj->klass());
+      _current_obj_start = cast_from_oop<uintptr_t>(obj);
+      _current_obj_end = _current_obj_start + (obj->size() * HeapWordSize);
+    } else {
+      _current_instance_klass = nullptr;
+      _current_obj_start = 0;
+      _current_obj_end = 0;
+    }
+  }
+
+  void clear_iteration_object() {
+    _current_instance_klass = nullptr;
+    _current_obj_start = 0;
+    _current_obj_end = 0;
+  }
+
   virtual void do_oop(oop* p) {
+    if (!finalizable && is_weak_annotated_field(p)) {
+      if (ZGeneration::old()->discover_weak_field((volatile zpointer*)p)) {
+        return;
+      }
+    }
+
     switch (generation) {
     case ZGenerationIdOptional::young:
       ZBarrier::mark_barrier_on_young_oop_field((volatile zpointer*)p);
@@ -373,18 +424,24 @@ void ZMark::follow_object(oop obj, bool finalizable) {
     if (obj->is_stackChunk()) {
       // No support for tracing through stack chunks as finalizably reachable
       ZMarkBarrierFollowOopClosure<false /* finalizable */, ZGenerationIdOptional::old> cl;
+      cl.set_iteration_object(obj);
       ZIterator::oop_iterate(obj, &cl);
+      cl.clear_iteration_object();
     } else if (finalizable) {
       ZMarkBarrierFollowOopClosure<true /* finalizable */, ZGenerationIdOptional::old> cl;
       ZIterator::oop_iterate(obj, &cl);
     } else {
       ZMarkBarrierFollowOopClosure<false /* finalizable */, ZGenerationIdOptional::old> cl;
+      cl.set_iteration_object(obj);
       ZIterator::oop_iterate(obj, &cl);
+      cl.clear_iteration_object();
     }
   } else {
     // Young gen must help out with old marking
     ZMarkBarrierFollowOopClosure<false /* finalizable */, ZGenerationIdOptional::young> cl;
+    cl.set_iteration_object(obj);
     ZIterator::oop_iterate(obj, &cl);
+    cl.clear_iteration_object();
   }
 }
 

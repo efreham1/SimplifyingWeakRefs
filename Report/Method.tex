@@ -53,13 +53,13 @@ When processing the discovered references, ZGC iterates over the discovered list
 \subsection{Implementation of Dynamic Array for Discovered References}
 \label{subsec:dynamic-array-impl}
 
-The implemented dynamic array, called \texttt{ZAddressArray}, stores discovered references in a contiguous layout rather than linking them via the \texttt{discovered} field. The array is allocated on the C heap and grows using a power-of-two strategy (with a minimum capacity of 8), using \texttt{memcpy} for bulk copying during expansion rather than element-by-element loops.
+The implemented dynamic array, called \texttt{ZReferenceArray}, stores discovered references in a contiguous layout rather than linking them via the \texttt{discovered} field. The array is allocated on the C heap and grows using a power-of-two strategy (with a minimum capacity of 8), using \texttt{memcpy} for bulk copying during expansion rather than element-by-element loops.
 
-Each GC worker thread maintains its own \texttt{ZAddressArray} instance to avoid contention. During discovery, when a reference should be added to a discovery list, its data is appended to the worker's array instead of being appended to a linked list. The reference's \texttt{discovered} field is still set (to a self-referencing pointer) to mark the reference as discovered, preventing duplicate discovery.
+Each GC worker thread maintains its own \texttt{ZReferenceArray} instance to avoid contention. During discovery, when a reference should be added to a discovery list, its data is appended to the worker's array instead of being appended to a linked list. The reference's \texttt{discovered} field is still set (to a self-referencing pointer) to mark the reference as discovered, preventing duplicate discovery.
 
 During processing, the array is iterated sequentially using index-based access. Because the elements are stored contiguously in memory, this iteration benefits from hardware prefetching and improved cache line utilisation compared to following pointers scattered across the heap.
 
-When using both dynamic arrays and separate discovered lists, only the discovered list for weak references without a \texttt{ReferenceQueue} is backed by a \texttt{ZAddressArray}, while the regular discovered list continues to use the linked list.
+When using both dynamic arrays and separate discovered lists, only the discovered list for weak references without a \texttt{ReferenceQueue} is backed by a \texttt{ZReferenceArray}, while the regular discovered list continues to use the linked list.
 
 The resulting discovery and processing flow is summarised in \cref{lst:dynamic-array-processing}.
 
@@ -73,7 +73,7 @@ void discover_reference(oop ref_obj, ReferenceType type) {
     //...
 }
 
-void process_worker_discovered_weak_refs_without_queue(ZAddressArray& arr) {
+void process_worker_discovered_weak_refs_without_queue(ZReferenceArray& arr) {
     size_t dropped = 0;
     for (size_t i = 0; i < arr.length(); i++) {
         const ZWeakRefData& data = arr.at(i);
@@ -88,7 +88,7 @@ void process_worker_discovered_weak_refs_without_queue(ZAddressArray& arr) {
     arr.clear_and_reserve(dropped);
 }
 \end{lstlisting}
-\caption[Dynamic-array weak processing]{Pseudocode for the \texttt{ZAddressArray}-backed queue-less weak-reference path. Discovery appends pre-fetched fields and processing scans the array sequentially. The corresponding source code is provided in \cref{app:dynamic-array-source,app:refproc-impl-source}.}
+\caption[Dynamic-array weak processing]{Pseudocode for the \texttt{ZReferenceArray}-backed queue-less weak-reference path. Discovery appends pre-fetched fields and processing scans the array sequentially. The corresponding source code is provided in \cref{app:dynamic-array-source,app:refproc-impl-source}.}
 \label{lst:dynamic-array-processing}
 \end{listing}
 

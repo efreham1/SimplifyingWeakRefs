@@ -552,8 +552,12 @@ inline zaddress ZBarrier::blocking_load_barrier_on_phantom_oop_field_preloaded(v
 //
 
 inline bool ZBarrier::clean_barrier_on_weak_oop_field(volatile zpointer* p) {
-  assert(ZResurrection::is_blocked(), "This operation is only valid when resurrection is blocked");
   const zpointer o = load_atomic(p);
+  return clean_barrier_on_weak_oop_field_preloaded(p, o);
+}
+
+inline bool ZBarrier::clean_barrier_on_weak_oop_field_preloaded(volatile zpointer* p, zpointer o) {
+  assert(ZResurrection::is_blocked(), "This operation is only valid when resurrection is blocked");
   auto slow_path = [=](zaddress addr) -> zaddress {
     return ZBarrier::blocking_load_barrier_on_weak_slow_path(p, addr);
   };

@@ -288,8 +288,6 @@ class SerializeClosure;
   template(parameter_annotations_name,                "parameterAnnotations")                     \
   template(annotation_default_name,                   "annotationDefault")                        \
   template(reflect_ConstantPool,                      "jdk/internal/reflect/ConstantPool")        \
-  template(java_lang_ref_ReferenceQueue,             "java/lang/ref/ReferenceQueue")             \
-  template(java_lang_ref_ReferenceQueue_NULL_QUEUE_name, "NULL_QUEUE")                           \
   template(base_name,                                 "base")                                     \
   /* Type Annotations (JDK 8 and above) */                                                        \
   template(type_annotations_name,                     "typeAnnotations")                          \

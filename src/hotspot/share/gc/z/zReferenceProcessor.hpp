@@ -26,7 +26,7 @@
 
 #include "gc/shared/referenceDiscoverer.hpp"
 #include "gc/z/zAddress.hpp"
-#include "gc/z/zAddressArray.hpp"
+#include "gc/z/zReferenceArray.hpp"
 #include "gc/z/zValue.hpp"
 #include "gc/z/zConfFlags.h"
 
@@ -43,36 +43,42 @@ private:
   static const size_t ReferenceTypeCount = REF_PHANTOM + 1;
   typedef size_t Counters[ReferenceTypeCount];
 
-  ZWorkers* const           _workers;
-  ReferencePolicy*          _soft_reference_policy;
-  bool                      _uses_clear_all_soft_reference_policy;
-  ZPerWorker<Counters>      _encountered_count;
-  ZPerWorker<Counters>      _discovered_count;
-  ZPerWorker<Counters>      _enqueued_count;
-  ZPerWorker<size_t>        _encountered_weak_refs_without_queue_count;
-  ZPerWorker<size_t>        _discovered_weak_refs_without_queue_count;
-  ZPerWorker<size_t>        _cleared_weak_refs_without_queue_count;
-  ZPerWorker<zaddress>      _discovered_list;
-  ZContended<zaddress>      _pending_list;
-  zaddress                  _pending_list_tail;
+  ZWorkers* const             _workers;
+  ReferencePolicy*            _soft_reference_policy;
+  bool                        _uses_clear_all_soft_reference_policy;
+  ZPerWorker<Counters>        _encountered_count;
+  ZPerWorker<Counters>        _discovered_count;
+  ZPerWorker<Counters>        _enqueued_count;
+  ZPerWorker<size_t>          _encountered_weak_refs_without_queue_count;
+  ZPerWorker<size_t>          _discovered_weak_refs_without_queue_count;
+  ZPerWorker<size_t>          _cleared_weak_refs_without_queue_count;
+  ZPerWorker<size_t>          _encountered_weak_fields_count;
+  ZPerWorker<size_t>          _discovered_weak_fields_count;
+  ZPerWorker<size_t>          _cleared_weak_fields_count;
+  ZPerWorker<zaddress>        _discovered_list;
+  ZContended<zaddress>        _pending_list;
+  zaddress                    _pending_list_tail;
+  ZPerWorker<ZWeakFieldArray> _discovered_weak_fields;
+  ZPerWorker<bool>            _discovered_weak_fields_empty;
 #if ZUseSeparateDiscoveredLists
 #if ZUseDynamicArray
-  ZPerWorker<ZAddressArray> _discovered_weak_refs_without_queue_arr;
-  ZPerWorker<bool>          _array_empty;
+  ZPerWorker<ZWeakRefArray>   _discovered_weak_refs_without_queue_arr;
+  ZPerWorker<bool>            _array_empty;
 #else // !ZUseDynamicArray
-  ZPerWorker<zaddress>      _discovered_weak_refs_without_queue_ll;
+  ZPerWorker<zaddress>        _discovered_weak_refs_without_queue_ll;
 #endif // ZUseDynamicArray
 #elif ZUseDynamicArray // !ZUseSeparateDiscoveredLists && ZUseDynamicArray
-  ZPerWorker<ZAddressArray> _discovered_all_refs_arr;
-  ZPerWorker<bool>          _all_refs_array_empty;
+  ZPerWorker<ZWeakRefArray>   _discovered_all_refs_arr;
+  ZPerWorker<bool>            _all_refs_array_empty;
 #endif // ZUseSeparateDiscoveredLists
-  OopHandle                 _null_queue_handle;
+  OopHandle                   _null_queue_handle;
 
   bool is_inactive(zaddress reference, oop referent, ReferenceType type) const;
   bool is_strongly_live(oop referent) const;
   bool is_softly_live(zaddress reference, ReferenceType type) const;
 
   bool should_discover(zaddress reference, ReferenceType type, oop referent) const;
+  bool should_discover_weak_field(zpointer field_value) const;
   bool try_make_inactive(zaddress reference, ReferenceType type) const;
 #if ZUseOptimisedClearPath
   bool try_make_inactive_fast(const ZWeakRefData& data);
@@ -84,12 +90,13 @@ private:
 
   void process_worker_discovered_list(zaddress discovered_list);
 #if ZUseSeparateDiscoveredLists && ZUseDynamicArray
-  void process_worker_discovered_weak_refs_without_queue(ZAddressArray& weak_refs_without_queue);
+  void process_worker_discovered_weak_refs_without_queue(ZWeakRefArray& weak_refs_without_queue);
 #elif ZUseSeparateDiscoveredLists && !ZUseDynamicArray
   void process_worker_discovered_weak_refs_without_queue(zaddress weak_refs_without_queue);
 #elif !ZUseSeparateDiscoveredLists && ZUseDynamicArray
-  void process_worker_discovered_all_refs(ZAddressArray& all_refs);
+  void process_worker_discovered_all_refs(ZWeakRefArray& all_refs);
 #endif // ZUseSeparateDiscoveredLists && ZUseDynamicArray
+  void process_worker_discovered_weak_fields(ZWeakFieldArray& weak_fields);
   void work();
   void collect_statistics();
 
@@ -101,6 +108,8 @@ private:
 
 public:
   ZReferenceProcessor(ZWorkers* workers);
+
+  bool discover_weak_field(volatile zpointer* field_addr);
   
   void set_soft_reference_policy(bool clear_all_soft_references);
   bool uses_clear_all_soft_reference_policy() const;
@@ -113,7 +122,7 @@ public:
   
   void verify_pending_references();
   
-  void prepare();
+  void initializeResources();
 };
 
 #endif // SHARE_GC_Z_ZREFERENCEPROCESSOR_HPP

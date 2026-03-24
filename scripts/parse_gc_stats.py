@@ -244,13 +244,14 @@ def plot_metric_boxplots(variants_all_metrics, variants, metric_names, run_id=1)
 
     DISPLAY_NAMES = {
         "none": "Baseline",
+        "all": "All",
         "clear_path_only": "Clear Path",
         "sep_only": "Sep",
         "dyn_only": "Dyn",
         "clear_path_sep": "Clear Path\n+Sep",
         "clear_path_dyn": "Clear Path\n+Dyn",
         "sep_dyn": "Sep+Dyn",
-        "all": "All",
+        "weak_fields": "Weak Fields",
     }
 
     # Keep only metrics that have data in at least one variant
@@ -275,7 +276,7 @@ def plot_metric_boxplots(variants_all_metrics, variants, metric_names, run_id=1)
     elif n_cols == 1:
         axes = axes.reshape(-1, 1)
 
-    # Distinct colours for up to 8 variants
+    # Distinct colours for up to 9 variants
     colors = [plt.cm.tab10(i / max(len(variants) - 1, 1)) for i in range(len(variants))]
 
     for idx, metric_name in enumerate(metrics_to_plot):
@@ -666,13 +667,14 @@ def plot_continuous_monitoring_multi(variants_continuous, run_id=1):
 
     DISPLAY_NAMES = {
         "none": "Baseline",
+        "all": "All",
         "clear_path_only": "Optimised Clear Path",
         "sep_only": "Sep",
         "dyn_only": "Dyn",
         "clear_path_sep": "Optimised Clear Path+Sep",
         "clear_path_dyn": "Optimised Clear Path+Dyn",
         "sep_dyn": "Sep+Dyn",
-        "all": "All",
+        "weak_fields": "Weak Fields",
     }
 
     if not variants_continuous:
@@ -741,27 +743,74 @@ def main():
         elif sys.argv[1].startswith("--id="):
             run_id = sys.argv[1].split("=")[1]
 
-    # Auto-detect benchmark name from output files for this run_id
+    # Auto-detect benchmark name from output files for this run_id.
+    # When weak-fields is enabled, this run id can contain both gc/single logs
+    # and field/field-single logs. Pick the dominant benchmark family.
     candidate_files = glob.glob(f"output/run_*_*_run*_{run_id}.log")
     benchmark_name = "gc"  # default
     if candidate_files:
-        m = re.match(r'output/run_([^_]+)_', candidate_files[0])
-        if m:
-            benchmark_name = m.group(1)
+        benchmark_counts = {
+            "gc": 0,
+            "weakref": 0,
+            "single": 0,
+            "field": 0,
+            "field-single": 0,
+            "single-field": 0,
+        }
+        benchmark_tokens = [
+            "field-single",
+            "single-field",
+            "weakref",
+            "single",
+            "field",
+            "gc",
+        ]
+        for f in candidate_files:
+            base = Path(f).name
+            for token in benchmark_tokens:
+                if base.startswith(f"run_{token}_"):
+                    benchmark_counts[token] += 1
+                    break
+
+        benchmark_priority = ["gc", "single", "weakref", "field", "field-single", "single-field"]
+        benchmark_name = max(benchmark_priority, key=lambda b: (benchmark_counts[b], -benchmark_priority.index(b)))
     use_max = benchmark_name == "single"
+
+    weak_fields_benchmark_name = None
+    if benchmark_name in ["gc", "weakref", "field", "weakfield"]:
+        weak_fields_benchmark_name = "field"
+    elif benchmark_name in ["single", "field-single", "single-field"]:
+        weak_fields_benchmark_name = "field-single"
 
     # Canonical variant order (matches scripts/run_benchmark_iterations.sh)
     VARIANTS_ORDERED = [
         "none", "clear_path_only", "sep_only", "dyn_only",
-        "clear_path_sep", "clear_path_dyn", "sep_dyn", "all",
+        "clear_path_sep", "clear_path_dyn", "sep_dyn", "all", "weak_fields",
     ]
 
-    # Discover which variants actually produced output files for this run_id
+    # Discover which variants actually produced output files for this run_id.
+    # weak_fields has existed with two naming schemes:
+    # 1) output/run_field(_single)_weak_fields_...
+    # 2) output/run_<benchmark_name>_weak_fields_...
     variants_log_files = {}
     variants_monitor_files = {}
     for variant in VARIANTS_ORDERED:
-        log_files = sorted(glob.glob(f"output/run_{benchmark_name}_{variant}_*_{run_id}.log"))
-        monitor_files = sorted(glob.glob(f"output/monitor_{benchmark_name}_{variant}_*_{run_id}.csv"))
+        if variant == "weak_fields":
+            source_benchmarks = [benchmark_name]
+            if weak_fields_benchmark_name:
+                source_benchmarks.append(weak_fields_benchmark_name)
+            # De-duplicate while preserving order
+            source_benchmarks = list(dict.fromkeys(source_benchmarks))
+        else:
+            source_benchmarks = [benchmark_name]
+
+        log_files = []
+        monitor_files = []
+        for source_benchmark in source_benchmarks:
+            log_files.extend(glob.glob(f"output/run_{source_benchmark}_{variant}_*_{run_id}.log"))
+            monitor_files.extend(glob.glob(f"output/monitor_{source_benchmark}_{variant}_*_{run_id}.csv"))
+        log_files = sorted(set(log_files))
+        monitor_files = sorted(set(monitor_files))
         if log_files:
             variants_log_files[variant] = log_files
         if monitor_files:
@@ -780,6 +829,8 @@ def main():
     print("=" * 80 + "\n")
     print(f"Run ID    : {run_id}")
     print(f"Benchmark : {benchmark_name}{'  (using max values)' if use_max else ''}")
+    if weak_fields_benchmark_name:
+        print(f"Weak fields source benchmark: {weak_fields_benchmark_name}")
     print(f"Variants found: {len(present)}")
     for v in present:
         n_log = len(variants_log_files[v])

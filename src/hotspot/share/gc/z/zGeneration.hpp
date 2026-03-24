@@ -312,6 +312,8 @@ public:
 
   // Reference processing
   ReferenceDiscoverer* reference_discoverer();
+  bool discover_weak_field(volatile zpointer* field_addr);
+  void initialize_reference_processor_resources();
   void set_soft_reference_policy(bool clear);
   bool uses_clear_all_soft_reference_policy() const;
 

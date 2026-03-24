@@ -85,21 +85,22 @@ done
 case "$BENCHMARK_NAME" in
     gc|weakref)
         BENCHMARK_CLASS="test/weakrefs/WeakRefMultiObjectBenchmark.java"
-        ;;
-    field|weakfield)
-        BENCHMARK_CLASS="test/weakrefs/WeakFieldMultiObjectBenchmark.java"
+        WEAK_FIELDS_BENCHMARK_CLASS="test/weakrefs/WeakFieldMultiObjectBenchmark.java"
+        WEAK_FIELDS_BENCHMARK_NAME="field"
         ;;
     single)
         BENCHMARK_CLASS="test/weakrefs/WeakRefSingleObjectBenchmark.java"
-        ;;
-    field-single|single-field)
-        BENCHMARK_CLASS="test/weakrefs/WeakFieldSingleObjectBenchmark.java"
+        WEAK_FIELDS_BENCHMARK_CLASS="test/weakrefs/WeakFieldSingleObjectBenchmark.java"
+        WEAK_FIELDS_BENCHMARK_NAME="field-single"
         ;;
     *)
-        # Allow passing a full path directly
-        BENCHMARK_CLASS="$BENCHMARK_NAME"
+        echo -e "${RED}Unknown benchmark name: $BENCHMARK_NAME${NC}"
+        echo "Supported benchmarks: gc, weakref, single"
+        exit 1
         ;;
 esac
+
+PRIMARY_BENCHMARK_CLASS="$BENCHMARK_CLASS"
 
 print_header "WEAKREF GC BENCHMARK"
 echo -e "${BOLD}Running:${NC} $OUTER_ITERATIONS runs × 3 iterations"
@@ -335,6 +336,7 @@ for ((run=1; run<=OUTER_ITERATIONS; run++)); do
         # Point global JAVA_BIN/JCMD_BIN to this variant for run_single internals
         JAVA_BIN="$variant_java"
         JCMD_BIN="$variant_jcmd"
+        BENCHMARK_CLASS="$PRIMARY_BENCHMARK_CLASS"
 
         print_header "Run $run/$OUTER_ITERATIONS - Variant $variant"
         prepare_environment
@@ -344,6 +346,33 @@ for ((run=1; run<=OUTER_ITERATIONS; run++)); do
             break 2
         fi
     done
+
+    # Weak-fields configuration: always run with the "none" build variant.
+    if [ -n "$WEAK_FIELDS_BENCHMARK_CLASS" ]; then
+        variant="none"
+        variant_build_dir="./build/${variant}-linux-x86_64-server-release"
+        variant_java="$variant_build_dir/jdk/bin/java"
+        variant_jcmd="$variant_build_dir/jdk/bin/jcmd"
+
+        if [ ! -x "$variant_java" ]; then
+            print_warning "Build for weak_fields configuration not found at $variant_java; skipping"
+            continue
+        fi
+
+        JAVA_BIN="$variant_java"
+        JCMD_BIN="$variant_jcmd"
+        BENCHMARK_CLASS="$WEAK_FIELDS_BENCHMARK_CLASS"
+
+        print_header "Run $run/$OUTER_ITERATIONS - Variant weak_fields (build none)"
+        prepare_environment
+        run_single "weak_fields" "$run" "$OUTER_ITERATIONS"
+        if [ $? -ne 0 ]; then
+            overall_status=1
+            break
+        fi
+
+        BENCHMARK_CLASS="$PRIMARY_BENCHMARK_CLASS"
+    fi
 done
 
 if [ $overall_status -ne 0 ]; then
@@ -358,6 +387,10 @@ echo ""
 echo -e "${GREEN}Output Summary:${NC}"
 echo "  • Benchmark logs:     output/run_${BENCHMARK_NAME}_<variant>_run*_${RUN_ID}.log"
 echo "  • Memory monitoring:  output/monitor_${BENCHMARK_NAME}_<variant>_run*_${RUN_ID}.csv"
+if [ -n "$WEAK_FIELDS_BENCHMARK_NAME" ]; then
+    echo "  • Weak-fields config: output/run_${WEAK_FIELDS_BENCHMARK_NAME}_weak_fields_run*_${RUN_ID}.log"
+    echo "                        output/monitor_${WEAK_FIELDS_BENCHMARK_NAME}_weak_fields_run*_${RUN_ID}.csv"
+fi
 echo ""
 echo -e "${CYAN}Next Steps:${NC}"
 echo "  To analyze and compare results, run:"

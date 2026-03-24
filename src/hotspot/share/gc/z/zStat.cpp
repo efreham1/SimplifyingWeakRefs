@@ -1642,6 +1642,7 @@ void ZStatMetaspace::print() {
 ZStatReferences::ZCount ZStatReferences::_soft;
 ZStatReferences::ZCount ZStatReferences::_weak;
 ZStatReferences::ZCount ZStatReferences::_weak_no_queue;
+ZStatReferences::ZCount ZStatReferences::_weak_fields;
 ZStatReferences::ZCount ZStatReferences::_final;
 ZStatReferences::ZCount ZStatReferences::_phantom;
 
@@ -1661,6 +1662,10 @@ void ZStatReferences::set_weak(size_t encountered, size_t discovered, size_t enq
 
 void ZStatReferences::set_weak_no_queue(size_t encountered, size_t discovered, size_t enqueued) {
   set(&_weak_no_queue, encountered, discovered, enqueued);
+}
+
+void ZStatReferences::set_weak_fields(size_t encountered, size_t discovered, size_t enqueued) {
+  set(&_weak_fields, encountered, discovered, enqueued);
 }
 
 void ZStatReferences::set_final(size_t encountered, size_t discovered, size_t enqueued) {
@@ -1698,6 +1703,7 @@ void ZStatReferences::print() {
   ref_print("Soft References:", _soft);
   ref_print("Weak References:", _weak);
   ref_print("Weak (No Queue):", _weak_no_queue);
+  ref_print("Weak Fields:", _weak_fields);
   ref_print("Final References:", _final);
   ref_print("Phantom References:", _phantom);
 }
