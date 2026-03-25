@@ -1595,6 +1595,9 @@ void LIRGenerator::do_StoreField(StoreField* x) {
   if (is_volatile) {
     decorators |= MO_SEQ_CST;
   }
+  if (!needs_patching && UseZGC && field_type == T_OBJECT && x->field()->is_weak()) {
+    decorators |= ON_WEAK_OOP_REF;
+  }
   if (needs_patching) {
     decorators |= C1_NEEDS_PATCHING;
   }
@@ -1794,7 +1797,7 @@ void LIRGenerator::do_LoadField(LoadField* x) {
   if (is_volatile) {
     decorators |= MO_SEQ_CST;
   }
-  if (UseZGC && field_type == T_OBJECT && x->field()->is_weak()) {
+  if (!needs_patching && UseZGC && field_type == T_OBJECT && x->field()->is_weak()) {
     decorators |= ON_WEAK_OOP_REF;
   }
   if (needs_patching) {

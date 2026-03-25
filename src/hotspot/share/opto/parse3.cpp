@@ -222,6 +222,12 @@ void Parse::do_put_xxx(Node* obj, ciField* field, bool is_field) {
 
   bool is_obj = is_reference_type(bt);
 
+  if (is_obj) {
+    if (UseZGC && field->is_weak()) {
+      decorators |= ON_WEAK_OOP_REF;
+    }
+  }
+
   // Store the value.
   const Type* field_type;
   if (!field->type()->is_loaded()) {

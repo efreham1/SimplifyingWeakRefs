@@ -375,13 +375,15 @@ class ClassFieldDescriptor: public CHeapObj<mtInternal> {
   int _field_index;
   int _field_offset;
   char _field_type;
+  bool _is_weak;
  public:
-  ClassFieldDescriptor(int index, char type, int offset) :
-    _field_index(index), _field_offset(offset), _field_type(type) {
+  ClassFieldDescriptor(int index, char type, int offset, bool is_weak = false) :
+    _field_index(index), _field_offset(offset), _field_type(type), _is_weak(is_weak) {
   }
   int field_index()  const  { return _field_index; }
   char field_type()  const  { return _field_type; }
   int field_offset() const  { return _field_offset; }
+  bool is_weak()     const  { return _is_weak; }
 };
 
 class ClassFieldMap: public CHeapObj<mtInternal> {
@@ -400,7 +402,7 @@ class ClassFieldMap: public CHeapObj<mtInternal> {
   static int interfaces_field_count(InstanceKlass* ik);
 
   // add a field
-  void add(int index, char type, int offset);
+  void add(int index, char type, int offset, bool is_weak = false);
 
  public:
   ~ClassFieldMap();
@@ -436,8 +438,8 @@ int ClassFieldMap::interfaces_field_count(InstanceKlass* ik) {
   return count;
 }
 
-void ClassFieldMap::add(int index, char type, int offset) {
-  ClassFieldDescriptor* field = new ClassFieldDescriptor(index, type, offset);
+void ClassFieldMap::add(int index, char type, int offset, bool is_weak) {
+  ClassFieldDescriptor* field = new ClassFieldDescriptor(index, type, offset, is_weak);
   _fields->append(field);
 }
 
@@ -461,7 +463,7 @@ ClassFieldMap* ClassFieldMap::create_map_of_static_fields(Klass* k) {
     if (!fld.access_flags().is_static()) {
       continue;
     }
-    field_map->add(index, fld.signature()->char_at(0), fld.offset());
+    field_map->add(index, fld.signature()->char_at(0), fld.offset(), fld.field_flags().is_weak());
   }
 
   return field_map;
@@ -490,7 +492,7 @@ ClassFieldMap* ClassFieldMap::create_map_of_instance_fields(oop obj) {
       if (fld.access_flags().is_static()) {
         continue;
       }
-      field_map->add(start_index + index, fld.signature()->char_at(0), fld.offset());
+      field_map->add(start_index + index, fld.signature()->char_at(0), fld.offset(), fld.field_flags().is_weak());
     }
     // update total_field_number for superclass (decrease by the field count in the current class)
     total_field_number = start_index;
@@ -2760,7 +2762,12 @@ inline bool VM_HeapWalkOperation::iterate_over_object(oop o) {
     ClassFieldDescriptor* field = field_map->field_at(i);
     char type = field->field_type();
     if (!is_primitive_field_type(type)) {
-      oop fld_o = o->obj_field_access<AS_NO_KEEPALIVE | ON_UNKNOWN_OOP_REF>(field->field_offset());
+      oop fld_o;
+      if (UseZGC && field->is_weak()) {
+        fld_o = o->obj_field_access<AS_NO_KEEPALIVE | ON_WEAK_OOP_REF>(field->field_offset());
+      } else {
+        fld_o = o->obj_field_access<AS_NO_KEEPALIVE | ON_UNKNOWN_OOP_REF>(field->field_offset());
+      }
       // ignore any objects that aren't visible to profiler
       if (fld_o != nullptr) {
         assert(Universe::heap()->is_in(fld_o), "unsafe code should not "
