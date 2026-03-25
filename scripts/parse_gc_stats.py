@@ -12,6 +12,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
+def get_benchmark_mode_label(benchmark_name):
+    """Return canonical benchmark mode label used in plot names and titles."""
+    single_modes = {"single", "field-single", "single-field"}
+    return "single" if benchmark_name in single_modes else "double"
+
+
 def extract_run_num(filename):
     """Extract run number from filename like 'run_ON_run2_1.log'.
     
@@ -233,7 +239,7 @@ def extract_phases_with_iteration(data_list):
     return phase_marks
 
 
-def plot_metric_boxplots(variants_all_metrics, variants, metric_names, run_id=1):
+def plot_metric_boxplots(variants_all_metrics, variants, metric_names, run_id=1, benchmark_mode_label="double"):
     """Plot boxplots comparing all variant configs for each metric.
 
     Each metric gets its own subplot. Within each subplot there is one box per
@@ -320,19 +326,24 @@ def plot_metric_boxplots(variants_all_metrics, variants, metric_names, run_id=1)
     for idx in range(n_metrics, n_rows * n_cols):
         axes[idx // n_cols][idx % n_cols].axis('off')
 
-    plt.suptitle("GC Metrics Comparison Across Configurations", fontsize=14, fontweight='bold')
+    plt.suptitle(
+        f"GC Metrics Comparison Across Configurations ({benchmark_mode_label.capitalize()} Benchmark)",
+        fontsize=14,
+        fontweight='bold',
+    )
     plt.tight_layout()
-    output_file = f'images/metric_boxplots_{run_id}.png'
-    plt.savefig(output_file, dpi=150, bbox_inches='tight')
+    output_file = f'images/metric_boxplots_{benchmark_mode_label}_{run_id}.pdf'
+    plt.savefig(output_file, bbox_inches='tight')
     print(f"Metric boxplots saved to: {output_file}")
     plt.close()
 
 
-def plot_continuous_monitoring(on_data, off_data, on_monitor_files=None, off_monitor_files=None, run_id=1, output_file=None):
+def plot_continuous_monitoring(on_data, off_data, on_monitor_files=None, off_monitor_files=None,
+                               run_id=1, output_file=None, benchmark_mode_label="double"):
     """Plot continuous memory monitoring data over time."""
     
     if output_file is None:
-        output_file = f'images/continuous_memory_{run_id}.png'
+        output_file = f'images/continuous_memory_{benchmark_mode_label}_{run_id}.pdf'
     
     # Ensure images directory exists
     Path('images').mkdir(parents=True, exist_ok=True)
@@ -562,8 +573,14 @@ def plot_continuous_monitoring(on_data, off_data, on_monitor_files=None, off_mon
     # draw_phase_marks(ax2, off_phase_marks if off_data else [], 'red')
     # draw_phase_marks(ax3, off_phase_marks if off_data else [], 'red')
     
-    plt.tight_layout()
-    plt.savefig(output_file, dpi=150, bbox_inches='tight')
+    fig.suptitle(
+        f"Continuous Memory Usage ({benchmark_mode_label.capitalize()} Benchmark)",
+        fontsize=15,
+        fontweight='bold',
+        y=1.01,
+    )
+    plt.tight_layout(rect=[0, 0, 1, 0.98])
+    plt.savefig(output_file, bbox_inches='tight')
     print(f"Continuous monitoring plot saved to: {output_file}")
 
 
@@ -658,7 +675,7 @@ def aggregate_gc_metrics(file_list):
     return all_metrics, agg
 
 
-def plot_continuous_monitoring_multi(variants_continuous, run_id=1):
+def plot_continuous_monitoring_multi(variants_continuous, run_id=1, benchmark_mode_label="double"):
     """Plot mean RSS, GC-auxiliary, and heap usage over time for N variant configs.
 
     Each variant is drawn as a distinct colour. Shaded bands show ±1 std dev.
@@ -727,9 +744,15 @@ def plot_continuous_monitoring_multi(variants_continuous, run_id=1):
     ax3.legend(fontsize=10)
     ax3.grid(True, alpha=0.3)
 
-    plt.tight_layout()
-    output_file = f'images/continuous_memory_multi_{run_id}.png'
-    plt.savefig(output_file, dpi=150, bbox_inches='tight')
+    fig.suptitle(
+        f"Continuous Memory Usage ({benchmark_mode_label.capitalize()} Benchmark)",
+        fontsize=15,
+        fontweight='bold',
+        y=1.01,
+    )
+    plt.tight_layout(rect=[0, 0, 1, 0.98])
+    output_file = f'images/continuous_memory_{benchmark_mode_label}_{run_id}.pdf'
+    plt.savefig(output_file, bbox_inches='tight')
     print(f"Continuous monitoring plot saved to: {output_file}")
     plt.close()
 
@@ -775,6 +798,7 @@ def main():
         benchmark_priority = ["gc", "single", "weakref", "field", "field-single", "single-field"]
         benchmark_name = max(benchmark_priority, key=lambda b: (benchmark_counts[b], -benchmark_priority.index(b)))
     use_max = benchmark_name == "single"
+    benchmark_mode_label = get_benchmark_mode_label(benchmark_name)
 
     weak_fields_benchmark_name = None
     if benchmark_name in ["gc", "weakref", "field", "weakfield"]:
@@ -829,6 +853,7 @@ def main():
     print("=" * 80 + "\n")
     print(f"Run ID    : {run_id}")
     print(f"Benchmark : {benchmark_name}{'  (using max values)' if use_max else ''}")
+    print(f"Mode      : {benchmark_mode_label}")
     if weak_fields_benchmark_name:
         print(f"Weak fields source benchmark: {weak_fields_benchmark_name}")
     print(f"Variants found: {len(present)}")
@@ -901,7 +926,7 @@ def main():
         "Young Subphase: Concurrent Mark Follow",
     ]
     print("Generating metric boxplots...")
-    plot_metric_boxplots(variants_all_metrics, present, metrics_to_plot, run_id)
+    plot_metric_boxplots(variants_all_metrics, present, metrics_to_plot, run_id, benchmark_mode_label)
     print("\u2713 Boxplots generated successfully!")
 
     # Continuous monitoring: aggregate and plot all variants
@@ -918,7 +943,7 @@ def main():
 
         if variants_continuous:
             print("Generating continuous monitoring plot...")
-            plot_continuous_monitoring_multi(variants_continuous, run_id)
+            plot_continuous_monitoring_multi(variants_continuous, run_id, benchmark_mode_label)
             print("\u2713 Continuous monitoring plot generated!")
 
     print("\n" + "=" * 80)
