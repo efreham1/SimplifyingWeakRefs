@@ -29,7 +29,6 @@
 #include "classfile/classLoadInfo.hpp"
 #include "classfile/defaultMethods.hpp"
 #include "classfile/fieldLayoutBuilder.hpp"
-#include "gc/shared/gc_globals.hpp"
 #include "classfile/javaClasses.inline.hpp"
 #include "classfile/moduleEntry.hpp"
 #include "classfile/packageEntry.hpp"
@@ -938,7 +937,6 @@ public:
     _method_IntrinsicCandidate,
     _jdk_internal_vm_annotation_Contended,
     _field_Stable,
-    _field_Weak,
     _jdk_internal_vm_annotation_ReservedStackAccess,
     _jdk_internal_ValueBased,
     _java_lang_Deprecated,
@@ -981,9 +979,6 @@ public:
 
   void set_stable(bool stable) { set_annotation(_field_Stable); }
   bool is_stable() const { return has_annotation(_field_Stable); }
-
-  void set_weak(bool weak) { set_annotation(_field_Weak); }
-  bool is_weak() const { return has_annotation(_field_Weak); }
 
   bool has_aot_runtime_setup() const { return has_annotation(_method_AOTRuntimeSetup); }
 };
@@ -1891,10 +1886,6 @@ AnnotationCollector::annotation_index(const ClassLoaderData* loader_data,
       if (!privileged)              break;  // only allow in privileged code
       return _field_Stable;
     }
-    case VM_SYMBOL_ENUM_NAME(java_lang_ref_weak_signature): {
-      if (_location != _in_field)   break;  // only allow for fields
-      return _field_Weak;
-    }
     case VM_SYMBOL_ENUM_NAME(jdk_internal_vm_annotation_TrustFinalFields_signature): {
       if (_location != _in_class)   break;  // only allow for classes
       if (!privileged)              break;  // only allow in privileged code
@@ -1945,17 +1936,6 @@ void ClassFileParser::FieldAnnotationCollector::apply_to(FieldInfo* f) {
     f->set_contended_group(contended_group());
   if (is_stable())
     (f->field_flags_addr())->update_stable(true);
-  if (is_weak()) {
-    if (UseZGC) {
-      (f->field_flags_addr())->update_weak(true);
-    } else {
-      static bool weak_annotation_warning_printed = false;
-      if (!weak_annotation_warning_printed) {
-        weak_annotation_warning_printed = true;
-        log_warning(class)("Ignoring @java.lang.ref.weak field annotation because ZGC is not enabled");
-      }
-    }
-  }
 }
 
 ClassFileParser::FieldAnnotationCollector::~FieldAnnotationCollector() {

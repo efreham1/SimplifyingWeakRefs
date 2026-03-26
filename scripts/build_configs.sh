@@ -2,10 +2,19 @@
 set -euo pipefail
 
 # build_configs.sh
-# Builds configurations created by scripts/create_configs.sh
+# Builds configurations created by scripts/create_configs.sh.
+# patches/base/src/ contains common ref-proc patches (zStat) applied to all ref-proc variants.
+# patches/sep_base/src/ contains patches for separate discovered lists (collectedHeap, zCollectedHeap,
+#   zGeneration, threads) applied only to sep_only, clear_path_sep, sep_dyn, all.
+# patches/<variant>/src/ contains variant-specific ref-proc files (3 files each).
+# patches/weak_fields/src/ contains the weak field annotation/processing patches (standalone).
+#
 # Usage: ./scripts/build_configs.sh --debug-level release|fastdebug [everything|variant|conf_name ...]
 
-MAPPING_FILE="$(dirname "$0")/variants.conf"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+MAPPING_FILE="${SCRIPT_DIR}/variants.conf"
+PATCHES_DIR="${REPO_ROOT}/patches"
 MAKE_TARGET="exploded-image"
 JOBS="$(nproc)"
 DEBUG_LEVEL=""
@@ -17,16 +26,15 @@ if [ ! -f "${MAPPING_FILE}" ]; then
   exit 1
 fi
 
-# Read mapping into arrays
+# Read mapping into arrays: conf_name|variant
 declare -a confs
-declare -a flags_arr
-while IFS='|' read -r conf flags; do
-  # Skip comments and empty lines
+declare -a variants_arr
+while IFS='|' read -r conf variant; do
   case "$conf" in
     \#*|"") continue ;;
   esac
   confs+=("$conf")
-  flags_arr+=("$flags")
+  variants_arr+=("$variant")
 done < <(grep -vE '^\s*#' "${MAPPING_FILE}")
 
 # Parse args
@@ -51,7 +59,7 @@ done
 
 if [ "${DEBUG_LEVEL_SET}" = false ]; then
   echo "Missing required option: --debug-level release|fastdebug" 1>&2
-  echo "Usage: ./scripts/build_configs.sh --debug-level release|fastdebug [all|variant|conf_name ...]" 1>&2
+  echo "Usage: ./scripts/build_configs.sh --debug-level release|fastdebug [everything|variant|conf_name ...]" 1>&2
   exit 1
 fi
 
@@ -125,8 +133,74 @@ if [ ${#build_list[@]} -eq 0 ]; then
   exit 1
 fi
 
+# Install variant source files by layering patches onto src/
+# - "none" variant: no patches (builds unmodified upstream src/)
+# - "weak_fields" variant: apply only patches/weak_fields/src/ (standalone)
+# - ref-proc variants: apply patches/base/src/, then for variants with
+#   separate discovered lists also patches/sep_base/src/, then patches/<variant>/src/
+install_variant_files() {
+  local variant="$1"
+  local base_dir="${PATCHES_DIR}/base/src"
+  local sep_base_dir="${PATCHES_DIR}/sep_base/src"
+  local variant_dir="${PATCHES_DIR}/${variant}/src"
+
+  if [ "${variant}" = "none" ]; then
+    # Baseline: no patches, build unmodified upstream src/
+    return 0
+  fi
+
+  if [ "${variant}" = "weak_fields" ]; then
+    # Standalone: only weak_fields patches, no base
+    if [ ! -d "${variant_dir}" ]; then
+      echo "Error: weak_fields patch directory not found: ${variant_dir}" >&2
+      return 1
+    fi
+    cp -r "${variant_dir}/." "${REPO_ROOT}/src/"
+    return 0
+  fi
+
+  if [ ! -d "${base_dir}" ]; then
+    echo "Error: base patch directory not found: ${base_dir}" >&2
+    return 1
+  fi
+
+  # Always apply base patches (zStat) for ref-proc variants
+  cp -r "${base_dir}/." "${REPO_ROOT}/src/"
+
+  # Apply sep_base patches for variants with separate discovered lists
+  case "${variant}" in
+    sep_only|clear_path_sep|sep_dyn|all)
+      cp -r "${sep_base_dir}/." "${REPO_ROOT}/src/"
+      ;;
+  esac
+
+  # Apply variant-specific patches on top
+  if [ ! -d "${variant_dir}" ]; then
+    echo "Error: variant patch directory not found: ${variant_dir}" >&2
+    return 1
+  fi
+  cp -r "${variant_dir}/." "${REPO_ROOT}/src/"
+}
+
+# Save a pristine copy of src/ before any patches are applied
+SRC_BACKUP="$(mktemp -d)"
+echo "Backing up src/ to ${SRC_BACKUP}"
+cp -a "${REPO_ROOT}/src/." "${SRC_BACKUP}/"
+
+# Restore src/ from the backup
+restore_src() {
+  rm -rf "${REPO_ROOT}/src"
+  cp -a "${SRC_BACKUP}/." "${REPO_ROOT}/src/"
+}
+
+cleanup() {
+  restore_src
+  rm -rf "${SRC_BACKUP}"
+}
+trap cleanup EXIT
+
 for conf in "${build_list[@]}"; do
-  # Find mapping index
+  # Find variant for this conf
   idx=-1
   for i in "${!confs[@]}"; do
     if [ "${confs[$i]}" = "$conf" ]; then idx=$i; break; fi
@@ -135,19 +209,23 @@ for conf in "${build_list[@]}"; do
     echo "Skipping unknown conf: $conf" 1>&2
     continue
   fi
-  flags="${flags_arr[$idx]}"
+  variant="${variants_arr[$idx]}"
 
   echo
-  echo "=== Building: ${conf} ==="
-  echo "Flags: ${flags}"
+  echo "=== Building: ${conf} (variant: ${variant}) ==="
 
-  echo "Running: make CONF=${conf} JVM_EXTRA_CFLAGS='${flags}' ${MAKE_TARGET} JOBS=${JOBS}"
-  make CONF="${conf}" \
-    JVM_EXTRA_CFLAGS="${flags}" \
-    ${MAKE_TARGET} JOBS="${JOBS}"
+  echo "Installing variant files: ${variant}"
+  install_variant_files "${variant}"
 
+  echo "Running: make CONF=${conf} ${MAKE_TARGET} JOBS=${JOBS}"
+  make CONF="${conf}" ${MAKE_TARGET} JOBS="${JOBS}"
   echo "Finished build: build/${conf}"
+
+  # Restore src/ to clean original state before applying patches, then overlay this variant's files
+  echo "Restoring src/ to original state before applying patches"
+  restore_src
 done
 
-echo
+# Cleanup handled by trap
+
 echo "All requested builds complete."

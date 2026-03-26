@@ -167,7 +167,6 @@ public:
   bool is_static               () const { return flags().is_static(); }
   bool is_final                () const { return flags().is_final(); }
   bool is_stable               () const { return flags().is_stable(); }
-  bool is_weak                 () const { return flags().is_weak(); }
   bool is_volatile             () const { return flags().is_volatile(); }
   bool is_transient            () const { return flags().is_transient(); }
   // The field is modified outside of instance initializer methods

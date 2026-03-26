@@ -293,13 +293,7 @@ void ZBarrier::verify_on_weak(volatile zpointer* referent_addr) {
     const uintptr_t base = (uintptr_t)referent_addr - (size_t)java_lang_ref_Reference::referent_offset();
     const oop obj = cast_to_oop(base);
     assert(oopDesc::is_oop(obj), "Verification failed for: ref " PTR_FORMAT " obj: " PTR_FORMAT, (uintptr_t)referent_addr, base);
-    // For Reference.referent fields, verify the offset matches
-    // For @weak-annotated fields, the offset will differ but verification is done at compile time
-    if (java_lang_ref_Reference::is_referent_field(obj, java_lang_ref_Reference::referent_offset())) {
-      // This is a Reference.referent field - verify it
-      assert(java_lang_ref_Reference::is_referent_field(obj, java_lang_ref_Reference::referent_offset()), "Sanity");
-    }
-    // else: assume it's a @weak field, which is verified at compile time via ON_WEAK_OOP_REF decorator
+    assert(java_lang_ref_Reference::is_referent_field(obj, java_lang_ref_Reference::referent_offset()), "Sanity");
   }
 }
 

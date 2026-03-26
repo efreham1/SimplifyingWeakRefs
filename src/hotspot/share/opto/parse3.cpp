@@ -144,9 +144,6 @@ void Parse::do_get_xxx(Node* obj, ciField* field, bool is_field) {
   bool is_obj = is_reference_type(bt);
 
   if (is_obj) {
-    if (UseZGC && field->is_weak()) {
-      decorators |= ON_WEAK_OOP_REF;
-    }
     if (!field->type()->is_loaded()) {
       type = TypeInstPtr::BOTTOM;
       must_assert_null = true;
@@ -169,9 +166,6 @@ void Parse::do_get_xxx(Node* obj, ciField* field, bool is_field) {
   }
 
   Node* ld = access_load_at(obj, adr, adr_type, type, bt, decorators);
-  if (is_obj && UseZGC && field->is_weak()) {
-    insert_mem_bar(Op_MemBarCPUOrder);
-  }
 
   // Adjust Java stack
   if (type2size[bt] == 1)
@@ -221,12 +215,6 @@ void Parse::do_put_xxx(Node* obj, ciField* field, bool is_field) {
   decorators |= is_vol ? MO_SEQ_CST : MO_UNORDERED;
 
   bool is_obj = is_reference_type(bt);
-
-  if (is_obj) {
-    if (UseZGC && field->is_weak()) {
-      decorators |= ON_WEAK_OOP_REF;
-    }
-  }
 
   // Store the value.
   const Type* field_type;

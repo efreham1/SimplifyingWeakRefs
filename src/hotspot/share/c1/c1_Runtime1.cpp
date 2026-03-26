@@ -968,7 +968,6 @@ JRT_ENTRY(void, Runtime1::patch_code(JavaThread* current, StubId stub_id ))
   BasicType patch_field_type = T_ILLEGAL;
   bool deoptimize_for_volatile = false;
   bool deoptimize_for_atomic = false;
-  bool deoptimize_for_weak = false;
   int patch_field_offset = -1;
   Klass* init_klass = nullptr; // klass needed by load_klass_patching code
   Klass* load_klass = nullptr; // klass needed by load_klass_patching code
@@ -1011,11 +1010,6 @@ JRT_ENTRY(void, Runtime1::patch_code(JavaThread* current, StubId stub_id ))
 
     patch_field_type = result.field_type();
     deoptimize_for_atomic = (AlwaysAtomicAccesses && (patch_field_type == T_DOUBLE || patch_field_type == T_LONG));
-
-    // If we are patching a field which is @weak then at compile time
-    // it must not have been known to be weak, so the generated code
-    // uses the wrong barrier. Force deoptimization.
-    deoptimize_for_weak = UseZGC && result.is_weak();
 
   } else if (load_klass_or_mirror_patch_id) {
     Klass* k = nullptr;
@@ -1089,9 +1083,9 @@ JRT_ENTRY(void, Runtime1::patch_code(JavaThread* current, StubId stub_id ))
     ShouldNotReachHere();
   }
 
-  if (deoptimize_for_volatile || deoptimize_for_atomic || deoptimize_for_weak) {
-    // At compile time we assumed the field wasn't volatile/atomic/weak but after
-    // loading it turns out it was, so we have to throw the
+  if (deoptimize_for_volatile || deoptimize_for_atomic) {
+    // At compile time we assumed the field wasn't volatile/atomic but after
+    // loading it turns out it was volatile/atomic so we have to throw the
     // compiled code out and let it be regenerated.
     if (TracePatching) {
       if (deoptimize_for_volatile) {
@@ -1099,9 +1093,6 @@ JRT_ENTRY(void, Runtime1::patch_code(JavaThread* current, StubId stub_id ))
       }
       if (deoptimize_for_atomic) {
         tty->print_cr("Deoptimizing for patching atomic field reference");
-      }
-      if (deoptimize_for_weak) {
-        tty->print_cr("Deoptimizing for patching weak field reference");
       }
     }
 

@@ -250,10 +250,6 @@ protected:
   // This is the correct place to place such initialization methods.
   virtual void post_initialize();
 
-  // Optional hook for initialization that must happen after initPhase2 has
-  // completed (for example when module/class initialization ordering matters).
-  virtual void post_module_init() {}
-
   static bool is_shutting_down();
 
   void initiate_shutdown();

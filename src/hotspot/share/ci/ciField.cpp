@@ -239,7 +239,7 @@ static bool trust_final_nonstatic_fields(ciInstanceKlass* holder) {
 
 void ciField::initialize_from(fieldDescriptor* fd) {
   // Get the flags, offset, and canonical holder of the field.
-  _flags = ciFlags(fd->access_flags(), fd->field_flags().is_stable(), fd->field_flags().is_weak(), fd->field_status().is_initialized_final_update());
+  _flags = ciFlags(fd->access_flags(), fd->field_flags().is_stable(), fd->field_status().is_initialized_final_update());
   _offset = fd->offset();
   Klass* field_holder = fd->field_holder();
   assert(field_holder != nullptr, "null field_holder");

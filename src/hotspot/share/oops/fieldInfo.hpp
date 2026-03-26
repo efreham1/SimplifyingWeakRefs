@@ -76,7 +76,6 @@ class FieldInfo {
       _ff_injected,     // internal field injected by the JVM
       _ff_generic,      // has a generic signature
       _ff_stable,       // trust as stable b/c declared as @Stable
-      _ff_weak,         // is annotated as @weak
       _ff_contended,    // is contended, may have contention-group
     };
 
@@ -111,14 +110,12 @@ class FieldInfo {
     bool is_injected() const        { return test_flag(_ff_injected); }
     bool is_generic() const         { return test_flag(_ff_generic); }
     bool is_stable() const          { return test_flag(_ff_stable); }
-    bool is_weak() const            { return test_flag(_ff_weak); }
     bool is_contended() const       { return test_flag(_ff_contended); }
 
     void update_initialized(bool z) { update_flag(_ff_initialized, z); }
     void update_injected(bool z)    { update_flag(_ff_injected, z); }
     void update_generic(bool z)     { update_flag(_ff_generic, z); }
     void update_stable(bool z)      { update_flag(_ff_stable, z); }
-    void update_weak(bool z)        { update_flag(_ff_weak, z); }
     void update_contended(bool z)   { update_flag(_ff_contended, z); }
   };
 

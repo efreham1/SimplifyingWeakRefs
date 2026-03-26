@@ -25,9 +25,6 @@
 #include "classfile/javaClasses.inline.hpp"
 #include "gc/shared/accessBarrierSupport.inline.hpp"
 #include "oops/access.hpp"
-#include "oops/instanceKlass.hpp"
-#include "runtime/fieldDescriptor.inline.hpp"
-#include "runtime/globals.hpp"
 
 DecoratorSet AccessBarrierSupport::resolve_unknown_oop_ref_strength(DecoratorSet decorators, oop base, ptrdiff_t offset) {
   // Note that the referent in a FinalReference is technically not strong.
@@ -38,29 +35,13 @@ DecoratorSet AccessBarrierSupport::resolve_unknown_oop_ref_strength(DecoratorSet
   //      FinalReferences, but the GC always wants to follow the referent
   //      as if it was strong.
   DecoratorSet ds = decorators & ~ON_UNKNOWN_OOP_REF;
-  if (java_lang_ref_Reference::is_referent_field(base, offset) &&
-      !java_lang_ref_Reference::is_final(base)) {
-    if (java_lang_ref_Reference::is_phantom(base)) {
-      ds |= ON_PHANTOM_OOP_REF;
-    } else {
-      ds |= ON_WEAK_OOP_REF;
-    }
-  } else if (UseZGC && base != nullptr) {
-    // Check for @weak annotated fields.
-    Klass* k = base->klass();
-    if (k->is_instance_klass()) {
-      fieldDescriptor fd;
-      if (InstanceKlass::cast(k)->find_field_from_offset((int)offset, false, &fd) &&
-          fd.is_weak()) {
-        ds |= ON_WEAK_OOP_REF;
-      } else {
-        ds |= ON_STRONG_OOP_REF;
-      }
-    } else {
-      ds |= ON_STRONG_OOP_REF;
-    }
-  } else {
+  if (!java_lang_ref_Reference::is_referent_field(base, offset) ||
+      java_lang_ref_Reference::is_final(base)) {
     ds |= ON_STRONG_OOP_REF;
+  } else if (java_lang_ref_Reference::is_phantom(base)) {
+    ds |= ON_PHANTOM_OOP_REF;
+  } else {
+    ds |= ON_WEAK_OOP_REF;
   }
   return ds;
 }

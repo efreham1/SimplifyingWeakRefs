@@ -29,7 +29,6 @@
 #include "compiler/compileBroker.hpp"
 #include "compiler/compileLog.hpp"
 #include "gc/shared/barrierSet.hpp"
-#include "gc/shared/gc_globals.hpp"
 #include "jfr/support/jfrIntrinsics.hpp"
 #include "memory/resourceArea.hpp"
 #include "oops/klass.inline.hpp"
@@ -7124,9 +7123,6 @@ Node* LibraryCallKit::load_field_from_object(Node* fromObj, const char* fieldNam
   // Build the resultant type of the load
   const Type *type;
   if (bt == T_OBJECT) {
-    if (UseZGC && field->is_weak()) {
-      decorators |= ON_WEAK_OOP_REF;
-    }
     type = TypeOopPtr::make_from_klass(field_klass->as_klass());
   } else {
     type = Type::get_const_basic_type(bt);
@@ -7136,14 +7132,7 @@ Node* LibraryCallKit::load_field_from_object(Node* fromObj, const char* fieldNam
     decorators |= MO_SEQ_CST;
   }
 
-
-  Node* result = access_load_at(fromObj, adr, adr_type, type, bt, decorators);
-  if (bt == T_OBJECT && UseZGC && field->is_weak()) {
-    // Add memory barrier to prevent commoning reads from this field
-    // across safepoint since GC can change its value.
-    insert_mem_bar(Op_MemBarCPUOrder);
-  }
-  return result;
+  return access_load_at(fromObj, adr, adr_type, type, bt, decorators);
 }
 
 Node * LibraryCallKit::field_address_from_object(Node * fromObj, const char * fieldName, const char * fieldTypeString,

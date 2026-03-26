@@ -171,14 +171,6 @@ inline ReferenceDiscoverer* ZGenerationOld::reference_discoverer() {
   return &_reference_processor;
 }
 
-inline bool ZGenerationOld::discover_weak_field(volatile zpointer* field_addr) {
-  return _reference_processor.discover_weak_field(field_addr);
-}
-
-inline void ZGenerationOld::initialize_reference_processor_resources() {
-  _reference_processor.initializeResources();
-}
-
 inline bool ZGenerationOld::active_remset_is_current() const {
   assert(_young_seqnum_at_reloc_start != 0, "Must be set before used");
 

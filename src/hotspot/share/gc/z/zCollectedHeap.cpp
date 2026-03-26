@@ -94,19 +94,6 @@ void ZCollectedHeap::initialize_serviceability() {
   _heap.serviceability_initialize();
 }
 
-void ZCollectedHeap::post_initialize() {
-  CollectedHeap::post_initialize();
-}
-
-void ZCollectedHeap::post_module_init() {
-  Thread* const current = Thread::current();
-  guarantee(current->is_Java_thread(), "Must run on a JavaThread during bootstrap");
-  guarantee(!current->is_ConcurrentGC_thread(), "Must not run on a GC thread");
-
-  // Runs after call_initPhase2(), when module initialization has completed.
-  ZGeneration::old()->initialize_reference_processor_resources();
-}
-
 class ZStopConcurrentGCThreadClosure : public ThreadClosure {
 public:
   virtual void do_thread(Thread* thread) {

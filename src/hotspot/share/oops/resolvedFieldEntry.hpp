@@ -55,7 +55,7 @@ class ResolvedFieldEntry {
   u2 _field_index;              // Index into field information in holder InstanceKlass
   u2 _cpool_index;              // Constant pool index
   u1 _tos_state;                // TOS state
-  u1 _flags;                    // Flags: [0000|0|is_weak|is_final|is_volatile]
+  u1 _flags;                    // Flags: [0000|00|is_final|is_volatile]
   u1 _get_code, _put_code;      // Get and Put bytecodes of the field
 #ifdef _LP64
   u4 _padding;
@@ -84,8 +84,7 @@ public:
   enum {
       is_volatile_shift     = 0,
       is_final_shift        = 1, // unused
-      is_weak_shift         = 2, 
-      max_flag_shift        = is_weak_shift
+      max_flag_shift        = is_final_shift
   };
 
   // Getters
@@ -98,7 +97,6 @@ public:
   u1 put_code()                 const { return AtomicAccess::load_acquire(&_put_code);      }
   bool is_final()               const { return (_flags & (1 << is_final_shift))    != 0; }
   bool is_volatile ()           const { return (_flags & (1 << is_volatile_shift)) != 0; }
-  bool is_weak()                const { return (_flags & (1 << is_weak_shift))     != 0; }
   bool is_resolved(Bytecodes::Code code) const {
     switch(code) {
     case Bytecodes::_getstatic:
@@ -117,14 +115,11 @@ public:
   void print_on(outputStream* st) const;
 
  private:
-  void set_flags(bool is_final_flag, bool is_volatile_flag, bool is_weak_flag) {
-    u1 new_flags = static_cast<u1>(is_final_flag) << is_final_shift |
-                    static_cast<u1>(is_volatile_flag) << is_volatile_shift |
-                    static_cast<u1>(is_weak_flag) << is_weak_shift;
-    _flags = new_flags;
+  void set_flags(bool is_final_flag, bool is_volatile_flag) {
+    int new_flags = (is_final_flag << is_final_shift) | static_cast<int>(is_volatile_flag);
+    _flags = checked_cast<u1>(new_flags);
     assert(is_final() == is_final_flag, "Must be");
     assert(is_volatile() == is_volatile_flag, "Must be");
-    assert(is_weak() == is_weak_flag, "Must be");
   }
 
   inline void set_bytecode(u1* code, u1 new_code) {

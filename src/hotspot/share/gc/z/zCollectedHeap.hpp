@@ -65,8 +65,6 @@ public:
   const char* name() const override;
   jint initialize() override;
   void initialize_serviceability() override;
-  void post_initialize() override;
-  void post_module_init() override;
 
   size_t max_capacity() const override;
   size_t capacity() const override;

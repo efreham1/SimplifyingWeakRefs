@@ -309,9 +309,10 @@ print_header "STARTING BENCHMARK SUITE"
 print_step "Running all variant builds for each iteration"
 echo ""
 
-# Define the variants corresponding to builds created by scripts/build_exploded_images_variants.sh
+# Define the variants corresponding to builds created by scripts/build_configs.sh
 variants=(
     "none"
+    "base"
     "all"
     "clear_path_only"
     "sep_only"
@@ -347,9 +348,9 @@ for ((run=1; run<=OUTER_ITERATIONS; run++)); do
         fi
     done
 
-    # Weak-fields configuration: always run with the "none" build variant.
+    # Weak-fields configuration: run with the dedicated "weak_fields" build variant.
     if [ -n "$WEAK_FIELDS_BENCHMARK_CLASS" ]; then
-        variant="none"
+        variant="weak_fields"
         variant_build_dir="./build/${variant}-linux-x86_64-server-release"
         variant_java="$variant_build_dir/jdk/bin/java"
         variant_jcmd="$variant_build_dir/jdk/bin/jcmd"
@@ -363,7 +364,7 @@ for ((run=1; run<=OUTER_ITERATIONS; run++)); do
         JCMD_BIN="$variant_jcmd"
         BENCHMARK_CLASS="$WEAK_FIELDS_BENCHMARK_CLASS"
 
-        print_header "Run $run/$OUTER_ITERATIONS - Variant weak_fields (build none)"
+        print_header "Run $run/$OUTER_ITERATIONS - Variant weak_fields"
         prepare_environment
         run_single "weak_fields" "$run" "$OUTER_ITERATIONS"
         if [ $? -ne 0 ]; then

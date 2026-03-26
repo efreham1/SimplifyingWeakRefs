@@ -40,12 +40,11 @@ private:
 
   AccessFlags _flags;
   bool _stable;
-  bool _weak;
   bool _initialized_final_update;
 
-  ciFlags() :_flags(0), _stable(false), _weak(false), _initialized_final_update(false) { }
-  ciFlags(AccessFlags flags, bool is_stable = false, bool is_weak = false, bool is_initialized_final_update = false) :
-    _flags(flags), _stable(is_stable), _weak(is_weak), _initialized_final_update(is_initialized_final_update) { }
+  ciFlags() :_flags(0), _stable(false), _initialized_final_update(false) { }
+  ciFlags(AccessFlags flags, bool is_stable = false, bool is_initialized_final_update = false) :
+    _flags(flags), _stable(is_stable), _initialized_final_update(is_initialized_final_update) { }
 
 public:
   // Java access flags
@@ -62,7 +61,6 @@ public:
   bool is_interface            () const { return _flags.is_interface();    }
   bool is_abstract             () const { return _flags.is_abstract();     }
   bool is_stable               () const { return _stable; }
-  bool is_weak                 () const { return _weak; }
   // In case the current object represents a field, return true if
   // the field is modified outside of instance initializer methods
   // (or class/initializer methods if the field is static) and false

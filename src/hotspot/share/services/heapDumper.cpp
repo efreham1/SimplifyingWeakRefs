@@ -751,7 +751,7 @@ class DumperSupport : AllStatic {
   // dump a jdouble
   static void dump_double(AbstractDumpWriter* writer, jdouble d);
   // dumps the raw value of the given field
-  static void dump_field_value(AbstractDumpWriter* writer, char type, oop obj, int offset, bool is_weak = false);
+  static void dump_field_value(AbstractDumpWriter* writer, char type, oop obj, int offset);
   // returns the size of the static fields; also counts the static fields
   static u4 get_static_fields_size(InstanceKlass* ik, u2& field_count);
   // dumps static fields of the given class
@@ -817,7 +817,6 @@ class DumperClassCacheTableEntry : public CHeapObj<mtServiceability> {
 private:
   GrowableArray<char> _sigs_start;
   GrowableArray<int> _offsets;
-  GrowableArray<bool> _is_weak;
   u4 _instance_size;
   int _entries;
 
@@ -827,7 +826,6 @@ public:
   int field_count()             { return _entries; }
   char sig_start(int field_idx) { return _sigs_start.at(field_idx); }
   int offset(int field_idx)     { return _offsets.at(field_idx); }
-  bool is_weak(int field_idx)   { return _is_weak.at(field_idx); }
   u4 instance_size()            { return _instance_size; }
 };
 
@@ -878,7 +876,6 @@ public:
           Symbol* sig = fld.signature();
           entry->_sigs_start.push(sig->char_at(0));
           entry->_offsets.push(fld.offset());
-          entry->_is_weak.push(fld.field_flags().is_weak());
           entry->_entries++;
           entry->_instance_size += DumperSupport::sig2size(sig);
         }
@@ -991,16 +988,11 @@ void DumperSupport::dump_double(AbstractDumpWriter* writer, jdouble d) {
 }
 
 // dumps the raw value of the given field
-void DumperSupport::dump_field_value(AbstractDumpWriter* writer, char type, oop obj, int offset, bool is_weak) {
+void DumperSupport::dump_field_value(AbstractDumpWriter* writer, char type, oop obj, int offset) {
   switch (type) {
     case JVM_SIGNATURE_CLASS :
     case JVM_SIGNATURE_ARRAY : {
-      oop o;
-      if (UseZGC && is_weak) {
-        o = obj->obj_field_access<ON_WEAK_OOP_REF | AS_NO_KEEPALIVE>(offset);
-      } else {
-        o = obj->obj_field_access<ON_UNKNOWN_OOP_REF | AS_NO_KEEPALIVE>(offset);
-      }
+      oop o = obj->obj_field_access<ON_UNKNOWN_OOP_REF | AS_NO_KEEPALIVE>(offset);
       o = mask_dormant_archived_object(o, obj);
       assert(oopDesc::is_oop_or_null(o), "Expected an oop or nullptr at " PTR_FORMAT, p2i(o));
       writer->write_objectID(o);
@@ -1122,7 +1114,7 @@ void DumperSupport::dump_static_fields(AbstractDumpWriter* writer, Klass* k) {
       writer->write_u1(sig2tag(sig));       // type
 
       // value
-      dump_field_value(writer, sig->char_at(0), ik->java_mirror(), fld.offset(), fld.field_flags().is_weak());
+      dump_field_value(writer, sig->char_at(0), ik->java_mirror(), fld.offset());
     }
   }
 
@@ -1156,7 +1148,7 @@ void DumperSupport::dump_static_fields(AbstractDumpWriter* writer, Klass* k) {
 void DumperSupport::dump_instance_fields(AbstractDumpWriter* writer, oop o, DumperClassCacheTableEntry* class_cache_entry) {
   assert(class_cache_entry != nullptr, "Pre-condition: must be provided");
   for (int idx = 0; idx < class_cache_entry->field_count(); idx++) {
-    dump_field_value(writer, class_cache_entry->sig_start(idx), o, class_cache_entry->offset(idx), class_cache_entry->is_weak(idx));
+    dump_field_value(writer, class_cache_entry->sig_start(idx), o, class_cache_entry->offset(idx));
   }
 }
 
