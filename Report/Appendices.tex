@@ -1,81 +1,86 @@
 \chapter{Changed Source Code}
 \label{app:changed-source-code}
 
-This appendix lists the complete source files changed to implement the weak-reference processing optimisations evaluated in this thesis. For readability and to keep the thesis build stable, representative changed regions are included below.
+This appendix lists the source files changed to implement the weak-reference processing optimisations evaluated in this thesis. The code shown is from the \texttt{all} configuration variant, which combines all three optimisations (separate discovered lists, dynamic arrays, and the optimised clear path). Each configuration variant is stored under \texttt{patches/<variant>/src/} and overlaid onto the upstream OpenJDK source tree before building.
 
-Full changed source files:
+Files changed in the \texttt{all} variant:
 \begin{itemize}
-		\item \texttt{src/hotspot/share/gc/z/zConfFlags.h}
-		\item \texttt{src/hotspot/share/gc/z/zReferenceArray.hpp}
-		\item \texttt{src/hotspot/share/gc/z/zReferenceProcessor.hpp}
-		\item \texttt{src/hotspot/share/gc/z/zReferenceProcessor.cpp}
+	\item \texttt{patches/all/src/hotspot/share/gc/z/zWeakRefArray.hpp}
+	\item \texttt{patches/all/src/hotspot/share/gc/z/zReferenceProcessor.hpp}
+	\item \texttt{patches/all/src/hotspot/share/gc/z/zReferenceProcessor.cpp}
 \end{itemize}
 
-\section{Configuration Flags}
-\label{app:conf-flags}
+Common files shared by all ref-proc variants:
+\begin{itemize}
+	\item \texttt{patches/base/src/hotspot/share/gc/z/zStat.hpp}
+	\item \texttt{patches/base/src/hotspot/share/gc/z/zStat.cpp}
+\end{itemize}
 
-\noindent\textbf{File:} \texttt{src/hotspot/share/gc/z/zConfFlags.h}
-
-\lstinputlisting[
-	nolol,
-	language=C++
-]{../src/hotspot/share/gc/z/zConfFlags.h}
+Additional files for variants with separate discovered lists:
+\begin{itemize}
+	\item \texttt{patches/sep\_base/src/hotspot/share/gc/shared/collectedHeap.hpp}
+	\item \texttt{patches/sep\_base/src/hotspot/share/gc/z/zCollectedHeap.cpp}
+	\item \texttt{patches/sep\_base/src/hotspot/share/gc/z/zCollectedHeap.hpp}
+	\item \texttt{patches/sep\_base/src/hotspot/share/gc/z/zGeneration.hpp}
+	\item \texttt{patches/sep\_base/src/hotspot/share/gc/z/zGeneration.inline.hpp}
+	\item \texttt{patches/sep\_base/src/hotspot/share/runtime/threads.cpp}
+\end{itemize}
 
 \section{Dynamic-array Data Structure}
 \label{app:dynamic-array-source}
 
-\noindent\textbf{File:} \texttt{src/hotspot/share/gc/z/zReferenceArray.hpp}
+\noindent\textbf{File:} \texttt{patches/all/src/hotspot/share/gc/z/zWeakRefArray.hpp}
 
 \lstinputlisting[
 	nolol,
 	language=C++
-]{../src/hotspot/share/gc/z/zReferenceArray.hpp}
+]{../patches/all/src/hotspot/share/gc/z/zWeakRefArray.hpp}
 
 \section{Reference Processor Interface}
 \label{app:refproc-interface-source}
 
-\noindent\textbf{File:} \texttt{src/hotspot/share/gc/z/zReferenceProcessor.hpp}
+\noindent\textbf{File:} \texttt{patches/all/src/hotspot/share/gc/z/zReferenceProcessor.hpp}
 
 \lstinputlisting[
 	nolol,
 	language=C++
-]{../src/hotspot/share/gc/z/zReferenceProcessor.hpp}
+]{../patches/all/src/hotspot/share/gc/z/zReferenceProcessor.hpp}
 
 \section{Reference Processor Implementation (Excerpts)}
 \label{app:refproc-impl-source}
 
-\noindent\textbf{Excerpt:} \texttt{src/hotspot/share/gc/z/zReferenceProcessor.cpp} (constructor and per-worker storage setup)
+\noindent\textbf{Excerpt:} \texttt{zReferenceProcessor.cpp} (constructor and per-worker storage setup)
 
 \lstinputlisting[
 	nolol,
 	language=C++,
-	firstline=120,
-	lastline=190
-]{../src/hotspot/share/gc/z/zReferenceProcessor.cpp}
+	firstline=132,
+	lastline=170
+]{../patches/all/src/hotspot/share/gc/z/zReferenceProcessor.cpp}
 
-\noindent\textbf{Excerpt:} \texttt{src/hotspot/share/gc/z/zReferenceProcessor.cpp} (discovery path with queue-less weak-reference routing)
-
-\lstinputlisting[
-	nolol,
-	language=C++,
-	firstline=300,
-	lastline=390
-]{../src/hotspot/share/gc/z/zReferenceProcessor.cpp}
-
-\noindent\textbf{Excerpt:} \texttt{src/hotspot/share/gc/z/zReferenceProcessor.cpp} (processing paths for separate lists and dynamic-array variants)
+\noindent\textbf{Excerpt:} \texttt{zReferenceProcessor.cpp} (discovery path with queue-less weak-reference routing)
 
 \lstinputlisting[
 	nolol,
 	language=C++,
-	firstline=500,
-	lastline=705
-]{../src/hotspot/share/gc/z/zReferenceProcessor.cpp}
+	firstline=288,
+	lastline=370
+]{../patches/all/src/hotspot/share/gc/z/zReferenceProcessor.cpp}
 
-\noindent\textbf{Excerpt:} \texttt{src/hotspot/share/gc/z/zReferenceProcessor.cpp} (queue sentinel initialisation and queue checks)
+\noindent\textbf{Excerpt:} \texttt{zReferenceProcessor.cpp} (processing paths for separate lists and dynamic-array variants)
 
 \lstinputlisting[
 	nolol,
 	language=C++,
-	firstline=920,
-	lastline=980
-]{../src/hotspot/share/gc/z/zReferenceProcessor.cpp}
+	firstline=419,
+	lastline=475
+]{../patches/all/src/hotspot/share/gc/z/zReferenceProcessor.cpp}
+
+\noindent\textbf{Excerpt:} \texttt{zReferenceProcessor.cpp} (queue sentinel initialisation and queue checks)
+
+\lstinputlisting[
+	nolol,
+	language=C++,
+	firstline=680,
+	lastline=713
+]{../patches/all/src/hotspot/share/gc/z/zReferenceProcessor.cpp}

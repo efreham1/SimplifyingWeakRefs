@@ -35,14 +35,12 @@
 #include "gc/z/zValue.inline.hpp"
 #include "gc/z/zPage.inline.hpp"
 #include "logging/log.hpp"
-#include "memory/allocation.hpp"
 #include "memory/universe.hpp"
 #include "oops/access.inline.hpp"
 #include "runtime/atomicAccess.hpp"
 #include "runtime/mutexLocker.hpp"
 #include "runtime/os.hpp"
 #include "runtime/thread.hpp"
-#include "utilities/ticks.hpp"
 
 #include "classfile/symbolTable.hpp"
 #include "classfile/systemDictionary.hpp"
@@ -140,15 +138,15 @@ ZReferenceProcessor::ZReferenceProcessor(ZWorkers* workers)
     _encountered_weak_refs_without_queue_count(),
     _discovered_weak_refs_without_queue_count(),
     _cleared_weak_refs_without_queue_count(),
-    _discovered_list(),
+    _discovered_list(zaddress::null),
     _pending_list(zaddress::null),
     _pending_list_tail(zaddress::null),
-  _discovered_weak_refs_without_queue_arr(),
-  _array_empty(),
+    _discovered_weak_refs_without_queue_arr(),
+    _array_empty(),
     _null_queue_handle() {
-  _array_empty.set_all(true);
 
-  log_info(gc, ref)("Reference Processor created, Macros: ZUseSeparateDiscoveredLists=1, ZUseDynamicArray=1, ZUseOptimisedClearPath=1");
+  _array_empty.set_all(true);
+  log_info(gc, ref)("Reference Processor created, Config: All optimisations enabled");
 }
 
 void ZReferenceProcessor::set_soft_reference_policy(bool clear_all_soft_references) {
@@ -224,7 +222,6 @@ bool ZReferenceProcessor::should_discover(zaddress reference, ReferenceType type
   // They will automatically be dropped during the reference processing phase.
   return true;
 }
-
 
 bool ZReferenceProcessor::try_make_inactive(zaddress reference, ReferenceType type) const {
   const zpointer referent = reference_referent(reference);
@@ -365,7 +362,6 @@ bool ZReferenceProcessor::discover_reference(oop reference_obj, ReferenceType ty
   return true;
 }
 
-
 void ZReferenceProcessor::process_worker_discovered_list(zaddress discovered_list) {
   zaddress keep_head = zaddress::null;
   zaddress keep_tail = zaddress::null;
@@ -383,14 +379,10 @@ void ZReferenceProcessor::process_worker_discovered_list(zaddress discovered_lis
       // Keep reference
       log_trace(gc, ref)("Enqueued Reference: " PTR_FORMAT " (%s)", untype(reference), reference_type_name(type));
 
-      // Update statistics
-      if (type == REF_WEAK && !has_reference_queue(reference)) {
-        _cleared_weak_refs_without_queue_count.get()++;
-      }
-      else {
-        _enqueued_count.get()[type]++;
-        list_append(keep_head, keep_tail, reference);
-      }
+      // Update statistics      
+      _enqueued_count.get()[type]++;
+
+      list_append(keep_head, keep_tail, reference);
     } else {
       // Drop reference
       log_trace(gc, ref)("Dropped Reference: " PTR_FORMAT " (%s)", untype(reference), reference_type_name(type));
@@ -467,9 +459,10 @@ void ZReferenceProcessor::work() {
 void ZReferenceProcessor::verify_empty() const {
 #ifdef ASSERT
   ZPerWorkerConstIterator<zaddress> iter(&_discovered_list);
-  for (const zaddress* head; iter.next(&head);) {
-    assert(is_null(*head), "Discovered list not empty");
+  for (const zaddress* list; iter.next(&list);) {
+    assert(is_null(*list), "Discovered list not empty");
   }
+  
   ZPerWorkerConstIterator<ZWeakRefArray> iter_weak_refs(&_discovered_weak_refs_without_queue_arr);
   for (const ZWeakRefArray* array; iter_weak_refs.next(&array);) {
     assert(array->is_empty(), "Discovered weak refs without queue not empty");
