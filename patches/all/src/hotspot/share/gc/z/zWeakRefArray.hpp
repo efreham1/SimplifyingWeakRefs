@@ -21,8 +21,8 @@
  * questions.
  */
 
-#ifndef SHARE_GC_Z_ZREFERENCEARRAY_HPP
-#define SHARE_GC_Z_ZREFERENCEARRAY_HPP
+#ifndef SHARE_GC_Z_ZWEAKREFARRAY_HPP
+#define SHARE_GC_Z_ZWEAKREFARRAY_HPP
 
 #include "gc/z/zAddress.hpp"
 #include "memory/allocation.hpp"
@@ -70,9 +70,9 @@ private:
   } 
 
 public:
-  ZReferenceArray() : _data(nullptr), _length(0), _capacity(0) {}
+  ZWeakRefArray() : _data(nullptr), _length(0), _capacity(0) {}
 
-  ~ZReferenceArray() {
+  ~ZWeakRefArray() {
     if (_data != nullptr) {
       FreeHeap(_data);
       _data = nullptr;
@@ -140,4 +140,4 @@ public:
   }
 };
 
-#endif // SHARE_GC_Z_ZREFERENCEARRAY_HPP
+#endif // SHARE_GC_Z_ZWEAKREFARRAY_HPP

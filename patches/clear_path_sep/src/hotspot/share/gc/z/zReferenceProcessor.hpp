@@ -26,7 +26,6 @@
 
 #include "gc/shared/referenceDiscoverer.hpp"
 #include "gc/z/zAddress.hpp"
-#include "gc/z/zReferenceArray.hpp"
 #include "gc/z/zValue.hpp"
 
 class ConcurrentGCTimer;

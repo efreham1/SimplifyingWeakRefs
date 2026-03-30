@@ -21,8 +21,8 @@
  * questions.
  */
 
-#ifndef SHARE_GC_Z_ZREFERENCEARRAY_HPP
-#define SHARE_GC_Z_ZREFERENCEARRAY_HPP
+#ifndef SHARE_GC_Z_ZWEAKFIELDARRAY_HPP
+#define SHARE_GC_Z_ZWEAKFIELDARRAY_HPP
 
 #include "gc/z/zAddress.hpp"
 #include "memory/allocation.hpp"
@@ -46,7 +46,7 @@ struct ZWeakFieldData {
 // - Single clear_and_reserve operation to avoid separate clear/reserve calls
 // - Array-of-structs layout improves cache efficiency for sequential processing
 template <typename Entry>
-class ZReferenceArray : public AnyObj {
+class ZWeakFieldArray : public AnyObj {
 private:
   Entry* _data;
   size_t _length;
@@ -76,9 +76,9 @@ private:
   } 
 
 public:
-  ZReferenceArray() : _data(nullptr), _length(0), _capacity(0) {}
+  ZWeakFieldArray() : _data(nullptr), _length(0), _capacity(0) {}
 
-  ~ZReferenceArray() {
+  ~ZWeakFieldArray() {
     if (_data != nullptr) {
       FreeHeap(_data);
       _data = nullptr;
@@ -146,6 +146,4 @@ public:
   }
 };
 
-typedef ZReferenceArray<ZWeakFieldData> ZWeakFieldArray;
-
-#endif // SHARE_GC_Z_ZREFERENCEARRAY_HPP
+#endif // SHARE_GC_Z_ZWEAKFIELDARRAY_HPP
