@@ -183,13 +183,18 @@ install_variant_files() {
 }
 
 # Save a pristine copy of src/ before any patches are applied
-SRC_BACKUP="$(mktemp -d)"
-echo "Backing up src/ to ${SRC_BACKUP}"
-cp -a "${REPO_ROOT}/src/." "${SRC_BACKUP}/"
+SRC_BACKUP="${REPO_ROOT}/.src_backup"
+if [ -d "${SRC_BACKUP}" ]; then
+  echo "Backup already exists at ${SRC_BACKUP}, reusing it."
+else
+  echo "Backing up src/ to ${SRC_BACKUP}"
+  cp -a "${REPO_ROOT}/src/." "${SRC_BACKUP}/"
+fi
 
 # Restore src/ from the backup
 restore_src() {
   rm -rf "${REPO_ROOT}/src"
+  mkdir -p "${REPO_ROOT}/src"
   cp -a "${SRC_BACKUP}/." "${REPO_ROOT}/src/"
 }
 
