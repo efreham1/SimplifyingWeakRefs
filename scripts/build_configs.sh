@@ -4,8 +4,8 @@ set -euo pipefail
 # build_configs.sh
 # Builds configurations created by scripts/create_configs.sh.
 # patches/base/src/ contains common ref-proc patches (zStat) applied to all ref-proc variants.
-# patches/sep_base/src/ contains patches for separate discovered lists (collectedHeap, zCollectedHeap,
-#   zGeneration, threads) applied only to sep_only, clear_path_sep, sep_dyn, all.
+# patches/null_queue_base/src/ contains patches for null-queue handling (collectedHeap, zCollectedHeap,
+#   zGeneration, threads) applied to all ref-proc variants except dyn_only.
 # patches/<variant>/src/ contains variant-specific ref-proc files (3 files each).
 # patches/weak_fields/src/ contains the weak field annotation/processing patches (standalone).
 #
@@ -137,11 +137,11 @@ fi
 # - "none" variant: no patches (builds unmodified upstream src/)
 # - "weak_fields" variant: apply only patches/weak_fields/src/ (standalone)
 # - ref-proc variants: apply patches/base/src/, then for variants with
-#   separate discovered lists also patches/sep_base/src/, then patches/<variant>/src/
+#   null-queue handling also patches/null_queue_base/src/, then patches/<variant>/src/
 install_variant_files() {
   local variant="$1"
   local base_dir="${PATCHES_DIR}/base/src"
-  local sep_base_dir="${PATCHES_DIR}/sep_base/src"
+  local null_queue_base_dir="${PATCHES_DIR}/null_queue_base/src"
   local variant_dir="${PATCHES_DIR}/${variant}/src"
 
   if [ "${variant}" = "none" ]; then
@@ -167,12 +167,10 @@ install_variant_files() {
   # Always apply base patches (zStat) for ref-proc variants
   cp -r "${base_dir}/." "${REPO_ROOT}/src/"
 
-  # Apply sep_base patches for variants with separate discovered lists
-  case "${variant}" in
-    sep_only|clear_path_sep|sep_dyn|all)
-      cp -r "${sep_base_dir}/." "${REPO_ROOT}/src/"
-      ;;
-  esac
+  # Apply null_queue_base patches for all variants except dyn_only
+  if [ "${variant}" != "dyn_only" ]; then
+    cp -r "${null_queue_base_dir}/." "${REPO_ROOT}/src/"
+  fi
 
   # Apply variant-specific patches on top
   if [ ! -d "${variant_dir}" ]; then

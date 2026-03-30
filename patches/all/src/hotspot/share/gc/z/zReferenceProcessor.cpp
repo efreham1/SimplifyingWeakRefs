@@ -373,8 +373,8 @@ void ZReferenceProcessor::process_worker_discovered_list(zaddress discovered_lis
 
     const ReferenceType type = reference_type(reference);
     const zaddress next = reference_discovered(reference);
-  
     reference_set_discovered(reference, zaddress::null);
+
     if (try_make_inactive(reference, type)) {
       // Keep reference
       log_trace(gc, ref)("Enqueued Reference: " PTR_FORMAT " (%s)", untype(reference), reference_type_name(type));
@@ -409,6 +409,7 @@ void ZReferenceProcessor::process_worker_discovered_list(zaddress discovered_lis
     }
   }
 }
+
 void ZReferenceProcessor::process_worker_discovered_weak_refs_without_queue(ZWeakRefArray& weak_refs_without_queue) {
   size_t dropped = 0;
   for (size_t i = 0; i < weak_refs_without_queue.length(); i++) {
@@ -428,8 +429,6 @@ void ZReferenceProcessor::process_worker_discovered_weak_refs_without_queue(ZWea
   weak_refs_without_queue.clear_and_reserve(dropped);
 }
 
-
-
 void ZReferenceProcessor::work() {
   SuspendibleThreadSetJoiner sts_joiner;
 
@@ -447,11 +446,13 @@ void ZReferenceProcessor::work() {
     const bool has_array = !AtomicAccess::xchg(array_empty, true);
     const bool has_discovered = discovered_list != zaddress::null;
     
-    if (has_discovered) {
-      process_worker_discovered_list(discovered_list);
-    }
     if (has_array) {
+      // Process discovered weak references without queue
       process_worker_discovered_weak_refs_without_queue(*array_addr);
+    }
+    if (has_discovered) {
+      // Process discovered references
+      process_worker_discovered_list(discovered_list);
     }
   }
 }
@@ -513,7 +514,6 @@ void ZReferenceProcessor::reset_statistics() {
   for (size_t* count; iter_cleared_weak_no_queue.next(&count);) {
     *count = 0;
   }
-
 }
 
 void ZReferenceProcessor::collect_statistics() {

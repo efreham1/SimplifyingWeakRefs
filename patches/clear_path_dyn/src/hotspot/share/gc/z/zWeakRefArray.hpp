@@ -37,6 +37,8 @@ struct ZWeakRefData {
   zaddress referent_addr;
   zpointer referent_field_value;
   zaddress reference;
+  ReferenceType type;
+  bool has_reference_queue;
 };
 
 

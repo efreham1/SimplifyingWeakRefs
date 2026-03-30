@@ -27,7 +27,7 @@ usage() {
   for d in "${PATCHES_DIR}"/*/; do
     v="$(basename "$d")"
     [ "$v" = "base" ] && continue
-    [ "$v" = "sep_base" ] && continue
+    [ "$v" = "null_queue_base" ] && continue
     echo "  $v"
   done
   exit 1
@@ -58,7 +58,7 @@ restore_src() {
 install_variant_files() {
   local variant="$1"
   local base_dir="${PATCHES_DIR}/base/src"
-  local sep_base_dir="${PATCHES_DIR}/sep_base/src"
+  local null_queue_base_dir="${PATCHES_DIR}/null_queue_base/src"
   local variant_dir="${PATCHES_DIR}/${variant}/src"
 
   if [ "${variant}" = "none" ]; then
@@ -83,12 +83,10 @@ install_variant_files() {
   # Always apply base patches (zStat) for ref-proc variants
   cp -r "${base_dir}/." "${REPO_ROOT}/src/"
 
-  # Apply sep_base patches for variants with separate discovered lists
-  case "${variant}" in
-    sep_only|clear_path_sep|sep_dyn|all)
-      cp -r "${sep_base_dir}/." "${REPO_ROOT}/src/"
-      ;;
-  esac
+  # Apply null_queue_base patches for all variants except dyn_only
+  if [ "${variant}" != "dyn_only" ]; then
+    cp -r "${null_queue_base_dir}/." "${REPO_ROOT}/src/"
+  fi
 
   # Apply variant-specific patches on top
   if [ ! -d "${variant_dir}" ]; then
@@ -124,23 +122,38 @@ case "${command}" in
     ;;
   save)
     if [ $# -lt 1 ]; then
-      echo "Error: 'save' requires a patch name (e.g. base, sep_base, clear_path_dyn, ...)." >&2
+      echo "Error: 'save' requires a variant name." >&2
       usage
     fi
-    patch="$1"
-    patch_dir="${PATCHES_DIR}/${patch}/src"
-    if [ ! -d "${patch_dir}" ]; then
-      echo "Error: patch directory not found: ${patch_dir}" >&2
+    variant="$1"
+
+    # Build list of patch dirs to save into (same layering as copy)
+    save_dirs=()
+    if [ "${variant}" != "none" ] && [ "${variant}" != "weak_fields" ]; then
+      save_dirs+=("${PATCHES_DIR}/base/src")
+      if [ "${variant}" != "dyn_only" ]; then
+        save_dirs+=("${PATCHES_DIR}/null_queue_base/src")
+      fi
+    fi
+    variant_dir="${PATCHES_DIR}/${variant}/src"
+    if [ -d "${variant_dir}" ]; then
+      save_dirs+=("${variant_dir}")
+    elif [ "${variant}" != "none" ]; then
+      echo "Error: patch directory not found: ${variant_dir}" >&2
       exit 1
     fi
-    echo "Copying files from src/ back into patches/${patch}/src/"
-    count=0
-    while IFS= read -r -d '' rel; do
-      cp "${REPO_ROOT}/src/${rel}" "${patch_dir}/${rel}"
-      echo "  ${rel}"
-      count=$((count + 1))
-    done < <(cd "${patch_dir}" && find . -type f -print0 | sed -z 's|^\./||')
-    echo "Done. ${count} file(s) updated in patches/${patch}/src/."
+
+    total=0
+    for patch_dir in "${save_dirs[@]}"; do
+      patch_name="${patch_dir#${PATCHES_DIR}/}"
+      echo "Copying files from src/ back into patches/${patch_name}"
+      while IFS= read -r -d '' rel; do
+        cp "${REPO_ROOT}/src/${rel}" "${patch_dir}/${rel}"
+        echo "  ${rel}"
+        total=$((total + 1))
+      done < <(cd "${patch_dir}" && find . -type f -print0 | sed -z 's|^\./||')
+    done
+    echo "Done. ${total} file(s) updated."
     ;;
   *)
     echo "Error: Unknown command '${command}'" >&2

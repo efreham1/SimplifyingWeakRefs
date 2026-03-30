@@ -33,8 +33,8 @@ variants=(
 
 CONFIGS_DIR="${REPO_ROOT}/patches"
 
-# Sanity check: base and sep_base directories must exist
-for required_dir in base sep_base; do
+# Sanity check: base and null_queue_base directories must exist
+for required_dir in base null_queue_base; do
   if [ ! -d "${CONFIGS_DIR}/${required_dir}" ]; then
     echo "Error: missing config directory: ${CONFIGS_DIR}/${required_dir}" >&2
     exit 1
