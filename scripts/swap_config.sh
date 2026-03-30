@@ -21,8 +21,9 @@ usage() {
   echo "Usage:"
   echo "  $0 copy <variant>   Apply variant patches to src/"
   echo "  $0 restore          Restore src/ from backup"
+  echo "  $0 save <patch>     Copy files from src/ back into patches/<patch>/"
   echo ""
-  echo "Available variants:"
+  echo "Available variants/patches:"
   for d in "${PATCHES_DIR}"/*/; do
     v="$(basename "$d")"
     [ "$v" = "base" ] && continue
@@ -120,6 +121,26 @@ case "${command}" in
     ;;
   restore)
     restore_src
+    ;;
+  save)
+    if [ $# -lt 1 ]; then
+      echo "Error: 'save' requires a patch name (e.g. base, sep_base, clear_path_dyn, ...)." >&2
+      usage
+    fi
+    patch="$1"
+    patch_dir="${PATCHES_DIR}/${patch}/src"
+    if [ ! -d "${patch_dir}" ]; then
+      echo "Error: patch directory not found: ${patch_dir}" >&2
+      exit 1
+    fi
+    echo "Copying files from src/ back into patches/${patch}/src/"
+    count=0
+    while IFS= read -r -d '' rel; do
+      cp "${REPO_ROOT}/src/${rel}" "${patch_dir}/${rel}"
+      echo "  ${rel}"
+      count=$((count + 1))
+    done < <(cd "${patch_dir}" && find . -type f -print0 | sed -z 's|^\./||')
+    echo "Done. ${count} file(s) updated in patches/${patch}/src/."
     ;;
   *)
     echo "Error: Unknown command '${command}'" >&2
