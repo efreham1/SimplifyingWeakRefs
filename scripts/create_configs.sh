@@ -33,13 +33,11 @@ variants=(
 
 CONFIGS_DIR="${REPO_ROOT}/patches"
 
-# Sanity check: base and null_queue_base directories must exist
-for required_dir in base null_queue_base; do
-  if [ ! -d "${CONFIGS_DIR}/${required_dir}" ]; then
-    echo "Error: missing config directory: ${CONFIGS_DIR}/${required_dir}" >&2
-    exit 1
-  fi
-done
+# Sanity check: base directory must exist
+if [ ! -d "${CONFIGS_DIR}/base" ]; then
+  echo "Error: missing config directory: ${CONFIGS_DIR}/base" >&2
+  exit 1
+fi
 for name in "${variants[@]}"; do
   if [ "${name}" = "none" ]; then continue; fi
   if [ ! -d "${CONFIGS_DIR}/${name}" ]; then

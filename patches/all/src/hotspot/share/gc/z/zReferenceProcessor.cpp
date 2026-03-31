@@ -265,11 +265,12 @@ bool ZReferenceProcessor::try_make_inactive_fast(const ZWeakRefData& data) {
   const zaddress referent_addr = data.referent_addr;
   const zpointer referent_ptr = data.referent_field_value;
 
-  ZPage* const page = ZHeap::heap()->page(referent_addr);
-
   if (ZPointer::is_mark_good(referent_ptr)) {
     return false;
   }
+
+  ZPage* const page = ZHeap::heap()->page(referent_addr);
+  
   else if (!page->is_object_strongly_live(referent_addr) && page->is_old()) {
     *data.referent_field_addr = color_null();
     return true;
@@ -285,7 +286,10 @@ bool ZReferenceProcessor::try_make_inactive_fast(const ZWeakRefData& data) {
 
 void ZReferenceProcessor::discover(zaddress reference, ReferenceType type, zaddress referent) {
   log_trace(gc, ref)("Discovered Reference: " PTR_FORMAT " (%s)", untype(reference), reference_type_name(type));
-
+  
+  assert(ZHeap::heap()->is_old(reference), "Must be old");
+  assert(is_null(reference_discovered(reference)), "Already discovered");
+  
   // Update statistics
   if (type == REF_WEAK && !has_reference_queue(reference)) {
     _discovered_weak_refs_without_queue_count.get()++;
@@ -294,14 +298,12 @@ void ZReferenceProcessor::discover(zaddress reference, ReferenceType type, zaddr
     _discovered_count.get()[type]++;
   }
 
-  assert(ZHeap::heap()->is_old(reference), "Must be old");
-  assert(is_null(reference_discovered(reference)), "Already discovered");
-
+  
   if (type == REF_WEAK && !has_reference_queue(reference)) {
     zpointer* const referent_addr = reference_referent_addr_non_vol(reference);
     zaddress* const discovered_addr = reference_discovered_addr(reference);
     const zpointer referent_value = *referent_addr;
-
+    
     // WeakReference with null ReferenceQueue - remember for special processing
     ZWeakRefArray& weak_refs_without_queue = _discovered_weak_refs_without_queue_arr.get();
     ZWeakRefData data = {referent_addr, discovered_addr, referent, referent_value};
@@ -316,11 +318,11 @@ void ZReferenceProcessor::discover(zaddress reference, ReferenceType type, zaddr
       volatile zpointer* const referent_addr = reference_referent_addr(reference);
       ZBarrier::mark_barrier_on_old_oop_field(referent_addr, true /* finalizable */);
     }
-
+    
     // Add reference to discovered list
-    zaddress* const head = _discovered_list.addr();
-    reference_set_discovered(reference, *head);
-    *head = reference;
+    zaddress* const list = _discovered_list.addr();
+    reference_set_discovered(reference, *list);
+    *list = reference;
   }
 }
 
@@ -468,6 +470,7 @@ void ZReferenceProcessor::verify_empty() const {
   for (const ZWeakRefArray* array; iter_weak_refs.next(&array);) {
     assert(array->is_empty(), "Discovered weak refs without queue not empty");
   }
+
   assert(is_null(_pending_list.get()), "Pending list not empty");
 #endif
 }
@@ -563,7 +566,6 @@ void ZReferenceProcessor::collect_statistics() {
   for (const size_t* count; iter_cleared_weak_no_queue.next(&count);) {
     cleared_weak_no_queue += *count;
   }
-
 
   // Update statistics
   ZStatReferences::set_soft(encountered[REF_SOFT], discovered[REF_SOFT], enqueued[REF_SOFT]);

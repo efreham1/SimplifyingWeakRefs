@@ -27,7 +27,6 @@ usage() {
   for d in "${PATCHES_DIR}"/*/; do
     v="$(basename "$d")"
     [ "$v" = "base" ] && continue
-    [ "$v" = "null_queue_base" ] && continue
     echo "  $v"
   done
   exit 1
@@ -58,7 +57,6 @@ restore_src() {
 install_variant_files() {
   local variant="$1"
   local base_dir="${PATCHES_DIR}/base/src"
-  local null_queue_base_dir="${PATCHES_DIR}/null_queue_base/src"
   local variant_dir="${PATCHES_DIR}/${variant}/src"
 
   if [ "${variant}" = "none" ]; then
@@ -75,17 +73,13 @@ install_variant_files() {
     return 0
   fi
 
-  if [ ! -d "${base_dir}" ]; then
-    echo "Error: base patch directory not found: ${base_dir}" >&2
-    return 1
-  fi
-
-  # Always apply base patches (zStat) for ref-proc variants
-  cp -r "${base_dir}/." "${REPO_ROOT}/src/"
-
-  # Apply null_queue_base patches for all variants except dyn_only
+  # Apply base patches for all ref-proc variants except dyn_only
   if [ "${variant}" != "dyn_only" ]; then
-    cp -r "${null_queue_base_dir}/." "${REPO_ROOT}/src/"
+    if [ ! -d "${base_dir}" ]; then
+      echo "Error: base patch directory not found: ${base_dir}" >&2
+      return 1
+    fi
+    cp -r "${base_dir}/." "${REPO_ROOT}/src/"
   fi
 
   # Apply variant-specific patches on top
@@ -129,11 +123,8 @@ case "${command}" in
 
     # Build list of patch dirs to save into (same layering as copy)
     save_dirs=()
-    if [ "${variant}" != "none" ] && [ "${variant}" != "weak_fields" ]; then
+    if [ "${variant}" != "none" ] && [ "${variant}" != "weak_fields" ] && [ "${variant}" != "dyn_only" ]; then
       save_dirs+=("${PATCHES_DIR}/base/src")
-      if [ "${variant}" != "dyn_only" ]; then
-        save_dirs+=("${PATCHES_DIR}/null_queue_base/src")
-      fi
     fi
     variant_dir="${PATCHES_DIR}/${variant}/src"
     if [ -d "${variant_dir}" ]; then

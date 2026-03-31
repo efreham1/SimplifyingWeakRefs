@@ -3,10 +3,8 @@ set -euo pipefail
 
 # build_configs.sh
 # Builds configurations created by scripts/create_configs.sh.
-# patches/base/src/ contains common ref-proc patches (zStat) applied to all ref-proc variants.
-# patches/null_queue_base/src/ contains patches for null-queue handling (collectedHeap, zCollectedHeap,
-#   zGeneration, threads) applied to all ref-proc variants except dyn_only.
-# patches/<variant>/src/ contains variant-specific ref-proc files (3 files each).
+# patches/base/src/ contains common ref-proc patches applied to all ref-proc variants except dyn_only.
+# patches/<variant>/src/ contains variant-specific ref-proc files.
 # patches/weak_fields/src/ contains the weak field annotation/processing patches (standalone).
 #
 # Usage: ./scripts/build_configs.sh --debug-level release|fastdebug [everything|variant|conf_name ...]
@@ -136,12 +134,10 @@ fi
 # Install variant source files by layering patches onto src/
 # - "none" variant: no patches (builds unmodified upstream src/)
 # - "weak_fields" variant: apply only patches/weak_fields/src/ (standalone)
-# - ref-proc variants: apply patches/base/src/, then for variants with
-#   null-queue handling also patches/null_queue_base/src/, then patches/<variant>/src/
+# - ref-proc variants: apply patches/base/src/ (except for dyn_only), then patches/<variant>/src/
 install_variant_files() {
   local variant="$1"
   local base_dir="${PATCHES_DIR}/base/src"
-  local null_queue_base_dir="${PATCHES_DIR}/null_queue_base/src"
   local variant_dir="${PATCHES_DIR}/${variant}/src"
 
   if [ "${variant}" = "none" ]; then
@@ -159,17 +155,13 @@ install_variant_files() {
     return 0
   fi
 
-  if [ ! -d "${base_dir}" ]; then
-    echo "Error: base patch directory not found: ${base_dir}" >&2
-    return 1
-  fi
-
-  # Always apply base patches (zStat) for ref-proc variants
-  cp -r "${base_dir}/." "${REPO_ROOT}/src/"
-
-  # Apply null_queue_base patches for all variants except dyn_only
+  # Apply base patches for all ref-proc variants except dyn_only
   if [ "${variant}" != "dyn_only" ]; then
-    cp -r "${null_queue_base_dir}/." "${REPO_ROOT}/src/"
+    if [ ! -d "${base_dir}" ]; then
+      echo "Error: base patch directory not found: ${base_dir}" >&2
+      return 1
+    fi
+    cp -r "${base_dir}/." "${REPO_ROOT}/src/"
   fi
 
   # Apply variant-specific patches on top
