@@ -15,7 +15,7 @@ import numpy as np
 def get_benchmark_mode_label(benchmark_name):
     """Return canonical benchmark mode label used in plot names and titles."""
     single_modes = {"single", "field-single", "single-field"}
-    return "single" if benchmark_name in single_modes else "double"
+    return "single" if benchmark_name in single_modes else "multi"
 
 
 def extract_run_num(filename):
@@ -239,7 +239,7 @@ def extract_phases_with_iteration(data_list):
     return phase_marks
 
 
-def plot_metric_boxplots(variants_all_metrics, variants, metric_names, run_id=1, benchmark_mode_label="double"):
+def plot_metric_boxplots(variants_all_metrics, variants, metric_names, run_id=1, benchmark_mode_label="multi"):
     """Plot boxplots comparing all variant configs for each metric.
 
     Each metric gets its own subplot. Within each subplot there is one box per
@@ -339,7 +339,7 @@ def plot_metric_boxplots(variants_all_metrics, variants, metric_names, run_id=1,
 
 
 def plot_continuous_monitoring(on_data, off_data, on_monitor_files=None, off_monitor_files=None,
-                               run_id=1, output_file=None, benchmark_mode_label="double"):
+                               run_id=1, output_file=None, benchmark_mode_label="multi"):
     """Plot continuous memory monitoring data over time."""
     
     if output_file is None:
@@ -675,7 +675,7 @@ def aggregate_gc_metrics(file_list):
     return all_metrics, agg
 
 
-def plot_continuous_monitoring_multi(variants_continuous, run_id=1, benchmark_mode_label="double"):
+def plot_continuous_monitoring_multi(variants_continuous, run_id=1, benchmark_mode_label="multi"):
     """Plot mean RSS, GC-auxiliary, and heap usage over time for N variant configs.
 
     Each variant is drawn as a distinct colour. Shaded bands show ±1 std dev.
