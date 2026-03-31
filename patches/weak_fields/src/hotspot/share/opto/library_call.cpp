@@ -7165,6 +7165,7 @@ Node * LibraryCallKit::field_address_from_object(Node * fromObj, const char * fi
 
   assert(field != nullptr, "undefined field");
   assert(!field->is_volatile(), "not defined for volatile fields");
+  assert(!field->is_weak(), "not defined for weak reference fields");
 
   if (is_static) {
     const TypeInstPtr* tip = TypeInstPtr::make(fromKls->java_mirror());

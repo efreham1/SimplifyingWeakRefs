@@ -25,17 +25,11 @@
 
 package java.lang.ref;
 
-import java.lang.annotation.ElementType;
-import java.lang.annotation.Retention;
-import java.lang.annotation.RetentionPolicy;
-import java.lang.annotation.Target;
+import java.lang.annotation.*;
 
 /**
  * A field annotation for references that should be treated as weak by the VM.
- *
- * This first step only introduces the declaration so annotated code compiles.
  */
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.FIELD)
-public @interface weak {
-}
+public @interface weak {}

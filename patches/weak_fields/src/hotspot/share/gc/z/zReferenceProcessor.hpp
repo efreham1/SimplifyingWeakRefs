@@ -40,18 +40,18 @@ private:
   static const size_t ReferenceTypeCount = REF_PHANTOM + 1;
   typedef size_t Counters[ReferenceTypeCount];
 
-  ZWorkers* const      _workers;
-  ReferencePolicy*     _soft_reference_policy;
-  bool                 _uses_clear_all_soft_reference_policy;
-  ZPerWorker<Counters> _encountered_count;
-  ZPerWorker<Counters> _discovered_count;
-  ZPerWorker<Counters> _enqueued_count;
-  ZPerWorker<zaddress> _discovered_list;
-  ZContended<zaddress> _pending_list;
-  zaddress             _pending_list_tail;
+  ZWorkers* const             _workers;
+  ReferencePolicy*            _soft_reference_policy;
+  bool                        _uses_clear_all_soft_reference_policy;
+  ZPerWorker<Counters>        _encountered_count;
+  ZPerWorker<Counters>        _discovered_count;
+  ZPerWorker<Counters>        _enqueued_count;
   ZPerWorker<size_t>          _encountered_weak_fields_count;
   ZPerWorker<size_t>          _discovered_weak_fields_count;
   ZPerWorker<size_t>          _cleared_weak_fields_count;
+  ZPerWorker<zaddress>        _discovered_list;
+  ZContended<zaddress>        _pending_list;
+  zaddress                    _pending_list_tail;
   ZPerWorker<ZWeakFieldArray> _discovered_weak_fields;
   ZPerWorker<bool>            _discovered_weak_fields_empty;
 

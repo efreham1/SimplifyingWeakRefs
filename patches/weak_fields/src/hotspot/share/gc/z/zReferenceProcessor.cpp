@@ -33,9 +33,7 @@
 #include "gc/z/zTask.hpp"
 #include "gc/z/zTracer.inline.hpp"
 #include "gc/z/zValue.inline.hpp"
-#include "gc/z/zPage.inline.hpp"
 #include "logging/log.hpp"
-#include "memory/allocation.hpp"
 #include "memory/universe.hpp"
 #include "oops/access.inline.hpp"
 #include "runtime/atomicAccess.hpp"
@@ -119,14 +117,15 @@ ZReferenceProcessor::ZReferenceProcessor(ZWorkers* workers)
     _encountered_count(),
     _discovered_count(),
     _enqueued_count(),
-    _discovered_list(),
-    _pending_list(zaddress::null),
-    _pending_list_tail(zaddress::null),
     _encountered_weak_fields_count(),
     _discovered_weak_fields_count(),
     _cleared_weak_fields_count(),
+    _discovered_list(zaddress::null),
+    _pending_list(zaddress::null),
+    _pending_list_tail(zaddress::null),
     _discovered_weak_fields(),
     _discovered_weak_fields_empty() {
+  log_info(gc, ref)("Reference Processor created, weak field discovery enabled");
 }
 
 void ZReferenceProcessor::set_soft_reference_policy(bool clear_all_soft_references) {
@@ -322,25 +321,24 @@ bool ZReferenceProcessor::discover_weak_field(volatile zpointer* field_addr) {
     return false;
   }
 
-  const zpointer field_value = ZBarrier::load_atomic(field_addr);
   if (!should_discover_weak_field(field_value)) {
     // Not discovered
     return false;
   }
+
+  // Discovered
+  const zpointer field_value = ZBarrier::load_atomic(field_addr);
 
   log_trace(gc, ref)("Discovered Weak Reference Field: " PTR_FORMAT, p2i(field_addr));
 
   // Update statistics
   _discovered_weak_fields_count.get()++;
 
-  assert(ZHeap::heap()->is_old(to_zaddress(p2i(field_addr))), "Must be old");
-
   ZWeakFieldArray& weak_fields = _discovered_weak_fields.get();
   ZWeakFieldData data = {field_addr, field_value};
   weak_fields.append(data);
   _discovered_weak_fields_empty.set(false);
 
-  // Discovered
   return true;
 }
 
@@ -442,10 +440,12 @@ void ZReferenceProcessor::verify_empty() const {
   for (const zaddress* list; iter.next(&list);) {
     assert(is_null(*list), "Discovered list not empty");
   }
+  
   ZPerWorkerConstIterator<ZWeakFieldArray> iter_weak_fields(&_discovered_weak_fields);
   for (const ZWeakFieldArray* array; iter_weak_fields.next(&array);) {
     assert(array->is_empty(), "Discovered weak fields array not empty");
   }
+  
   assert(is_null(_pending_list.get()), "Pending list not empty");
 #endif
 }

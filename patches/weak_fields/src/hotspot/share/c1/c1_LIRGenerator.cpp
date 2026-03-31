@@ -1595,11 +1595,10 @@ void LIRGenerator::do_StoreField(StoreField* x) {
   if (is_volatile) {
     decorators |= MO_SEQ_CST;
   }
-  if (!needs_patching && UseZGC && field_type == T_OBJECT && x->field()->is_weak()) {
-    decorators |= ON_WEAK_OOP_REF;
-  }
   if (needs_patching) {
     decorators |= C1_NEEDS_PATCHING;
+  } else if (UseZGC && field_type == T_OBJECT && x->field()->is_weak()) {
+    decorators |= ON_WEAK_OOP_REF;
   }
 
   access_store_at(decorators, field_type, object, LIR_OprFact::intConst(x->offset()),
@@ -1797,11 +1796,10 @@ void LIRGenerator::do_LoadField(LoadField* x) {
   if (is_volatile) {
     decorators |= MO_SEQ_CST;
   }
-  if (!needs_patching && UseZGC && field_type == T_OBJECT && x->field()->is_weak()) {
-    decorators |= ON_WEAK_OOP_REF;
-  }
   if (needs_patching) {
     decorators |= C1_NEEDS_PATCHING;
+  } else if (UseZGC && field_type == T_OBJECT && x->field()->is_weak()) {
+    decorators |= ON_WEAK_OOP_REF;
   }
 
   LIR_Opr result = rlock_result(x, field_type);

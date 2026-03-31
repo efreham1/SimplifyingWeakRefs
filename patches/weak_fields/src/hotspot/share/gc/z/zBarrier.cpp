@@ -26,9 +26,12 @@
 #include "gc/z/zBarrier.inline.hpp"
 #include "gc/z/zGeneration.inline.hpp"
 #include "gc/z/zHeap.inline.hpp"
+#include "gc/z/zPage.inline.hpp"
 #include "gc/z/zStoreBarrierBuffer.inline.hpp"
 #include "memory/iterator.inline.hpp"
+#include "oops/instanceKlass.hpp"
 #include "oops/oop.inline.hpp"
+#include "runtime/fieldDescriptor.hpp"
 #include "runtime/safepoint.hpp"
 #include "utilities/debug.hpp"
 
@@ -287,20 +290,52 @@ zaddress ZBarrier::keep_alive_slow_path(zaddress addr) {
 
 #ifdef ASSERT
 
-// ON_WEAK barriers should only ever be applied to j.l.r.Reference.referents.
+// ON_WEAK barriers should only ever be applied to j.l.r.Reference.referents and @weak-annotated fields
 void ZBarrier::verify_on_weak(volatile zpointer* referent_addr) {
-  if (referent_addr != nullptr) {
-    const uintptr_t base = (uintptr_t)referent_addr - (size_t)java_lang_ref_Reference::referent_offset();
-    const oop obj = cast_to_oop(base);
-    assert(oopDesc::is_oop(obj), "Verification failed for: ref " PTR_FORMAT " obj: " PTR_FORMAT, (uintptr_t)referent_addr, base);
-    // For Reference.referent fields, verify the offset matches
-    // For @weak-annotated fields, the offset will differ but verification is done at compile time
-    if (java_lang_ref_Reference::is_referent_field(obj, java_lang_ref_Reference::referent_offset())) {
-      // This is a Reference.referent field - verify it
-      assert(java_lang_ref_Reference::is_referent_field(obj, java_lang_ref_Reference::referent_offset()), "Sanity");
-    }
-    // else: assume it's a @weak field, which is verified at compile time via ON_WEAK_OOP_REF decorator
+  if (referent_addr == nullptr) {
+    return;
   }
+
+  // Use ZGC page machinery to find the containing object
+  if (!ZHeap::heap()->is_in((uintptr_t)referent_addr)) {
+    return;
+  }
+
+  ZPage* const page = ZHeap::heap()->page(referent_addr);
+  if (page == nullptr) {
+    return;
+  }
+
+  const zaddress_unsafe base_addr = page->find_base_unsafe(referent_addr);
+  if (is_null(base_addr)) {
+    // Cannot find base object (e.g. livemap not yet populated); skip verification
+    return;
+  }
+
+  const oop obj = to_oop(safe(base_addr));
+  assert(oopDesc::is_oop(obj), "Verification failed for: ref " PTR_FORMAT " obj: " PTR_FORMAT,
+         (uintptr_t)referent_addr, (uintptr_t)base_addr);
+
+  const int offset = (int)((uintptr_t)referent_addr - cast_from_oop<uintptr_t>(obj));
+
+  // Check if it's a Reference.referent field
+  if (java_lang_ref_Reference::is_referent_field(obj, offset)) {
+    return;
+  }
+
+  // Check if it's a @weak-annotated field
+  Klass* const k = obj->klass();
+  if (k->is_instance_klass()) {
+    fieldDescriptor fd;
+    if (InstanceKlass::cast(k)->find_field_from_offset(offset, false, &fd)) {
+      assert(fd.is_weak(), "ON_WEAK_OOP_REF applied to non-weak, non-referent field %s.%s at offset %d",
+             k->external_name(), fd.name()->as_C_string(), offset);
+      return;
+    }
+  }
+
+  assert(false, "ON_WEAK_OOP_REF applied to unknown field at offset %d in %s",
+         offset, obj->klass()->external_name());
 }
 
 #endif

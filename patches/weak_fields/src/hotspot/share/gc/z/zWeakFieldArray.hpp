@@ -45,21 +45,21 @@ struct ZWeakFieldData {
 // - Does not zero newly allocated memory (caller responsible for initialization)
 // - Single clear_and_reserve operation to avoid separate clear/reserve calls
 // - Array-of-structs layout improves cache efficiency for sequential processing
-template <typename Entry>
 class ZWeakFieldArray : public AnyObj {
 private:
-  Entry* _data;
+  ZWeakFieldData* _data;
+  const size_t _ZWeakFieldData_size = sizeof(ZWeakFieldData);
   size_t _length;
   size_t _capacity;
 
   void expand_to(size_t new_capacity) {
     assert(new_capacity > _capacity, "expected growth but %ld <= %ld", new_capacity, _capacity);
     
-    Entry* new_data = (Entry*)AllocateHeap(new_capacity * sizeof(Entry), mtGC);
+    ZWeakFieldData* new_data = (ZWeakFieldData*)AllocateHeap(new_capacity * _ZWeakFieldData_size, mtGC);
     
     if (_length > 0) {
       // Use memcpy for trivially copyable types - much faster than element-by-element copy
-      memcpy(new_data, _data, _length * sizeof(Entry));
+      memcpy(new_data, _data, _length * _ZWeakFieldData_size);
     }
     
     if (_data != nullptr) {
@@ -85,7 +85,7 @@ public:
     }
   }
 
-  void append(const Entry& entry) {
+  void append(const ZWeakFieldData& entry) {
     if (_length >= _capacity) {
       grow(_length + 1);
     }
@@ -94,7 +94,7 @@ public:
   }
 
   // Get entry at index
-  const Entry& at(size_t index) const {
+  const ZWeakFieldData& at(size_t index) const {
     assert(index < _length, "index out of bounds: %ld (length: %ld)", index, _length);
     return _data[index];
   }
@@ -130,7 +130,7 @@ public:
       FreeHeap(_data);
     }
     _capacity = MAX2((size_t) 8, next_power_of_2(new_capacity - 1));
-    _data = (Entry*)AllocateHeap(_capacity * sizeof(Entry), mtGC);
+    _data = (ZWeakFieldData*)AllocateHeap(_capacity * _ZWeakFieldData_size, mtGC);
   }
 
   // Clear without deallocating

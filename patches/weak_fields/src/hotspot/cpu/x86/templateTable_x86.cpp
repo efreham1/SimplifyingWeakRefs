@@ -196,23 +196,6 @@ void TemplateTable::patch_bytecode(Bytecodes::Code bc, Register bc_reg,
       __ jcc(Assembler::zero, L_patch_done);  // don't patch
     }
     break;
-  case Bytecodes::_fast_agetfield:
-    {
-      // We skip bytecode quickening for getfield instructions when
-      // the field is weak
-      if (UseZGC) {
-        assert(byte_no == -1, "sanity");
-        assert(load_bc_into_bc_reg, "we use bc_reg as temp");
-        __ load_field_entry(temp_reg, bc_reg);
-        __ load_unsigned_byte(temp_reg, Address(temp_reg, in_bytes(ResolvedFieldEntry::flags_offset())));
-        __ testb(temp_reg, 1 << ResolvedFieldEntry::is_weak_shift);
-        __ jcc(Assembler::notZero, L_patch_done);  // don't patch
-      }
-      if (load_bc_into_bc_reg) {
-        __ movl(bc_reg, bc);
-      }
-    }
-    break;
   default:
     assert(byte_no == -1, "sanity");
     // the pair bytecodes have already done the load.
@@ -2592,13 +2575,12 @@ void TemplateTable::getfield_or_static(int byte_no, bool is_static, RewriteContr
   __ jcc(Assembler::notEqual, notObj);
   // atos
   if (UseZGC) {
-    __ testb(flags, 1 << ResolvedFieldEntry::is_weak_shift);
+    __ testl(flags, (1 << ResolvedFieldEntry::is_weak_shift));
     __ jcc(Assembler::zero, strongOopLoad);
+    // Weak load path
     do_oop_load(_masm, field, rax, ON_WEAK_OOP_REF);
     __ push(atos);
-    if (!is_static && rc == may_rewrite) {
-      patch_bytecode(Bytecodes::_fast_agetfield, bc, rbx);
-    }
+    // Don't rewrite bytecode for weak references, the fast path is only for strong loads
     __ jmp(Done);
     __ bind(strongOopLoad);
   }
@@ -2783,7 +2765,7 @@ void TemplateTable::putfield_or_static(int byte_no, bool is_static, RewriteContr
 
   Label notVolatile, Done;
 
-  // Check for volatile store (use testl to preserve flags register for weak check)
+  // Check for volatile store
   __ testl(flags, (1 << ResolvedFieldEntry::is_volatile_shift));
   __ jcc(Assembler::zero, notVolatile);
 
@@ -2805,7 +2787,7 @@ void TemplateTable::putfield_or_static_helper(int byte_no, bool is_static, Rewri
   const Address field(obj, off, Address::times_1, 0*wordSize);
 
   Label notByte, notBool, notInt, notShort, notChar,
-        notLong, notFloat, notObj, Done, weakStore, storeComplete;
+        notLong, notFloat, notObj, Done, strongOopStore;
 
   const Register bc    = c_rarg3;
 
@@ -2848,33 +2830,22 @@ void TemplateTable::putfield_or_static_helper(int byte_no, bool is_static, Rewri
     if (UseZGC) {
       // Test weak flag before pop(atos) overwrites flags (rax)
       __ testl(flags, (1 << ResolvedFieldEntry::is_weak_shift));
-      __ jcc(Assembler::notZero, weakStore);
-
-      // Strong store path
-      __ pop(atos);
-      if (!is_static) pop_and_check_object(obj);
-      do_oop_store(_masm, field, rax);
-      if (!is_static && rc == may_rewrite) {
-        patch_bytecode(Bytecodes::_fast_aputfield, bc, rbx, true, byte_no);
-      }
-      __ jmp(storeComplete);
-
+      __ jcc(Assembler::notZero, strongOopStore);
       // Weak store path
-      __ bind(weakStore);
       __ pop(atos);
       if (!is_static) pop_and_check_object(obj);
       do_oop_store(_masm, field, rax, ON_WEAK_OOP_REF);
-      if (!is_static && rc == may_rewrite) {
-        patch_bytecode(Bytecodes::_fast_aputfield, bc, rbx, true, byte_no);
-      }
-      __ bind(storeComplete);
-    } else {
-      __ pop(atos);
-      if (!is_static) pop_and_check_object(obj);
-      do_oop_store(_masm, field, rax);
-      if (!is_static && rc == may_rewrite) {
-        patch_bytecode(Bytecodes::_fast_aputfield, bc, rbx, true, byte_no);
-      }
+      // Don't rewrite bytecode for weak references, the fast path is only for strong stores
+      __ jmp(Done);
+      // Strong store path
+      __ bind(strongOopStore);
+    }
+
+    __ pop(atos);
+    if (!is_static) pop_and_check_object(obj);
+    do_oop_store(_masm, field, rax);
+    if (!is_static && rc == may_rewrite) {
+      patch_bytecode(Bytecodes::_fast_aputfield, bc, rbx, true, byte_no);
     }
     __ jmp(Done);
   }
