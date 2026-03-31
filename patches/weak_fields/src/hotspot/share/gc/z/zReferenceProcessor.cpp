@@ -125,7 +125,7 @@ ZReferenceProcessor::ZReferenceProcessor(ZWorkers* workers)
     _pending_list_tail(zaddress::null),
     _discovered_weak_fields(),
     _discovered_weak_fields_empty() {
-  log_info(gc, ref)("Reference Processor created, weak field discovery enabled");
+  log_info(gc, ref)("Reference Processor created, Config: Weak field discovery");
 }
 
 void ZReferenceProcessor::set_soft_reference_policy(bool clear_all_soft_references) {

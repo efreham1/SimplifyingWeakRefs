@@ -139,7 +139,7 @@ ZReferenceProcessor::ZReferenceProcessor(ZWorkers* workers)
     _pending_list_tail(zaddress::null),
     _null_queue_handle() {
 
-  log_info(gc, ref)("Reference Processor created, optimised clear path enabled");
+  log_info(gc, ref)("Reference Processor created, Config: Optimised clear path");
 }
 
 void ZReferenceProcessor::set_soft_reference_policy(bool clear_all_soft_references) {

@@ -145,7 +145,7 @@ ZReferenceProcessor::ZReferenceProcessor(ZWorkers* workers)
     _null_queue_handle() {
 
   _array_empty.set_all(true);
-  log_info(gc, ref)("Reference Processor created, Config: All optimisations enabled");
+  log_info(gc, ref)("Reference Processor created, Config: All optimisations");
 }
 
 void ZReferenceProcessor::set_soft_reference_policy(bool clear_all_soft_references) {

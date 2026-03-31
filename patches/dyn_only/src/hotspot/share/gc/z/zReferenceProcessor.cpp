@@ -123,7 +123,7 @@ ZReferenceProcessor::ZReferenceProcessor(ZWorkers* workers)
     _pending_list_tail(zaddress::null) {
   _discovered_array_empty.set_all(true);
 
-  log_info(gc, ref)("Reference Processor created, dynamic array enabled");
+  log_info(gc, ref)("Reference Processor created, Config: Dynamic array");
 }
 
 void ZReferenceProcessor::set_soft_reference_policy(bool clear_all_soft_references) {

@@ -143,7 +143,7 @@ ZReferenceProcessor::ZReferenceProcessor(ZWorkers* workers)
     _discovered_weak_refs_without_queue_ll(),
     _null_queue_handle() {
 
-  log_info(gc, ref)("Reference Processor created, separate lists and clear path optimisations enabled");
+  log_info(gc, ref)("Reference Processor created, Config: Separate lists, optimised clear path");
 }
 
 void ZReferenceProcessor::set_soft_reference_policy(bool clear_all_soft_references) {
