@@ -11,8 +11,8 @@ set -euo pipefail
 # Usage:
 #   ./scripts/clean_all_configs.sh
 
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 MAPPING_FILE="${SCRIPT_DIR}/variants.conf"
 
 cd "${REPO_ROOT}"

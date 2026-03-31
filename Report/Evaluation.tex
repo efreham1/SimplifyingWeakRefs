@@ -1,36 +1,36 @@
 \chapter{Evaluation}
 \label{chap:evaluation}
 
-This chapter describes the experimental setup used to evaluate the optimisation approaches presented in \cref{chap:design-and-implementation} and presents the results of the performance evaluation. \Cref{sec:build-configurations} describes the build configurations used to isolate the effect of each optimisation flag. \Cref{sec:performance-evaluation} details the benchmark design, execution environment, and measurement methodology. Finally, \cref{sec:results-presentation} presents the collected performance data.
+The implemented optimisations described in \cref{chap:design-and-implementation} were evaluated through two custom microbenchmarks designed to synthetically target the reference processing pipeline. The benchmarks were executed on a supercomputer cluster under controlled conditions, and the resulting GC timing statistics and memory usage metrics were collected to enable comparison between the baseline and optimised variants.
 
-\section{Build Configurations}
+\section{Build Configuration}
 \label{sec:build-configurations}
 
-The three optimisation approaches are controlled by compile-time preprocessor flags: \texttt{ZUseOptimisedClearPath} for the optimised clear path, \texttt{ZUseSeparateDiscoveredLists} for the separate discovered list, and \texttt{ZUseDynamicArray} for the dynamic array. Each flag can be independently enabled (1) or disabled (0) via compiler flags passed during the JDK build.
+Each optimisation variant is implemented as a separate set of modified source files stored under \texttt{patches/<variant>/src/}. Modifications shared by most variants reside in \texttt{patches/base/src/}. The \texttt{none} variant uses the unmodified upstream OpenJDK source and the \texttt{dyn\_only} variant only applies its own patches without the base patch. A build script (\texttt{scripts/build\_configs.sh}) automates building all variants: for each variant, it restores the upstream source, applies the appropriate patches, and invokes the JDK build.
 
-Eight build configurations were created to evaluate all combinations of the three optimisation flags, as shown in \cref{tab:build-configs}. Each configuration produces a separate JDK build with its own binary, allowing direct comparison under identical benchmark conditions.
+Eight build configurations were created to evaluate all combinations of the three optimisations, as shown in \cref{tab:build-configs}. Each configuration produces a separate JDK build with its own binary, allowing direct comparison under identical benchmark conditions.
 
-\begin{table}[htbp]
+\begin{table}[t]
 \centering
-\caption{Build configurations and their enabled optimisation flags}
+\caption[Build Variants]{Build variants and their enabled optimisations}
 \label{tab:build-configs}
-\begin{tabularx}{\textwidth}{lccX}
+\begin{tabularx}{\textwidth}{l|XXX}
 \toprule
-\textbf{Configuration} & \textbf{Clear\ Path} & \textbf{Sep.\ Lists} & \textbf{Dyn.\ Array} \\
+\textbf{Variant} & \textbf{Using\ Optimised\ Clear\ Path} & \textbf{Skipping\ Enqueue} & \textbf{Using\ Dynamic\ Array} \\
 \midrule
-\texttt{none}      & \textemdash & \textemdash & \textemdash \\
-\texttt{dyn\_only} & \textemdash  & \textemdash & \checkmark \\
-\texttt{sep\_only} & \textemdash & \checkmark  & \textemdash \\
-\texttt{sep\_dyn}  & \textemdash & \checkmark  & \checkmark  \\
-\texttt{clear\_path\_only} & \checkmark  & \textemdash & \textemdash \\
-\texttt{clear\_path\_dyn}  & \checkmark & \textemdash  & \checkmark  \\
-\texttt{clear\_path\_sep}  & \checkmark  & \checkmark  & \textemdash \\
-\texttt{all}       & \checkmark  & \checkmark  & \checkmark  \\
+None      & \textemdash & \textemdash & \textemdash \\
+Dyn & \textemdash  & \textemdash & \checkmark \\
+Sep & \textemdash & \checkmark  & \textemdash \\
+Sep + Dyn  & \textemdash & \checkmark  & \checkmark  \\
+Clear Path & \checkmark  & \textemdash & \textemdash \\
+Clear Path + Dyn  & \checkmark & \textemdash  & \checkmark  \\
+Clear Path + Sep  & \checkmark  & \checkmark  & \textemdash \\
+All       & \checkmark  & \checkmark  & \checkmark  \\
 \bottomrule
 \end{tabularx}
 \end{table}
 
-Weak fields were evaluated as a separate configuration in the same benchmark harness. In this setup, the \texttt{WeakReference} benchmark class is replaced by its weak-field counterpart while using the baseline (\texttt{none}) ZGC optimisation flag configuration. This isolates representation-level effects from the three \texttt{WeakReference} pipeline optimisations, whilst still allowing direct comparison within the same execution and analysis workflow.
+Weak fields were evaluated as a separate configuration in the same benchmark harness. In this setup, the \texttt{WeakReference} benchmark class is replaced by its weak-field counterpart using a dedicated \texttt{weak\_fields} build variant whose patches (\texttt{patches/weak\_fields/src/}) are applied independently of the base layer. This isolates representation-level effects from the three \texttt{WeakReference} pipeline optimisations, whilst still allowing direct comparison within the same execution and analysis workflow.
 
 \section{Performance Evaluation}
 \label{sec:performance-evaluation}
@@ -59,24 +59,37 @@ The benchmark runs three iterations with a five-second cooldown between them to 
 \subsection{Execution Environment}
 \label{subsec:execution-environment}
 
-To ensure reproducible measurements, the benchmarks were executed under controlled conditions using a dedicated runner script. The script applies the following isolation measures:
+The benchmarks were executed on \texttt{TODO: cluster name}, a supercomputer cluster at \texttt{TODO: institution}. Each benchmark instance was allocated approximately 4~CPU cores and 16\,GB of memory. The cluster nodes run \texttt{TODO: OS and kernel version}. Each variant was run using its pre-built JDK binary (see \cref{sec:build-configurations}).
 
-\begin{itemize}
-    \item \textbf{CPU pinning}: The Java process was pinned to a fixed set of CPU cores using \texttt{taskset}. Meanwhile, the monitoring and scripting processes ran on separate cores to avoid interference.
-    \item \textbf{CPU frequency control}: The CPU governor is set to performance mode at the base clock frequency. Both the minimum and maximum scaling frequencies are locked to the base frequency to prevent frequency scaling from introducing variance.
-    \item \textbf{Process priority}: The Java process is run with elevated priority (\texttt{nice -n -5}) to reduce scheduling interference from other system processes.
-    \item \textbf{Cache clearing}: Filesystem caches are dropped between runs by writing to \texttt{/proc/sys/vm/drop\_caches}.
-    \item \textbf{Cooldown period}: A configurable cooldown period (default 10 seconds) is inserted between variant runs to allow the system to return to a stable state.
-\end{itemize}
+\Cref{tab:jvm-options} lists the JVM options used for each benchmark family. Both benchmarks share a common set of options; the multi-object benchmark adds a forced major-collection interval to ensure frequent GC activity. Tenuring thresholds are set to~1 so that objects are promoted to the old generation quickly, which is necessary because ZGC does not perform reference processing in the young generation~\cite{openjdk-zreferenceprocessor-cpp}.
 
-For the single-object benchmark, the JVM was configured with a fixed 7\,GB heap and ZGC enabled. Tenuring thresholds are set to 1 to promote the target object to the old generation quickly, ensuring that the reference processor discovers it. GC statistics and reference processing logs were enabled to collect the results from.
+\begin{table}[htbp]
+\centering
+\caption{JVM options per benchmark family}
+\label{tab:jvm-options}
+\begin{tabularx}{\textwidth}{@{}llX@{}}
+\toprule
+\textbf{Option} & \textbf{Benchmark} & \textbf{Purpose} \\
+\midrule
+\texttt{-Xms7g -Xmx7g}        & Single & Fixed 7\,GB heap \\
+\texttt{-Xms8g -Xmx8g}        & Multi  & Fixed 8\,GB heap \\
+\texttt{-XX:+UseZGC}           & Both   & Enable ZGC \\
+\texttt{-XX:InitialTenuringThreshold=1}  & Both & Promote objects to old generation after one cycle \\
+\texttt{-XX:MaxTenuringThreshold=1}      & Both & Cap tenuring at 1 \\
+\texttt{-Xlog:gc+stats,gc+ref} & Both   & GC statistics and reference processing logs \\
+\texttt{-XX:NativeMemoryTracking=summary} & Both & Native Memory Tracking \\
+\texttt{-XX:ZCollectionIntervalMajor=0.5} & Multi & Force major collection every 0.5\,s \\
+\texttt{-XX:+ZCollectionIntervalOnly}     & Multi & Only timer-triggered major collections \\
+\bottomrule
+\end{tabularx}
+\end{table}
 
-For the multi-object benchmark the JVM was configured with a fixed 8\,GB heap, ZGC enabled, and a forced major collection interval of 0.5 seconds to ensure frequent GC activity during the benchmark. Tenuring thresholds are set to 1 to promote objects to the old generation quickly, ensuring that the reference processor discovers them. This is necessary since ZGC doesn't perform reference processing in the young generation. GC statistics and reference processing logs were enabled to collect the results from.
+A 10-second cooldown period was inserted between variant runs to allow the system to return to a stable state. Between runs, filesystem caches were dropped by writing to \texttt{/proc/sys/vm/drop\_caches}.
 
 \subsection{Measurement Methodology}
 \label{subsec:measurement-methodology}
 
-Each benchmark was run for 100 outer iterations. Within each outer iteration, all eight \texttt{WeakReference} variants are run in sequence with environment preparation between each. In the same outer iteration, the weak-field benchmark variant is then executed as an additional run. This interleaved ordering mitigates systematic drift in system conditions affecting one configuration more than others.
+Each benchmark was run for a total of 100 outer iterations. To parallelise execution across the cluster, the iterations were split across multiple instances, where each instance ran $n$ measurement iterations preceded by 1 warm-up iteration whose results were discarded. Each warm-up iteration executed the full benchmark workload for every variant and served to prime JIT compilation and OS-level caches before measured runs began. Within each measurement iteration, all eight \texttt{WeakReference} variants were run in sequence with cooldown and cache clearing between each. In the same iteration, the weak-field benchmark variant was then executed as an additional run. This interleaved ordering mitigates systematic drift in system conditions affecting one configuration more than others.
 
 During each run, a memory monitoring script samples memory metrics from the process at high frequency. Additionally, the current benchmark phase is tracked and for the multi-object benchmark the inner iteration is tracked as well. This tracking is done from the benchmark's log file to enable phase-aligned analysis. See \cref{tab:memory-monitoring-metrics} for the memory metrics collected.
 
@@ -120,7 +133,7 @@ Young Subphase: Concurrent Mark Follow & ms & Time spent in young-generation con
 \section{Presentation of Results}
 \label{sec:results-presentation}
 
-This section presents the empirical results of the performance evaluation. The comparison covers the baseline (\texttt{none}) and all seven non-empty combinations of the three optimisation flags (clear path, separate lists, dynamic array) for \texttt{WeakReference}-based processing. In addition, a dedicated \texttt{weak\_fields} configuration is included, where the weak-field benchmark classes are executed in the same harness and analysed with the same tooling. This configuration set enables two complementary comparisons:
+This section presents the empirical results of the performance evaluation. The comparison covers the baseline (\texttt{none}) and all seven non-empty combinations of the three optimisations (clear path, separate lists, dynamic array) for \texttt{WeakReference}-based processing. In addition, a dedicated \texttt{weak\_fields} configuration is included, where the weak-field benchmark classes are executed in the same harness and analysed with the same tooling. This configuration set enables two complementary comparisons:
 \begin{itemize}
 	\item \textbf{Intra-model comparison} among \texttt{WeakReference} variants to isolate the impact of each optimisation and their interactions.
 	\item \textbf{Inter-model comparison} between optimised \texttt{WeakReference} processing and weak-field representation to evaluate structural overhead trade-offs.

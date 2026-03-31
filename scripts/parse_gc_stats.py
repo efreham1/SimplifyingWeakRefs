@@ -240,24 +240,29 @@ def extract_phases_with_iteration(data_list):
 
 
 def plot_metric_boxplots(variants_all_metrics, variants, metric_names, run_id=1, benchmark_mode_label="multi"):
-    """Plot boxplots comparing all variant configs for each metric.
+    """Plot one boxplot per metric, each saved as a separate PDF.
 
-    Each metric gets its own subplot. Within each subplot there is one box per
-    variant config so distributions across the full set of runs can be compared
-    at a glance.
+    Each plot compares all variant configs side-by-side so distributions
+    across the full set of runs can be compared at a glance.
     """
     Path('images').mkdir(parents=True, exist_ok=True)
 
     DISPLAY_NAMES = {
-        "none": "Baseline",
+        "none": "None",
         "all": "All",
         "clear_path_only": "Clear Path",
         "sep_only": "Sep",
         "dyn_only": "Dyn",
-        "clear_path_sep": "Clear Path\n+Sep",
-        "clear_path_dyn": "Clear Path\n+Dyn",
-        "sep_dyn": "Sep+Dyn",
+        "clear_path_sep": "Clear Path\n+ Sep",
+        "clear_path_dyn": "Clear Path\n+ Dyn",
+        "sep_dyn": "Sep + Dyn",
         "weak_fields": "Weak Fields",
+    }
+
+    # Metrics where zero values should be filtered out (typically only
+    # recorded during certain GC cycles, so zeros are missing data).
+    FILTER_ZEROS_METRICS = {
+        "Young Generation: Young Generation",
     }
 
     # Keep only metrics that have data in at least one variant
@@ -270,30 +275,20 @@ def plot_metric_boxplots(variants_all_metrics, variants, metric_names, run_id=1,
         print("Warning: none of the requested metrics found in data")
         return
 
-    n_metrics = len(metrics_to_plot)
-    n_cols = min(3, n_metrics)
-    n_rows = (n_metrics + n_cols - 1) // n_cols
-
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(6 * n_cols, 5 * n_rows))
-    if n_rows == 1 and n_cols == 1:
-        axes = np.array([[axes]])
-    elif n_rows == 1:
-        axes = axes.reshape(1, -1)
-    elif n_cols == 1:
-        axes = axes.reshape(-1, 1)
-
     # Distinct colours for up to 9 variants
     colors = [plt.cm.tab10(i / max(len(variants) - 1, 1)) for i in range(len(variants))]
 
-    for idx, metric_name in enumerate(metrics_to_plot):
-        row = idx // n_cols
-        col = idx % n_cols
-        ax = axes[row, col]
+    for metric_name in metrics_to_plot:
+        fig, ax = plt.subplots(figsize=(8, 5))
+
+        filter_zeros = metric_name in FILTER_ZEROS_METRICS
 
         data_per_variant = []
         labels = []
         for variant in variants:
             values = variants_all_metrics.get(variant, {}).get(metric_name, {}).get("avg", [])
+            if values and filter_zeros:
+                values = [v for v in values if v != 0.0]
             data_per_variant.append(values if values else [])
             labels.append(DISPLAY_NAMES.get(variant, variant))
 
@@ -301,7 +296,8 @@ def plot_metric_boxplots(variants_all_metrics, variants, metric_names, run_id=1,
         non_empty = [(d, l, c) for d, l, c in zip(data_per_variant, labels, colors) if d]
         if not non_empty:
             ax.text(0.5, 0.5, 'No data', ha='center', va='center', transform=ax.transAxes)
-            ax.set_title(metric_name[:55], fontsize=10, fontweight='bold')
+            ax.set_title(metric_name, fontsize=12, fontweight='bold')
+            plt.close()
             continue
         data_filtered, labels_filtered, colors_filtered = zip(*non_empty)
 
@@ -317,25 +313,18 @@ def plot_metric_boxplots(variants_all_metrics, variants, metric_names, run_id=1,
             ""
         )
 
-        ax.set_title(metric_name[:55], fontsize=10, fontweight='bold')
-        ax.set_ylabel(f"Value ({units})" if units else "Value", fontsize=9)
-        ax.tick_params(axis='x', labelsize=8, rotation=15)
+        ax.set_title(metric_name, fontsize=12, fontweight='bold')
+        ax.set_ylabel(f"Value ({units})" if units else "Value", fontsize=10)
+        ax.tick_params(axis='x', labelsize=9, rotation=15)
         ax.grid(True, alpha=0.3, axis='y')
 
-    # Add sample-count annotation to the last used subplot
-    for idx in range(n_metrics, n_rows * n_cols):
-        axes[idx // n_cols][idx % n_cols].axis('off')
-
-    plt.suptitle(
-        f"GC Metrics Comparison Across Configurations ({benchmark_mode_label.capitalize()} Benchmark)",
-        fontsize=14,
-        fontweight='bold',
-    )
-    plt.tight_layout()
-    output_file = f'images/metric_boxplots_{benchmark_mode_label}_{run_id}.pdf'
-    plt.savefig(output_file, bbox_inches='tight')
-    print(f"Metric boxplots saved to: {output_file}")
-    plt.close()
+        plt.tight_layout()
+        # Build a filesystem-safe name from the metric
+        safe_name = metric_name.replace(": ", "_").replace(" ", "_").replace("(", "").replace(")", "").lower()
+        output_file = f'images/boxplot_{safe_name}_{benchmark_mode_label}_{run_id}.pdf'
+        plt.savefig(output_file, bbox_inches='tight')
+        print(f"  {output_file}")
+        plt.close()
 
 
 def plot_continuous_monitoring(on_data, off_data, on_monitor_files=None, off_monitor_files=None,
@@ -683,14 +672,14 @@ def plot_continuous_monitoring_multi(variants_continuous, run_id=1, benchmark_mo
     Path('images').mkdir(parents=True, exist_ok=True)
 
     DISPLAY_NAMES = {
-        "none": "Baseline",
+        "none": "None",
         "all": "All",
-        "clear_path_only": "Optimised Clear Path",
+        "clear_path_only": "Clear Path",
         "sep_only": "Sep",
         "dyn_only": "Dyn",
-        "clear_path_sep": "Optimised Clear Path+Sep",
-        "clear_path_dyn": "Optimised Clear Path+Dyn",
-        "sep_dyn": "Sep+Dyn",
+        "clear_path_sep": "Clear Path + Sep",
+        "clear_path_dyn": "Clear Path + Dyn",
+        "sep_dyn": "Sep + Dyn",
         "weak_fields": "Weak Fields",
     }
 
@@ -770,9 +759,10 @@ def main():
     # When weak-fields is enabled, this run id can contain both gc/single logs
     # and field/field-single logs. Pick the dominant benchmark family.
     candidate_files = glob.glob(f"output/run_*_*_run*_{run_id}.log")
-    benchmark_name = "gc"  # default
+    benchmark_name = "multi"  # default
     if candidate_files:
         benchmark_counts = {
+            "multi": 0,
             "gc": 0,
             "weakref": 0,
             "single": 0,
@@ -786,6 +776,7 @@ def main():
             "weakref",
             "single",
             "field",
+            "multi",
             "gc",
         ]
         for f in candidate_files:
@@ -795,13 +786,13 @@ def main():
                     benchmark_counts[token] += 1
                     break
 
-        benchmark_priority = ["gc", "single", "weakref", "field", "field-single", "single-field"]
+        benchmark_priority = ["multi", "gc", "single", "weakref", "field", "field-single", "single-field"]
         benchmark_name = max(benchmark_priority, key=lambda b: (benchmark_counts[b], -benchmark_priority.index(b)))
     use_max = benchmark_name == "single"
     benchmark_mode_label = get_benchmark_mode_label(benchmark_name)
 
     weak_fields_benchmark_name = None
-    if benchmark_name in ["gc", "weakref", "field", "weakfield"]:
+    if benchmark_name in ["multi", "gc", "weakref", "field", "weakfield"]:
         weak_fields_benchmark_name = "field"
     elif benchmark_name in ["single", "field-single", "single-field"]:
         weak_fields_benchmark_name = "field-single"
@@ -843,7 +834,7 @@ def main():
     if not variants_log_files:
         print(f"Error: no log files found in output/ for run id '{run_id}'")
         print("Make sure you have run:")
-        print("  sudo -E bash scripts/run_benchmark_iterations.sh")
+        print("  bash scripts/run_benchmark_iterations.sh")
         return 1
 
     present = [v for v in VARIANTS_ORDERED if v in variants_log_files]
@@ -916,14 +907,18 @@ def main():
         print()
 
     # Generate boxplots for the key GC metrics
+    young_gen_metric = ("Young Generation: Young Generation (Promote All)"
+                        if benchmark_mode_label == "single"
+                        else "Young Generation: Young Generation")
     metrics_to_plot = [
         "Major Collection: Major Collection",
         "Old Generation: Old Generation",
-        "Old Subphase: Concurrent Mark Follow",
-        "Old Subphase: Concurrent References Process",
+        "Old Phase: Concurrent Mark",
         "Old Phase: Concurrent Process Non-Strong",
-        "Young Generation: Young Generation",
-        "Young Subphase: Concurrent Mark Follow",
+        "Old Phase: Concurrent Relocate",
+        young_gen_metric,
+        "Young Phase: Concurrent Mark",
+        "Young Phase: Concurrent Relocate",
     ]
     print("Generating metric boxplots...")
     plot_metric_boxplots(variants_all_metrics, present, metrics_to_plot, run_id, benchmark_mode_label)

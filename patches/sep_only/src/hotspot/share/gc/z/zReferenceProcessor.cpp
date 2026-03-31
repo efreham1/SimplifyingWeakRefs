@@ -250,7 +250,7 @@ bool ZReferenceProcessor::try_make_inactive(zaddress reference, ReferenceType ty
   return false;
 }
 
-void ZReferenceProcessor::discover(zaddress reference, ReferenceType type, zaddress referent) {
+void ZReferenceProcessor::discover(zaddress reference, ReferenceType type) {
   log_trace(gc, ref)("Discovered Reference: " PTR_FORMAT " (%s)", untype(reference), reference_type_name(type));
   
   // Update statistics
@@ -261,7 +261,7 @@ void ZReferenceProcessor::discover(zaddress reference, ReferenceType type, zaddr
     _discovered_count.get()[type]++;
   }
   
-  zaddress* const list;
+  zaddress* list;
   if (type == REF_WEAK && !has_reference_queue(reference)) {
     list = _discovered_weak_refs_without_queue_ll.addr();
   } else {

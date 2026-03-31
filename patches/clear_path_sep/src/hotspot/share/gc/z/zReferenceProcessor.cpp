@@ -85,9 +85,6 @@ static volatile zpointer* reference_queue_addr(zaddress reference) {
   return (volatile zpointer*)to_oop(reference)->field_addr<zpointer>(java_lang_ref_Reference::queue_offset());
 }
 
-static zaddress* reference_discovered_addr(zaddress reference) {
-  return (zaddress*)java_lang_ref_Reference::discovered_addr_raw(to_oop(reference));
-}
 static zpointer* reference_referent_addr_non_vol(zaddress reference) {
   return (zpointer*)java_lang_ref_Reference::referent_addr_raw(to_oop(reference));
 }
@@ -295,7 +292,7 @@ void ZReferenceProcessor::discover(zaddress reference, ReferenceType type) {
     _discovered_count.get()[type]++;
   }
   
-  zaddress* const list;
+  zaddress* list;
   if (type == REF_WEAK && !has_reference_queue(reference)) {
     list = _discovered_weak_refs_without_queue_ll.addr();
   } else {

@@ -434,7 +434,7 @@ void ZReferenceProcessor::work() {
 
     if (has_array) {
       // Process discovered references
-      process_worker_discovered_all_refs(*all_refs_addr);
+      process_worker_discovered_array(*all_refs_addr);
     }
   }
 }

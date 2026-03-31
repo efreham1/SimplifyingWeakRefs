@@ -361,7 +361,7 @@ void ZReferenceProcessor::work() {
 void ZReferenceProcessor::verify_empty() const {
 #ifdef ASSERT
   ZPerWorkerConstIterator<ZWeakRefArray> iter(&_discovered_array);
-  for (const ZWeakRefArray* array; iter_all_refs.next(&array);) {
+  for (const ZWeakRefArray* array; iter.next(&array);) {
     assert(array->is_empty(), "Discovered all refs array not empty");
   }
 
