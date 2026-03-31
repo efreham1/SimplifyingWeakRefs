@@ -35,15 +35,12 @@
 #include "gc/z/zValue.inline.hpp"
 #include "gc/z/zPage.inline.hpp"
 #include "logging/log.hpp"
-#include "memory/allocation.hpp"
 #include "memory/universe.hpp"
 #include "oops/access.inline.hpp"
 #include "runtime/atomicAccess.hpp"
 #include "runtime/mutexLocker.hpp"
 #include "runtime/os.hpp"
 #include "runtime/thread.hpp"
-#include "utilities/ticks.hpp"
-
 #include "classfile/symbolTable.hpp"
 #include "classfile/systemDictionary.hpp"
 #include "oops/oopHandle.inline.hpp"
@@ -142,10 +139,10 @@ ZReferenceProcessor::ZReferenceProcessor(ZWorkers* workers)
     _cleared_weak_refs_without_queue_count(),
     _pending_list(zaddress::null),
     _pending_list_tail(zaddress::null),
-    _discovered_all_refs_arr(),
-    _all_refs_array_empty(),
+    _discovered_array(),
+    _discovered_array_empty(),
     _null_queue_handle() {
-  _all_refs_array_empty.set_all(true);
+  _discovered_array_empty.set_all(true);
 
   log_info(gc, ref)("Reference Processor created, config: optimised clear path, dynamic array for discovered references");
 }
@@ -307,7 +304,7 @@ void ZReferenceProcessor::discover(zaddress reference, ReferenceType type, zaddr
   // Add reference to discovered list
   assert(ZHeap::heap()->is_old(reference), "Must be old");
   assert(is_null(reference_discovered(reference)), "Already discovered");
-  ZWeakRefArray& all_refs = _discovered_all_refs_arr.get();
+  ZWeakRefArray& all_refs = _discovered_array.get();
   zpointer* const referent_field = reference_referent_addr_non_vol(reference);
   zaddress* const discovered_field = reference_discovered_addr(reference);
   const zpointer referent_value = *referent_field;
@@ -321,7 +318,7 @@ void ZReferenceProcessor::discover(zaddress reference, ReferenceType type, zaddr
     has_reference_queue(reference)
   };
   all_refs.append(data);
-  _all_refs_array_empty.set(false);
+  _discovered_array_empty.set(false);
   reference_set_discovered(reference, reference); // mark as discovered
 }
 
@@ -426,8 +423,8 @@ void ZReferenceProcessor::process_worker_discovered_array(ZWeakRefArray& all_ref
 void ZReferenceProcessor::work() {
   SuspendibleThreadSetJoiner sts_joiner;
 
-  ZPerWorkerIterator<ZWeakRefArray> iter_all_refs(&_discovered_all_refs_arr);
-  ZPerWorkerIterator<bool> iter_all_refs_empty(&_all_refs_array_empty);
+  ZPerWorkerIterator<ZWeakRefArray> iter_all_refs(&_discovered_array);
+  ZPerWorkerIterator<bool> iter_all_refs_empty(&_discovered_array_empty);
 
   ZWeakRefArray* all_refs_addr = nullptr;
   bool* all_refs_empty = nullptr;
@@ -444,14 +441,9 @@ void ZReferenceProcessor::work() {
 
 void ZReferenceProcessor::verify_empty() const {
 #ifdef ASSERT
-  ZPerWorkerConstIterator<zaddress> iter(&_discovered_list);
-  for (const zaddress* list; iter.next(&list);) {
-    assert(is_null(*list), "Discovered list not empty");
-  }
-
-  ZPerWorkerConstIterator<ZWeakRefArray> iter_all_refs(&_discovered_all_refs_arr);
-  for (const ZWeakRefArray* array; iter_all_refs.next(&array);) {
-    assert(array->is_empty(), "Discovered all refs array not empty");
+  ZPerWorkerConstIterator<ZWeakRefArray> iter(&_discovered_array);
+  for (const ZWeakRefArray* array; iter.next(&array);) {
+    assert(array->is_empty(), "Discovered array not empty");
   }
 
   assert(is_null(_pending_list.get()), "Pending list not empty");

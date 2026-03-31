@@ -41,7 +41,6 @@
 #include "runtime/mutexLocker.hpp"
 #include "runtime/os.hpp"
 #include "runtime/thread.hpp"
-
 #include "classfile/symbolTable.hpp"
 #include "classfile/systemDictionary.hpp"
 #include "oops/oopHandle.inline.hpp"

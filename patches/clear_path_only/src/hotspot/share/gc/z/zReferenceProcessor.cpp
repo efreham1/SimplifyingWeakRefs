@@ -35,15 +35,12 @@
 #include "gc/z/zValue.inline.hpp"
 #include "gc/z/zPage.inline.hpp"
 #include "logging/log.hpp"
-#include "memory/allocation.hpp"
 #include "memory/universe.hpp"
 #include "oops/access.inline.hpp"
 #include "runtime/atomicAccess.hpp"
 #include "runtime/mutexLocker.hpp"
 #include "runtime/os.hpp"
 #include "runtime/thread.hpp"
-#include "utilities/ticks.hpp"
-
 #include "classfile/symbolTable.hpp"
 #include "classfile/systemDictionary.hpp"
 #include "oops/oopHandle.inline.hpp"
@@ -137,7 +134,7 @@ ZReferenceProcessor::ZReferenceProcessor(ZWorkers* workers)
     _encountered_weak_refs_without_queue_count(),
     _discovered_weak_refs_without_queue_count(),
     _cleared_weak_refs_without_queue_count(),
-    _discovered_list(),
+    _discovered_list(zaddress::null),
     _pending_list(zaddress::null),
     _pending_list_tail(zaddress::null),
     _null_queue_handle() {
@@ -197,7 +194,10 @@ bool ZReferenceProcessor::is_softly_live(zaddress reference, ReferenceType type)
   return !_soft_reference_policy->should_clear_reference(to_oop(reference), clock);
 }
 
-bool ZReferenceProcessor::should_discover(zaddress reference, ReferenceType type, oop referent) const {
+bool ZReferenceProcessor::should_discover(zaddress reference, ReferenceType type) const {
+  volatile zpointer* const referent_addr = reference_referent_addr(reference);
+  const oop referent = to_oop(ZBarrier::load_barrier_on_oop_field(referent_addr));
+
   if (is_inactive(reference, referent, type)) {
     return false;
   }
@@ -280,7 +280,7 @@ bool ZReferenceProcessor::try_make_inactive_fast(const ZWeakRefData& data) {
   }
 }
 
-void ZReferenceProcessor::discover(zaddress reference, ReferenceType type, zaddress referent) {
+void ZReferenceProcessor::discover(zaddress reference, ReferenceType type) {
   log_trace(gc, ref)("Discovered Reference: " PTR_FORMAT " (%s)", untype(reference), reference_type_name(type));
 
   // Update statistics
@@ -330,16 +330,12 @@ bool ZReferenceProcessor::discover_reference(oop reference_obj, ReferenceType ty
     return false;
   }
 
-  volatile zpointer* const referent_addr = reference_referent_addr(reference);
-  const zaddress ref_raw_addr = ZBarrier::load_barrier_on_oop_field(referent_addr);
-  const oop referent = to_oop(ref_raw_addr);
-
-  if (!should_discover(reference, type, referent)) {
+  if (!should_discover(reference, type)) {
     // Not discovered
     return false;
   }
 
-  discover(reference, type, ref_raw_addr);
+  discover(reference, type);
 
   // Discovered
   return true;
@@ -381,14 +377,9 @@ void ZReferenceProcessor::process_worker_discovered_list(zaddress discovered_lis
         log_trace(gc, ref)("Enqueued Reference: " PTR_FORMAT " (%s)", untype(reference), reference_type_name(type));
 
         // Update statistics
-        if (type == REF_WEAK && !has_reference_queue(reference)) {
-          _cleared_weak_refs_without_queue_count.get()++;
-        }
-        else {
-          _enqueued_count.get()[type]++;
-          
-          list_append(keep_head, keep_tail, reference);
-        }
+        _enqueued_count.get()[type]++;
+        
+        list_append(keep_head, keep_tail, reference);
       } else {
         // Drop reference
         log_trace(gc, ref)("Dropped Reference: " PTR_FORMAT " (%s)", untype(reference), reference_type_name(type));

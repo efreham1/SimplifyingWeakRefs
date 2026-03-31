@@ -51,8 +51,8 @@ private:
   ZPerWorker<size_t>        _cleared_weak_refs_without_queue_count;
   ZContended<zaddress>      _pending_list;
   zaddress                  _pending_list_tail;
-  ZPerWorker<ZWeakRefArray> _discovered_all_refs_arr;
-  ZPerWorker<bool>          _all_refs_array_empty;
+  ZPerWorker<ZWeakRefArray> _discovered_array;
+  ZPerWorker<bool>          _discovered_array_empty;
   OopHandle                 _null_queue_handle;
 
   bool is_inactive(zaddress reference, oop referent, ReferenceType type) const;

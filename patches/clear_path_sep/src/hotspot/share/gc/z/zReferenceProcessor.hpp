@@ -64,11 +64,11 @@ private:
   bool is_strongly_live(oop referent) const;
   bool is_softly_live(zaddress reference, ReferenceType type) const;
 
-  bool should_discover(zaddress reference, ReferenceType type, oop referent) const;
+  bool should_discover(zaddress reference, ReferenceType type) const;
   bool try_make_inactive(zaddress reference, ReferenceType type) const;
   bool try_make_inactive_fast(const ZWeakRefData& data);
 
-  void discover(zaddress reference, ReferenceType type, zaddress referent);
+  void discover(zaddress reference, ReferenceType type);
   
   void verify_empty() const;
 

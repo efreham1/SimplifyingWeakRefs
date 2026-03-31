@@ -32,8 +32,6 @@ class ConcurrentGCTimer;
 class ReferencePolicy;
 class ZWorkers;
 
-
-
 class ZReferenceProcessor : public ReferenceDiscoverer {
   friend class ZReferenceProcessorTask;
 
@@ -41,29 +39,29 @@ private:
   static const size_t ReferenceTypeCount = REF_PHANTOM + 1;
   typedef size_t Counters[ReferenceTypeCount];
 
-  ZWorkers* const             _workers;
-  ReferencePolicy*            _soft_reference_policy;
-  bool                        _uses_clear_all_soft_reference_policy;
-  ZPerWorker<Counters>        _encountered_count;
-  ZPerWorker<Counters>        _discovered_count;
-  ZPerWorker<Counters>        _enqueued_count;
-  ZPerWorker<size_t>          _encountered_weak_refs_without_queue_count;
-  ZPerWorker<size_t>          _discovered_weak_refs_without_queue_count;
-  ZPerWorker<size_t>          _cleared_weak_refs_without_queue_count;
-  ZPerWorker<zaddress>        _discovered_list;
-  ZContended<zaddress>        _pending_list;
-  zaddress                    _pending_list_tail;
-  ZPerWorker<zaddress>        _discovered_weak_refs_without_queue_ll;
-  OopHandle                   _null_queue_handle;
+  ZWorkers* const      _workers;
+  ReferencePolicy*     _soft_reference_policy;
+  bool                 _uses_clear_all_soft_reference_policy;
+  ZPerWorker<Counters> _encountered_count;
+  ZPerWorker<Counters> _discovered_count;
+  ZPerWorker<Counters> _enqueued_count;
+  ZPerWorker<size_t>   _encountered_weak_refs_without_queue_count;
+  ZPerWorker<size_t>   _discovered_weak_refs_without_queue_count;
+  ZPerWorker<size_t>   _cleared_weak_refs_without_queue_count;
+  ZPerWorker<zaddress> _discovered_list;
+  ZContended<zaddress> _pending_list;
+  zaddress             _pending_list_tail;
+  ZPerWorker<zaddress> _discovered_weak_refs_without_queue_ll;
+  OopHandle            _null_queue_handle;
 
   bool is_inactive(zaddress reference, oop referent, ReferenceType type) const;
   bool is_strongly_live(oop referent) const;
   bool is_softly_live(zaddress reference, ReferenceType type) const;
 
-  bool should_discover(zaddress reference, ReferenceType type, oop referent) const;
+  bool should_discover(zaddress reference, ReferenceType type) const;
   bool try_make_inactive(zaddress reference, ReferenceType type) const;
 
-  void discover(zaddress reference, ReferenceType type, zaddress referent);
+  void discover(zaddress reference, ReferenceType type);
   
   void verify_empty() const;
 
@@ -80,7 +78,6 @@ private:
 
 public:
   ZReferenceProcessor(ZWorkers* workers);
-
   
   void set_soft_reference_policy(bool clear_all_soft_references);
   bool uses_clear_all_soft_reference_policy() const;
