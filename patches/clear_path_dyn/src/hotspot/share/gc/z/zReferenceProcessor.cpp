@@ -269,7 +269,7 @@ bool ZReferenceProcessor::try_make_inactive_fast(const ZWeakRefData& data) {
 
   ZPage* const page = ZHeap::heap()->page(referent_addr);
   
-  else if (!page->is_object_strongly_live(referent_addr) && page->is_old()) {
+  if (!page->is_object_strongly_live(referent_addr) && page->is_old()) {
     *data.referent_field_addr = color_null();
     return true;
   } else {
