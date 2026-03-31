@@ -70,12 +70,51 @@
 \usepackage{listings}
 \usepackage{xcolor}
 \usepackage{float}
+\usepackage{subcaption}
 
 % Define listing as a float type
 \floatstyle{plain}
 \newfloat{listing}{htbp}{lol}
 \floatname{listing}{Listing}
 \newcommand{\listoflistings}{\listof{listing}{List of Listings}}
+
+% Number listings per chapter (e.g. Listing 3.1) like figures and tables
+\makeatletter
+\@addtoreset{listing}{chapter}
+\makeatother
+\renewcommand{\thelisting}{\thechapter.\arabic{listing}}
+
+% Add "Listing" prefix to List of Listings entries, fix figure/table spacing
+\makeatletter
+\newcommand*\listingnumberline[1]{\hb@xt@ \@tempdima {Listing~#1:\hfil}}
+
+% Redefine \listoflistings to bypass \listof (which resets \l@listing)
+\renewcommand{\listoflistings}{%
+	\chapter*{List of Listings}%
+	\def\l@listing##1##2{%
+		\let\numberline\listingnumberline%
+		\customtocline{##1}{##2}{\z@}{6.5em}{0}%
+		\renewcommand{\numberline}{\stdnumberline}%
+	}%
+	\begingroup\setlength{\parskip}{\z@}%
+		\@starttoc{lol}%
+	\endgroup%
+}
+
+% Widen figure number box so "Figure X.X:" has space before the caption
+\renewcommand*\l@figure[2]{%
+	\let\numberline\figurenumberline%
+	\customtocline{#1}{#2}{\z@}{5.5em}{0}%
+	\renewcommand{\numberline}{\stdnumberline}%
+}
+
+% Remove extra \addvspace from table entries
+\renewcommand*\l@table[2]{%
+	\let\numberline\tablenumberline%
+	\customtocline{#1}{#2}{\z@}{5em}{0}%
+	\renewcommand{\numberline}{\stdnumberline}%
+}
+\makeatother
 
 % Configure listings for Java code
 \lstset{
@@ -221,7 +260,7 @@
         \tableofcontents
     \endgroup
     
-    % Lists of tables and figures
+    % Lists of tables, figures, and listings
     \listoftables
     \listoffigures
 	\listoflistings

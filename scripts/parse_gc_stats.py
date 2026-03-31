@@ -315,6 +315,7 @@ def plot_metric_boxplots(variants_all_metrics, variants, metric_names, run_id=1,
 
         ax.set_title(metric_name, fontsize=12, fontweight='bold')
         ax.set_ylabel(f"Value ({units})" if units else "Value", fontsize=10)
+        ax.set_ylim(bottom=0)
         ax.tick_params(axis='x', labelsize=9, rotation=15)
         ax.grid(True, alpha=0.3, axis='y')
 
@@ -667,7 +668,8 @@ def aggregate_gc_metrics(file_list):
 def plot_continuous_monitoring_multi(variants_continuous, run_id=1, benchmark_mode_label="multi"):
     """Plot mean RSS, GC-auxiliary, and heap usage over time for N variant configs.
 
-    Each variant is drawn as a distinct colour. Shaded bands show ±1 std dev.
+    Each memory metric is saved as a separate PDF.  Every variant is drawn as a
+    distinct colour with shaded ±1 std-dev bands.
     """
     Path('images').mkdir(parents=True, exist_ok=True)
 
@@ -690,60 +692,64 @@ def plot_continuous_monitoring_multi(variants_continuous, run_id=1, benchmark_mo
     variant_list = list(variants_continuous.keys())
     colors = [plt.cm.tab10(i / max(len(variant_list) - 1, 1)) for i in range(len(variant_list))]
 
-    fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(14, 12), sharex=True)
+    # Define the three memory metrics to plot individually
+    memory_metrics = [
+        {
+            "key": "rss",
+            "value_key": "rss_kb",
+            "std_key": "rss_std_kb",
+            "ylabel": "Total Process RSS (MB)",
+            "title": "Total Process Memory (Mean \u00b1 Std Dev)",
+            "safe_name": "rss",
+        },
+        {
+            "key": "gc",
+            "value_key": "gc_committed_kb",
+            "std_key": "gc_std_kb",
+            "ylabel": "GC Auxiliary Memory (MB)",
+            "title": "GC Auxiliary Memory (Mean \u00b1 Std Dev)",
+            "safe_name": "gc_auxiliary",
+        },
+        {
+            "key": "heap",
+            "value_key": "heap_kb",
+            "std_key": "heap_std_kb",
+            "ylabel": "Java Heap (MB)",
+            "title": "Java Heap Usage (Mean \u00b1 Std Dev)",
+            "safe_name": "java_heap",
+        },
+    ]
 
-    for variant, color in zip(variant_list, colors):
-        data = variants_continuous[variant]
-        if not data:
-            continue
-        label = DISPLAY_NAMES.get(variant, variant)
-        times = [(d['timestamp_ms'] - data[0]['timestamp_ms']) / 1000.0 for d in data]
-        rss   = [d['rss_kb'] / 1024.0 for d in data]
-        rss_s = [d.get('rss_std_kb', 0) / 1024.0 for d in data]
-        gc    = [d['gc_committed_kb'] / 1024.0 for d in data]
-        gc_s  = [d.get('gc_std_kb', 0) / 1024.0 for d in data]
-        heap  = [d.get('heap_kb', 0) / 1024.0 for d in data]
-        heap_s = [d.get('heap_std_kb', 0) / 1024.0 for d in data]
+    for mm in memory_metrics:
+        fig, ax = plt.subplots(figsize=(10, 5))
 
-        ax1.plot(times, rss, linewidth=1.5, label=label, color=color, alpha=0.85)
-        ax1.fill_between(times, [r - s for r, s in zip(rss, rss_s)],
-                         [r + s for r, s in zip(rss, rss_s)], color=color, alpha=0.15, linewidth=0)
+        for variant, color in zip(variant_list, colors):
+            data = variants_continuous[variant]
+            if not data:
+                continue
+            label = DISPLAY_NAMES.get(variant, variant)
+            times = [(d['timestamp_ms'] - data[0]['timestamp_ms']) / 1000.0 for d in data]
+            values = [d.get(mm["value_key"], 0) / 1024.0 for d in data]
+            stds = [d.get(mm["std_key"], 0) / 1024.0 for d in data]
 
-        ax2.plot(times, gc, linewidth=1.5, label=label, color=color, alpha=0.85)
-        ax2.fill_between(times, [g - s for g, s in zip(gc, gc_s)],
-                         [g + s for g, s in zip(gc, gc_s)], color=color, alpha=0.15, linewidth=0)
+            ax.plot(times, values, linewidth=1.5, label=label, color=color, alpha=0.85)
+            ax.fill_between(times,
+                            [v - s for v, s in zip(values, stds)],
+                            [v + s for v, s in zip(values, stds)],
+                            color=color, alpha=0.15, linewidth=0)
 
-        ax3.plot(times, heap, linewidth=1.5, label=label, color=color, alpha=0.85)
-        ax3.fill_between(times, [h - s for h, s in zip(heap, heap_s)],
-                         [h + s for h, s in zip(heap, heap_s)], color=color, alpha=0.15, linewidth=0)
+        ax.set_xlabel('Time (seconds)', fontsize=12)
+        ax.set_ylabel(mm["ylabel"], fontsize=12)
+        ax.set_ylim(bottom=0)
+        ax.set_title(mm["title"], fontsize=13, fontweight='bold')
+        ax.legend(fontsize=10)
+        ax.grid(True, alpha=0.3)
 
-    ax1.set_ylabel('Total Process RSS (MB)', fontsize=12)
-    ax1.set_title('Total Process Memory (Mean \u00b1 Std Dev)', fontsize=13, fontweight='bold')
-    ax1.legend(fontsize=10)
-    ax1.grid(True, alpha=0.3)
-
-    ax2.set_ylabel('GC Auxiliary Memory (MB)', fontsize=12)
-    ax2.set_title('GC Auxiliary Memory (Mean \u00b1 Std Dev)', fontsize=13, fontweight='bold')
-    ax2.legend(fontsize=10)
-    ax2.grid(True, alpha=0.3)
-
-    ax3.set_xlabel('Time (seconds)', fontsize=12)
-    ax3.set_ylabel('Java Heap (MB)', fontsize=12)
-    ax3.set_title('Java Heap Usage (Mean \u00b1 Std Dev)', fontsize=13, fontweight='bold')
-    ax3.legend(fontsize=10)
-    ax3.grid(True, alpha=0.3)
-
-    fig.suptitle(
-        f"Continuous Memory Usage ({benchmark_mode_label.capitalize()} Benchmark)",
-        fontsize=15,
-        fontweight='bold',
-        y=1.01,
-    )
-    plt.tight_layout(rect=[0, 0, 1, 0.98])
-    output_file = f'images/continuous_memory_{benchmark_mode_label}_{run_id}.pdf'
-    plt.savefig(output_file, bbox_inches='tight')
-    print(f"Continuous monitoring plot saved to: {output_file}")
-    plt.close()
+        plt.tight_layout()
+        output_file = f'images/memory_{mm["safe_name"]}_{benchmark_mode_label}_{run_id}.pdf'
+        plt.savefig(output_file, bbox_inches='tight')
+        print(f"  {output_file}")
+        plt.close()
 
 
 def main():
