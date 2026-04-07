@@ -9,13 +9,23 @@ set -euo pipefail
 #   ./scripts/swap_config.sh copy <variant>     # Apply variant patches to src/
 #   ./scripts/swap_config.sh restore             # Restore src/ from backup
 #
-# The backup is stored in .src_backup/ at the repo root. It is created
-# automatically on the first "copy" if it does not already exist.
+# The backup path is recorded under build/.swap_config_state/backup_path.
+# A temporary backup directory under .src_backup.* is created on the first
+# "copy" and removed by "restore".
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 PATCHES_DIR="${REPO_ROOT}/patches"
-SRC_BACKUP="${REPO_ROOT}/.src_backup"
+LOCK_FILE="${REPO_ROOT}/build/.build_configs.lock"
+SWAP_STATE_DIR="${REPO_ROOT}/build/.swap_config_state"
+BACKUP_PATH_FILE="${SWAP_STATE_DIR}/backup_path"
+
+mkdir -p "${REPO_ROOT}/build" "${SWAP_STATE_DIR}"
+exec 9>"${LOCK_FILE}"
+if ! flock -n 9; then
+  echo "Another src overlay operation is already active." >&2
+  exit 1
+fi
 
 usage() {
   echo "Usage:"
@@ -32,25 +42,54 @@ usage() {
   exit 1
 }
 
-backup_src() {
-  if [ -d "${SRC_BACKUP}" ]; then
-    echo "Backup already exists at ${SRC_BACKUP}, skipping backup."
+current_backup_dir() {
+  if [ ! -f "${BACKUP_PATH_FILE}" ]; then
     return 0
   fi
-  echo "Backing up src/ to ${SRC_BACKUP}"
-  cp -a "${REPO_ROOT}/src/." "${SRC_BACKUP}/"
+
+  cat "${BACKUP_PATH_FILE}"
+}
+
+backup_src() {
+  local backup_dir=""
+
+  backup_dir="$(current_backup_dir)"
+  if [ -n "${backup_dir}" ]; then
+    if [ -d "${backup_dir}" ]; then
+      echo "Backup already exists at ${backup_dir}, skipping backup."
+      return 0
+    fi
+
+    rm -f "${BACKUP_PATH_FILE}"
+  fi
+
+  backup_dir="$(mktemp -d "${REPO_ROOT}/.src_backup.XXXXXX")"
+  echo "Backing up src/ to ${backup_dir}"
+  cp -a "${REPO_ROOT}/src/." "${backup_dir}/"
+  printf '%s\n' "${backup_dir}" > "${BACKUP_PATH_FILE}"
 }
 
 restore_src() {
-  if [ ! -d "${SRC_BACKUP}" ]; then
-    echo "Error: No backup found at ${SRC_BACKUP}. Nothing to restore." >&2
+  local backup_dir=""
+  local restore_dir
+
+  backup_dir="$(current_backup_dir)"
+  if [ -z "${backup_dir}" ] || [ ! -d "${backup_dir}" ]; then
+    echo "Error: No backup found. Nothing to restore." >&2
     exit 1
   fi
-  echo "Restoring src/ from ${SRC_BACKUP}"
+
+  echo "Restoring src/ from ${backup_dir}"
+  restore_dir="$(mktemp -d "${REPO_ROOT}/.src_restore.XXXXXX")"
+  if ! cp -a "${backup_dir}/." "${restore_dir}/"; then
+    rm -rf "${restore_dir}"
+    exit 1
+  fi
+
   rm -rf "${REPO_ROOT}/src"
-  mkdir -p "${REPO_ROOT}/src"
-  cp -a "${SRC_BACKUP}/." "${REPO_ROOT}/src/"
-  rm -rf "${SRC_BACKUP}"
+  mv "${restore_dir}" "${REPO_ROOT}/src"
+  rm -rf "${backup_dir}"
+  rm -f "${BACKUP_PATH_FILE}"
   echo "Restore complete. Backup removed."
 }
 
@@ -69,7 +108,7 @@ install_variant_files() {
       echo "Error: weak_fields patch directory not found: ${variant_dir}" >&2
       return 1
     fi
-    cp -r "${variant_dir}/." "${REPO_ROOT}/src/"
+    cp -a "${variant_dir}/." "${REPO_ROOT}/src/"
     return 0
   fi
 
@@ -79,7 +118,7 @@ install_variant_files() {
       echo "Error: base patch directory not found: ${base_dir}" >&2
       return 1
     fi
-    cp -r "${base_dir}/." "${REPO_ROOT}/src/"
+    cp -a "${base_dir}/." "${REPO_ROOT}/src/"
   fi
 
   # Apply variant-specific patches on top
@@ -87,7 +126,7 @@ install_variant_files() {
     echo "Error: variant patch directory not found: ${variant_dir}" >&2
     return 1
   fi
-  cp -r "${variant_dir}/." "${REPO_ROOT}/src/"
+  cp -a "${variant_dir}/." "${REPO_ROOT}/src/"
 }
 
 # --- Main ---

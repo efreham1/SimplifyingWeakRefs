@@ -11,6 +11,7 @@ set -e
 # Default values
 JAVA_BIN="./build/linux-x86_64-server-release/jdk/bin/java"
 JCMD_BIN="./build/linux-x86_64-server-release/jdk/bin/jcmd"
+VARIANT_IMAGE_ROOT="./build/variant-images"
 MULTI_JVM_OPTS="${MULTI_JVM_OPTS:--Xms8g -Xmx8g -XX:+UseZGC -Xlog:gc+stats,gc+ref -XX:InitialTenuringThreshold=1 -XX:MaxTenuringThreshold=1 -XX:ZCollectionIntervalMajor=0.5 -XX:+ZCollectionIntervalOnly -XX:NativeMemoryTracking=summary}"
 SINGLE_JVM_OPTS="${SINGLE_JVM_OPTS:--Xms7g -Xmx7g -XX:+UseZGC -Xlog:gc+stats,gc+ref -XX:InitialTenuringThreshold=1 -XX:MaxTenuringThreshold=1 -XX:NativeMemoryTracking=summary}"
 # Available benchmarks:
@@ -25,6 +26,18 @@ COOLDOWN_SECONDS="${COOLDOWN_SECONDS:-10}"
 WARMUP_ITERATIONS="${WARMUP_ITERATIONS:-1}"
 MONITOR_SCRIPT="./scripts/monitor_memory.sh"
 RUN_ID=1  # Default ID for filenames
+
+# Ref-proc variants are built into per-variant image snapshots by build_configs.sh.
+variants=(
+    "none"
+    "clear_path_only"
+    "sep_only"
+    "dyn_only"
+    "clear_path_sep"
+    "clear_path_dyn"
+    "sep_dyn"
+    "all"
+)
 
 # Colors for output
 RED='\033[0;31m'
@@ -46,6 +59,11 @@ print_header() {
 print_step() { echo -e "${YELLOW}▶ $1${NC}"; }
 print_success() { echo -e "${GREEN}✓ $1${NC}"; }
 print_warning() { echo -e "${YELLOW}⚠ $1${NC}"; }
+
+variant_build_dir() {
+    local variant=$1
+    printf '%s/%s-linux-x86_64-server-release\n' "$VARIANT_IMAGE_ROOT" "$variant"
+}
 
 # Parse command line arguments
 while [ $# -gt 0 ]; do
@@ -233,7 +251,7 @@ if [ "$WARMUP_ITERATIONS" -gt 0 ]; then
     echo ""
     for ((warmup=1; warmup<=WARMUP_ITERATIONS; warmup++)); do
         for variant in "${variants[@]}"; do
-            variant_build_dir="./build/${variant}-linux-x86_64-server-release"
+            variant_build_dir="$(variant_build_dir "$variant")"
             variant_java="$variant_build_dir/jdk/bin/java"
             variant_jcmd="$variant_build_dir/jdk/bin/jcmd"
 
@@ -255,7 +273,7 @@ if [ "$WARMUP_ITERATIONS" -gt 0 ]; then
         # Warm-up for weak_fields
         if [ -n "$WEAK_FIELDS_BENCHMARK_CLASS" ]; then
             variant="weak_fields"
-            variant_build_dir="./build/${variant}-linux-x86_64-server-release"
+            variant_build_dir="$(variant_build_dir "$variant")"
             variant_java="$variant_build_dir/jdk/bin/java"
             variant_jcmd="$variant_build_dir/jdk/bin/jcmd"
 
@@ -287,22 +305,10 @@ fi
 print_step "Running $OUTER_ITERATIONS measured iteration(s) per variant"
 echo ""
 
-# Define the variants corresponding to builds created by scripts/build_configs.sh
-variants=(
-    "none"
-    "clear_path_only"
-    "sep_only"
-    "dyn_only"
-    "clear_path_sep"
-    "clear_path_dyn"
-    "sep_dyn"
-    "all"
-)
-
 overall_status=0
 for ((run=1; run<=OUTER_ITERATIONS; run++)); do
     for variant in "${variants[@]}"; do
-        variant_build_dir="./build/${variant}-linux-x86_64-server-release"
+        variant_build_dir="$(variant_build_dir "$variant")"
         variant_java="$variant_build_dir/jdk/bin/java"
         variant_jcmd="$variant_build_dir/jdk/bin/jcmd"
 
@@ -327,7 +333,7 @@ for ((run=1; run<=OUTER_ITERATIONS; run++)); do
     # Weak-fields configuration: run with the dedicated "weak_fields" build variant.
     if [ -n "$WEAK_FIELDS_BENCHMARK_CLASS" ]; then
         variant="weak_fields"
-        variant_build_dir="./build/${variant}-linux-x86_64-server-release"
+        variant_build_dir="$(variant_build_dir "$variant")"
         variant_java="$variant_build_dir/jdk/bin/java"
         variant_jcmd="$variant_build_dir/jdk/bin/jcmd"
 
@@ -365,6 +371,7 @@ echo ""
 echo -e "${GREEN}Output Summary:${NC}"
 echo "  • Benchmark logs:     output/run_${BENCHMARK_NAME}_<variant>_run*_${RUN_ID}.log"
 echo "  • Memory monitoring:  output/monitor_${BENCHMARK_NAME}_<variant>_run*_${RUN_ID}.csv"
+echo "  • Variant images:     ${VARIANT_IMAGE_ROOT}/<variant>-linux-x86_64-server-release"
 if [ -n "$WEAK_FIELDS_BENCHMARK_NAME" ]; then
     echo "  • Weak-fields config: output/run_${WEAK_FIELDS_BENCHMARK_NAME}_weak_fields_run*_${RUN_ID}.log"
     echo "                        output/monitor_${WEAK_FIELDS_BENCHMARK_NAME}_weak_fields_run*_${RUN_ID}.csv"

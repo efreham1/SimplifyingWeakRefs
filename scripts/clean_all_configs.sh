@@ -2,48 +2,61 @@
 set -euo pipefail
 
 # clean_all_configs.sh
-# Runs `make clean` for all known build configurations.
-#
-# Priority order for config discovery:
-# 1) scripts/variants.conf (same source used by create/build scripts)
-# 2) Any existing build config with build/<conf>/spec.gmk
+# Cleans the configured build directories used by the variant workflow and
+# removes variant image snapshots plus cached HotSpot artefacts.
 #
 # Usage:
 #   ./scripts/clean_all_configs.sh
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-MAPPING_FILE="${SCRIPT_DIR}/variants.conf"
+. "${SCRIPT_DIR}/variant_common.sh"
+
+clean_conf_build_output() {
+  local conf="$1"
+  local spec_file="${REPO_ROOT}/build/${conf}/spec.gmk"
+
+  if [ ! -f "${spec_file}" ]; then
+    return 0
+  fi
+
+  echo "=== Cleaning: ${conf} ==="
+  make CONF="${conf}" clean
+}
+
+remove_obsolete_per_variant_build_dirs() {
+  local level
+  local variant
+  local obsolete_dir
+
+  for level in release fastdebug; do
+    for variant in "${VARIANT_LIST[@]}"; do
+      if [ "${variant}" = "weak_fields" ]; then
+        continue
+      fi
+
+      obsolete_dir="${REPO_ROOT}/build/$(variant_image_name "${variant}" "${level}")"
+      if [ ! -f "${obsolete_dir}/spec.gmk" ]; then
+        continue
+      fi
+
+      echo "Removing obsolete build directory: ${obsolete_dir#${REPO_ROOT}/}"
+      rm -rf "${obsolete_dir}"
+    done
+  done
+}
 
 cd "${REPO_ROOT}"
 
-declare -a confs=()
+clean_conf_build_output "$(shared_conf_name "release")"
+clean_conf_build_output "$(shared_conf_name "fastdebug")"
+clean_conf_build_output "$(dedicated_conf_name "weak_fields" "release")"
+clean_conf_build_output "$(dedicated_conf_name "weak_fields" "fastdebug")"
 
-if [[ -f "${MAPPING_FILE}" ]]; then
-  while IFS='|' read -r conf _flags; do
-    case "${conf}" in
-      \#*|"") continue ;;
-    esac
-    confs+=("${conf}")
-  done < <(grep -vE '^\s*#|^\s*$' "${MAPPING_FILE}")
-fi
+rm -rf "${VARIANT_IMAGES_ROOT}"
+rm -rf "${VARIANT_STATE_ROOT}"
+rm -rf "$(shared_work_state_dir "release")"
+rm -rf "$(shared_work_state_dir "fastdebug")"
 
-if [[ ${#confs[@]} -eq 0 ]]; then
-  while IFS= read -r spec; do
-    confs+=("$(basename "$(dirname "${spec}")")")
-  done < <(find build -mindepth 2 -maxdepth 2 -type f -name spec.gmk 2>/dev/null | sort)
-fi
+remove_obsolete_per_variant_build_dirs
 
-if [[ ${#confs[@]} -eq 0 ]]; then
-  echo "No configurations found to clean."
-  exit 1
-fi
-
-echo "Cleaning ${#confs[@]} configuration(s)..."
-for conf in "${confs[@]}"; do
-  echo "=== Cleaning: ${conf} ==="
-  make CONF="${conf}" clean
-  echo "Done: ${conf}"
-done
-
-echo "All configurations cleaned."
+echo "All variant build outputs cleaned."

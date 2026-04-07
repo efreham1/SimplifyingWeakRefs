@@ -321,14 +321,14 @@ bool ZReferenceProcessor::discover_weak_field(volatile zpointer* field_addr) {
     return false;
   }
 
+  const zpointer field_value = ZBarrier::load_atomic(field_addr);
+
   if (!should_discover_weak_field(field_value)) {
     // Not discovered
     return false;
   }
 
   // Discovered
-  const zpointer field_value = ZBarrier::load_atomic(field_addr);
-
   log_trace(gc, ref)("Discovered Weak Reference Field: " PTR_FORMAT, p2i(field_addr));
 
   // Update statistics
