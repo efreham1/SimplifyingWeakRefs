@@ -49,7 +49,7 @@ bool discover_reference(oop ref_obj, ReferenceType type) {
 
 \section{Replacing Intrusive Linked List with Dynamic Array}
 \label{sec:replacing-intrusive-linked-list}
-When processing the discovered references, ZGC iterates over the discovered list. This list is, as described in \cref{subsec:discovery}, implemented as an intrusive linked list of the discovered references~\cite{openjdk-zreferenceprocessor-cpp}. This iteration over a linked list is inefficient since it has poor cache locality~\cite{chilimbi99}. Because of this, the intrusive linked list was replaced with a dynamic array for the discovered list for weak references without a \texttt{ReferenceQueue}. The intended effect of this optimisation is to reduce the amount of time spent loading the next reference to process and thereby allow for more efficient processing of the discovered references through better cache locality.
+When processing the discovered references, ZGC iterates over the discovered list. This list is, as described in \cref{subsec:discovery}, implemented as an intrusive linked list of the discovered references~\cite{openjdk-zreferenceprocessor-cpp}. This iteration over a linked list is inefficient since it has poor cache locality~\cite{drepper07-memory}. Because of this, the intrusive linked list was replaced with a dynamic array for the discovered list for weak references without a \texttt{ReferenceQueue}. The intended effect of this optimisation is to reduce the amount of time spent loading the next reference to process and thereby allow for more efficient processing of the discovered references through better cache locality.
 
 \subsection{Implementation of Dynamic Array for Discovered References}
 \label{subsec:dynamic-array-impl}
@@ -58,7 +58,7 @@ The implemented dynamic array, called \texttt{ZWeakRefArray}, stores discovered 
 
 Each GC worker thread maintains its own \texttt{ZWeakRefArray} instance to avoid contention. During discovery, when a reference should be added to a discovery list, its data is appended to the worker's array instead of being appended to a linked list. The reference's \texttt{discovered} field is still set (to a self-referencing pointer) to mark the reference as discovered, preventing duplicate discovery.
 
-During processing, the array is iterated sequentially using index-based access. Because the elements are stored contiguously in memory, this iteration improves cache line utilisation compared to following pointers scattered across the heap~\cite{chilimbi99}.
+During processing, the array is iterated sequentially using index-based access. Because the elements are stored contiguously in memory, this iteration improves cache line utilisation compared to following pointers scattered across the heap~\cite{drepper07-memory}.
 
 When using both dynamic arrays and separate discovered lists, only the discovered list for weak references without a \texttt{ReferenceQueue} is backed by a \texttt{ZWeakRefArray}, while the regular discovered list continues to use the linked list.
 

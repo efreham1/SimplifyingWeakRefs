@@ -1,51 +1,40 @@
-\chapter{Changed Source Code}
+\chapter{Source Code}
 \label{app:changed-source-code}
 
-This appendix lists the source files changed to implement the weak-reference processing optimisations evaluated in this thesis. The code shown is from the \texttt{all} configuration variant, which combines all three optimisations (separate discovered lists, dynamic arrays, and the optimised clear path). Each configuration variant is stored under \texttt{patches/<variant>/src/} and overlaid onto the upstream OpenJDK source tree before building.
+This appendix provides the key source code for the implemented optimisations. The code for the three core optimisations is from the combined (\texttt{all}) configuration variant, which includes all three optimisations. The code for the weak-field mechanism is from the \texttt{weak\_fields} configuration variant. Complete sources for all variants are available in the \texttt{patches/} directory of the project repository.
 
-Files changed in the \texttt{all} variant:
-\begin{itemize}
-	\item \texttt{patches/all/src/hotspot/share/gc/z/zWeakRefArray.hpp}
-	\item \texttt{patches/all/src/hotspot/share/gc/z/zReferenceProcessor.hpp}
-	\item \texttt{patches/all/src/hotspot/share/gc/z/zReferenceProcessor.cpp}
-\end{itemize}
-
-Common files shared by most ref-proc variants (applied via \texttt{patches/base/}):
-\begin{itemize}
-	\item \texttt{patches/base/src/hotspot/share/gc/shared/collectedHeap.hpp}
-	\item \texttt{patches/base/src/hotspot/share/gc/z/zCollectedHeap.cpp}
-	\item \texttt{patches/base/src/hotspot/share/gc/z/zCollectedHeap.hpp}
-	\item \texttt{patches/base/src/hotspot/share/gc/z/zGeneration.hpp}
-	\item \texttt{patches/base/src/hotspot/share/gc/z/zGeneration.inline.hpp}
-	\item \texttt{patches/base/src/hotspot/share/gc/z/zStat.hpp}
-	\item \texttt{patches/base/src/hotspot/share/gc/z/zStat.cpp}
-	\item \texttt{patches/base/src/hotspot/share/runtime/threads.cpp}
-\end{itemize}
+\lstset{basicstyle=\ttfamily\footnotesize,columns=flexible}
 
 \section{Dynamic-array Data Structure}
 \label{app:dynamic-array-source}
 
-\noindent\textbf{File:} \texttt{patches/all/src/hotspot/share/gc/z/zWeakRefArray.hpp}
+\noindent\textbf{File:} \texttt{zWeakRefArray.hpp}
 
 \lstinputlisting[
 	nolol,
 	language=C++
 ]{../patches/all/src/hotspot/share/gc/z/zWeakRefArray.hpp}
 
-\section{Reference Processor Interface}
-\label{app:refproc-interface-source}
+\section{Reference Processor}
+\label{app:refproc-impl-source}
 
-\noindent\textbf{File:} \texttt{patches/all/src/hotspot/share/gc/z/zReferenceProcessor.hpp}
+\subsection{Interface}
+\label{app:refproc-interface}
+
+\noindent\textbf{File:} \texttt{zReferenceProcessor.hpp}
 
 \lstinputlisting[
 	nolol,
 	language=C++
 ]{../patches/all/src/hotspot/share/gc/z/zReferenceProcessor.hpp}
 
-\section{Reference Processor Implementation (Excerpts)}
-\label{app:refproc-impl-source}
+\subsection{Implementation Excerpts}
+\label{app:refproc-excerpts}
 
-\noindent\textbf{Excerpt:} \texttt{zReferenceProcessor.cpp} (constructor and per-worker storage setup)
+The following excerpts from \texttt{zReferenceProcessor.cpp} show the constructor and per-worker storage setup, the discovery path with queue-less weak-reference routing, the processing paths, and the queue sentinel initialisation.
+
+\medskip
+\noindent\textbf{Constructor and per-worker storage:}
 
 \lstinputlisting[
 	nolol,
@@ -54,7 +43,7 @@ Common files shared by most ref-proc variants (applied via \texttt{patches/base/
 	lastline=170
 ]{../patches/all/src/hotspot/share/gc/z/zReferenceProcessor.cpp}
 
-\noindent\textbf{Excerpt:} \texttt{zReferenceProcessor.cpp} (discovery path with queue-less weak-reference routing)
+\noindent\textbf{Discovery path with queue-less routing:}
 
 \lstinputlisting[
 	nolol,
@@ -63,7 +52,7 @@ Common files shared by most ref-proc variants (applied via \texttt{patches/base/
 	lastline=370
 ]{../patches/all/src/hotspot/share/gc/z/zReferenceProcessor.cpp}
 
-\noindent\textbf{Excerpt:} \texttt{zReferenceProcessor.cpp} (processing paths for separate lists and dynamic-array variants)
+\noindent\textbf{Processing paths for separate discovered lists and dynamic arrays:}
 
 \lstinputlisting[
 	nolol,
@@ -72,7 +61,7 @@ Common files shared by most ref-proc variants (applied via \texttt{patches/base/
 	lastline=475
 ]{../patches/all/src/hotspot/share/gc/z/zReferenceProcessor.cpp}
 
-\noindent\textbf{Excerpt:} \texttt{zReferenceProcessor.cpp} (queue sentinel initialisation and queue checks)
+\noindent\textbf{Queue sentinel initialisation and queue checks:}
 
 \lstinputlisting[
 	nolol,
@@ -80,3 +69,82 @@ Common files shared by most ref-proc variants (applied via \texttt{patches/base/
 	firstline=680,
 	lastline=713
 ]{../patches/all/src/hotspot/share/gc/z/zReferenceProcessor.cpp}
+
+\section{Weak Fields}
+\label{app:weak-fields}
+
+\subsection{Annotation}
+\label{app:weak-fields-annotation}
+
+\noindent\textbf{File:} \texttt{java/lang/ref/weak.java}
+
+\lstinputlisting[
+	nolol,
+	language=Java
+]{../patches/weak_fields/src/java.base/share/classes/java/lang/ref/weak.java}
+
+\subsection{Data Structure}
+\label{app:weak-fields-array}
+
+\noindent\textbf{File:} \texttt{zWeakFieldArray.hpp}
+
+\lstinputlisting[
+	nolol,
+	language=C++
+]{../patches/weak_fields/src/hotspot/share/gc/z/zWeakFieldArray.hpp}
+
+\subsection{Reference Processor}
+\label{app:weak-fields-refproc}
+
+\noindent\textbf{File:} \texttt{zReferenceProcessor.hpp}
+
+\lstinputlisting[
+	nolol,
+	language=C++
+]{../patches/weak_fields/src/hotspot/share/gc/z/zReferenceProcessor.hpp}
+
+\medskip
+The following excerpts from \texttt{zReferenceProcessor.cpp} show the discovery filtering, the discovery function, and the processing function.
+
+\medskip
+\noindent\textbf{Discovery filtering:}
+
+\lstinputlisting[
+	nolol,
+	language=C++,
+	firstline=212,
+	lastline=226
+]{../patches/weak_fields/src/hotspot/share/gc/z/zReferenceProcessor.cpp}
+
+\noindent\textbf{Weak-field discovery:}
+
+\lstinputlisting[
+	nolol,
+	language=C++,
+	firstline=326,
+	lastline=360
+]{../patches/weak_fields/src/hotspot/share/gc/z/zReferenceProcessor.cpp}
+
+\noindent\textbf{Weak-field processing:}
+
+\lstinputlisting[
+	nolol,
+	language=C++,
+	firstline=393,
+	lastline=433
+]{../patches/weak_fields/src/hotspot/share/gc/z/zReferenceProcessor.cpp}
+
+\subsection{Marking Closure}
+\label{app:weak-fields-marking}
+
+The following excerpt from \texttt{zMark.cpp} shows how weak-annotated fields are detected and diverted to the weak-field discovery path during object marking.
+
+\medskip
+\noindent\textbf{Field annotation check and discovery diversion:}
+
+\lstinputlisting[
+	nolol,
+	language=C++,
+	firstline=297,
+	lastline=362
+]{../patches/weak_fields/src/hotspot/share/gc/z/zMark.cpp}

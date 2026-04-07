@@ -1,7 +1,7 @@
 \chapter{Background}
 \label{chap:background}
 
-The approaches investigated in this thesis, introduced in \cref{chap:introduction}, build on several concepts in the Java Virtual Machine's (JVM) garbage-collection architecture, particularly the Z Garbage Collector (ZGC), its reference-processing pipeline, and general garbage-collection principles. This chapter provides the background needed to understand their motivation and implementation.
+To answer the research questions posed in \cref{sec:research-questions}, it is necessary to understand key concepts of the Java Virtual Machine's (JVM) garbage collection mechanisms, the design and implementation of the Z Garbage Collector (ZGC), the Java reference types and their processing pipeline within ZGC, and general principles of garbage collection. This chapter provides an overview of these topics, which will serve as the foundation for the implementation and evaluation of the optimisations explored in this thesis.
 
 \section{Garbage Collection in the JVM}
 \label{sec:gc-overview}
@@ -151,7 +151,7 @@ ZGC achieves these goals through several key techniques:
 
 \paragraph{Coloured Pointers.} ZGC embeds metadata in the unused bits of 64-bit object pointers. These \emph{colour bits} encode information about the pointer's current state relative to the GC's phase, for example, whether the pointer has been remapped after relocation, or whether it points to a young or old generation object~\cite{jep333-zgc,openjdk-zaddress-hpp}. This allows the GC to reason about pointer states without loading the object header.
 
-\paragraph{Barriers.} ZGC uses barriers at every reference load or write. The barrier checks the colour bits of the loaded pointer and, if necessary, applies a fixup (e.g., remapping after relocation)~\cite{jep333-zgc,openjdk-zbarrier-cpp}. This is the mechanism that allows ZGC to perform most of its work concurrently with the application.
+\paragraph{Barriers.} ZGC uses barriers at every reference load or write. The barrier checks the colour bits of the loaded pointer and, if necessary, applies a fixup (e.g., remapping after relocation)~\cite{jep333-zgc,openjdk-zbarrier-cpp}. This is the mechanism that allows ZGC to perform most of its work concurrently with the application. Barriers are also used when modifying any coloured pointer to ensure that the GC can maintain consistency and correctness.
 
 \paragraph{Concurrent Phases.} A ZGC collection cycle interleaves short stop-the-world pauses (for root scanning and synchronisation) with concurrent phases (for marking, reference processing, and relocation)~\cite{jep333-zgc,openjdk-zreferenceprocessor-cpp}. The concurrent phases run alongside application threads, using barriers to maintain consistency.
 

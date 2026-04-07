@@ -3,10 +3,14 @@
 
 The implemented optimisations described in \cref{chap:design-and-implementation} were evaluated through two custom microbenchmarks designed to synthetically target the reference processing pipeline. The benchmarks were executed on a supercomputer cluster under controlled conditions, and the resulting GC timing statistics and memory usage metrics were collected to enable comparison between the baseline and optimised variants.
 
+\section{Modified Source Code}
+\label{sec:modified-source-code}
+Each optimisation variant is implemented as a separate set of modified source files stored under \texttt{patches/<variant>}. Modifications shared by most variants reside in \texttt{patches/base}. The \texttt{none} variant uses the unmodified upstream OpenJDK source and the \texttt{dyn\_only} and \texttt{weak\_fields} variants only applies their own patches without the base patch. 
+
 \section{Build Configuration}
 \label{sec:build-configurations}
 
-Each optimisation variant is implemented as a separate set of modified source files stored under \texttt{patches/<variant>/src/}. Modifications shared by most variants reside in \texttt{patches/base/src/}. The \texttt{none} variant uses the unmodified upstream OpenJDK source and the \texttt{dyn\_only} variant only applies its own patches without the base patch. A build script (\texttt{scripts/build\_configs.sh}) automates building all variants: for each variant, it restores the upstream source, applies the appropriate patches, and invokes the JDK build.
+A build script (\texttt{scripts/build\_configs.sh}) automates building all variants: for each variant, it restores the upstream source, applies the appropriate patches, and invokes the JDK build.
 
 Eight build configurations were created to evaluate all combinations of the three optimisations, as shown in \cref{tab:build-configs}. Each configuration produces a separate JDK build with its own binary, allowing direct comparison under identical benchmark conditions.
 

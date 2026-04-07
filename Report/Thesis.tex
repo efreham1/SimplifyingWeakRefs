@@ -187,6 +187,9 @@
 \Crefname{table}{Table}{Tables}
 \crefname{listing}{Listing}{Listings}
 \Crefname{listing}{Listing}{Listings}
+\newcounter{researchquestion}
+\crefname{researchquestion}{Research Question}{Research Questions}
+\Crefname{researchquestion}{Research Question}{Research Questions}
 
 % Numbering of headings down to the subsection level
 \numberingdepth{subsection}
@@ -225,7 +228,9 @@
     % Creates the front matter (title page(s), abstract, list of papers)
     % frontmatterCS = Comprehensive Summary (no half-title, good for Master's)
     % frontmatterMonograph = Monograph (includes half-title, typically for PhD)
-    \frontmatterCS 
+    \frontmatterCS
+    \setcounter{page}{1}  % Start Roman numbering at i after the title/abstract
+    \pagestyle{plain}     % Show Roman numerals from Acknowledgements onward
     
     % Dedication (optional)
     %\cleardoublepage
@@ -278,7 +283,6 @@
     \input{Conclusion}
 
 	
-	
 \backmatter
     % References
     % Using ieeetr style (modern, suitable for CS)
@@ -288,6 +292,9 @@
 	
 	% Appendices
 	\appendix
+	\setcounter{secnumdepth}{2}  % Re-enable section numbering after \backmatter
+	\renewcommand{\thesection}{\theappendix.\arabic{section}}
+	\renewcommand{\thesubsection}{\thesection.\arabic{subsection}}
 	\input{Appendices}
 
 \end{document}
