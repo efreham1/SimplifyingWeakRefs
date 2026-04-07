@@ -1,5 +1,4 @@
 import java.lang.ref.Reference;
-import java.lang.ref.ReferenceQueue;
 import java.lang.ref.WeakReference;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
@@ -27,10 +26,6 @@ public final class WeakRefMultiObjectBenchmark {
 
         WeakRefHolder(T referent) {
             this.referent = new WeakReference<>(referent);
-        }
-
-        WeakRefHolder(T referent, ReferenceQueue<? super T> queue) {
-            this.referent = new WeakReference<>(referent, queue);
         }
 
         T get() {
@@ -96,7 +91,6 @@ public final class WeakRefMultiObjectBenchmark {
 
         BigObject[] strongRefs = new BigObject[objectCount];
         WeakRefHolder<BigObject>[] weakRefs = new WeakRefHolder[objectCount];
-        ReferenceQueue<BigObject> queue = new ReferenceQueue<>();
         Random random = new Random(0x5eedcafeL + iter);
 
         System.out.println("Phase 1: Allocating references and objects...");
@@ -104,7 +98,6 @@ public final class WeakRefMultiObjectBenchmark {
 
         int[] strongOrder = shuffledIndices(objectCount, random);
         int[] weakOrder = shuffledIndices(objectCount, random);
-        int queuedRefCount = objectCount / 20;
 
         for (int i = 0; i < objectCount; i++) {
             int strongIdx = strongOrder[i];
@@ -113,11 +106,7 @@ public final class WeakRefMultiObjectBenchmark {
             strongRefs[strongIdx] = obj;
 
             int weakIdx = weakOrder[i];
-            if (i <= queuedRefCount) {
-                weakRefs[weakIdx] = new WeakRefHolder<>(obj, queue);
-            } else {
-                weakRefs[weakIdx] = new WeakRefHolder<>(obj);
-            }
+            weakRefs[weakIdx] = new WeakRefHolder<>(obj);
         }
 
         long allocDuration = System.nanoTime() - allocationStart;
@@ -163,12 +152,6 @@ public final class WeakRefMultiObjectBenchmark {
 
         int aliveWeakRefs = countAlive(weakRefs);
         System.out.printf("Final count of alive weak references: %d%n", aliveWeakRefs);
-
-        int queuedCount = 0;
-        while (queue.poll() != null) {
-            queuedCount++;
-        }
-        System.out.printf("References enqueued in ReferenceQueue: %d%n", queuedCount);
 
         for (i = 0; i < objectCount; i++) {
             if (strongRefs[i] != null) {
