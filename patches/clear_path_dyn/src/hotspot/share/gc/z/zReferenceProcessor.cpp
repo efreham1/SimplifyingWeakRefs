@@ -49,9 +49,11 @@
 static const ZStatSubPhase ZSubPhaseConcurrentReferencesProcess("Concurrent References Process", ZGenerationId::old);
 static const ZStatSubPhase ZSubPhaseConcurrentReferencesEnqueue("Concurrent References Enqueue", ZGenerationId::old);
 
+#ifdef ASSERT
 static ReferenceType reference_type(zaddress reference) {
   return InstanceKlass::cast(to_oop(reference)->klass())->reference_type();
 }
+#endif
 
 static const char* reference_type_name(ReferenceType type) {
   switch (type) {
@@ -92,9 +94,11 @@ static zpointer* reference_referent_addr_non_vol(zaddress reference) {
   return (zpointer*)java_lang_ref_Reference::referent_addr_raw(to_oop(reference));
 }
 
+#ifdef ASSERT
 static zaddress reference_discovered(zaddress reference) {
   return to_zaddress(java_lang_ref_Reference::discovered(to_oop(reference)));
 }
+#endif
 
 static void reference_set_discovered(zaddress reference, zaddress discovered) {
   java_lang_ref_Reference::set_discovered(to_oop(reference), to_oop(discovered));

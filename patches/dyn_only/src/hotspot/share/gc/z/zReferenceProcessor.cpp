@@ -75,9 +75,11 @@ static zpointer reference_referent(zaddress reference) {
   return ZBarrier::load_atomic(reference_referent_addr(reference));
 }
 
+#ifdef ASSERT
 static zaddress reference_discovered(zaddress reference) {
   return to_zaddress(java_lang_ref_Reference::discovered(to_oop(reference)));
 }
+#endif
 
 static void reference_set_discovered(zaddress reference, zaddress discovered) {
   java_lang_ref_Reference::set_discovered(to_oop(reference), to_oop(discovered));

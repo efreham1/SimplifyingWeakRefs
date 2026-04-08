@@ -4,8 +4,8 @@
 Three optimisations were implemented to address the inefficiencies in ZGC's processing of \texttt{WeakReference} objects without a \texttt{ReferenceQueue}. These optimisations are:
 \begin{itemize}
     \item Skipping the enqueue path for weak references without a \texttt{ReferenceQueue}, allowing them to be processed without being added to the pending list for the \texttt{ReferenceHandler} thread.
-    \item Replacing the intrusive linked list used for discovered references with a cache-friendly dynamic array for weak references without a \texttt{ReferenceQueue}.
-    \item Reducing the per-reference instruction cost during processing by introducing an optimised clear path that eliminates unnecessary operations for weak references without a \texttt{ReferenceQueue}.
+    \item Replacing the intrusive linked list used for discovered references with a dynamic array for weak references without a \texttt{ReferenceQueue}.
+    \item Optimising the clear path of references to eliminate unnecessary operations for weak references without a \texttt{ReferenceQueue}.
 \end{itemize}
 Furthermore, an exploratory implementation of weak fields was implemented to evaluate an alternative approach to expressing weak semantics that avoids the overhead of \texttt{WeakReference} objects entirely.
 
