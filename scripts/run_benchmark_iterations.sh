@@ -26,6 +26,7 @@ COOLDOWN_SECONDS="${COOLDOWN_SECONDS:-10}"
 WARMUP_ITERATIONS="${WARMUP_ITERATIONS:-1}"
 MONITOR_SCRIPT="./scripts/monitor_memory.sh"
 RUN_ID=1  # Default ID for filenames
+OUTPUT_ROOT="./output"
 
 # Ref-proc variants are built into per-variant image snapshots by build_configs.sh.
 variants=(
@@ -63,6 +64,26 @@ print_warning() { echo -e "${YELLOW}⚠ $1${NC}"; }
 variant_build_dir() {
     local variant=$1
     printf '%s/%s-linux-x86_64-server-release\n' "$VARIANT_IMAGE_ROOT" "$variant"
+}
+
+run_output_dir() {
+    local run_id=$1
+    printf '%s/id_%s\n' "$OUTPUT_ROOT" "$run_id"
+}
+
+run_logs_dir() {
+    local run_id=$1
+    printf '%s/logs\n' "$(run_output_dir "$run_id")"
+}
+
+run_memory_dir() {
+    local run_id=$1
+    printf '%s/memory\n' "$(run_output_dir "$run_id")"
+}
+
+ensure_run_output_dirs() {
+    local run_id=$1
+    mkdir -p "$(run_logs_dir "$run_id")" "$(run_memory_dir "$run_id")"
 }
 
 # Parse command line arguments
@@ -121,7 +142,7 @@ print_header "WEAKREF GC BENCHMARK"
 echo -e "${BOLD}Running:${NC} $OUTER_ITERATIONS runs × 3 iterations (+ $WARMUP_ITERATIONS warm-up)"
 echo -e "${BOLD}Benchmark:${NC} $BENCHMARK_CLASS"
 echo -e "${BOLD}Run ID:${NC} $RUN_ID"
-echo -e "${BOLD}Cooldown:${NC} ${COOLDOWN_SECONDS}s between GA configs"
+echo -e "${BOLD}Cooldown:${NC} ${COOLDOWN_SECONDS}s between variant runs"
 echo -e "${BOLD}Multi JVM opts:${NC} $MULTI_JVM_OPTS"
 echo -e "${BOLD}Single JVM opts:${NC} $SINGLE_JVM_OPTS"
 echo ""
@@ -134,27 +155,33 @@ cooldown_system() {
 }
 
 cleanup_old_results() {
-    print_step "Cleaning up old CSV and log files for Run ID $RUN_ID..."
-    
-    mkdir -p output
-    
-    # Remove old benchmark output files only for this run ID
-    rm -f output/run_*_run*_${RUN_ID}.log
-    rm -f output/monitor_*_run*_${RUN_ID}.csv
-    
-    print_success "Old results cleaned up for Run ID $RUN_ID"
+    print_step "Cleaning up existing CSV and log files for Run ID $RUN_ID..."
+
+    ensure_run_output_dirs "$RUN_ID"
+
+    # Remove benchmark output files only for this run ID.
+    rm -f "$(run_logs_dir "$RUN_ID")"/run_*_run*_"${RUN_ID}".log
+    rm -f "$(run_memory_dir "$RUN_ID")"/monitor_*_run*_"${RUN_ID}".csv
+
+    print_success "Existing results cleaned up for Run ID $RUN_ID"
 }
 
 run_single() {
     local label=$1           # variant label
     local run=$2             # run number
     local total_runs=$3      # total number of runs
+    local log_dir
+    local memory_dir
+
+    log_dir="$(run_logs_dir "$RUN_ID")"
+    memory_dir="$(run_memory_dir "$RUN_ID")"
+    mkdir -p "$log_dir" "$memory_dir"
 
     # Create separate log and monitor files for each run with run number tag and execution ID
-    local log_file="output/run_${BENCHMARK_NAME}_${label}_run${run}_${RUN_ID}.log"
-    local monitor_log="output/monitor_${BENCHMARK_NAME}_${label}_run${run}_${RUN_ID}.csv"
+    local log_file="${log_dir}/run_${BENCHMARK_NAME}_${label}_run${run}_${RUN_ID}.log"
+    local monitor_log="${memory_dir}/monitor_${BENCHMARK_NAME}_${label}_run${run}_${RUN_ID}.csv"
 
-    printf "${CYAN}▶${NC} Run %d/%d (GA %s) - Starting...${NC}\r" "$run" "$total_runs" "$label"
+    printf "${CYAN}▶${NC} Run %d/%d (Variant %s) - Starting...${NC}\r" "$run" "$total_runs" "$label"
     echo ""
     echo "  Logging to: $log_file"
     echo "  Memory monitoring to: $monitor_log"
@@ -169,7 +196,7 @@ run_single() {
     # Start Java process in background
     (
         echo ""
-        echo "=== RUN $run/$total_runs (GA $label) ==="
+        echo "=== RUN $run/$total_runs (Variant $label) ==="
         echo ""
         $JAVA_BIN $JAVA_OPTS $BENCHMARK_CLASS 2>&1
     ) >> "$log_file" 2>&1 &
@@ -190,7 +217,7 @@ run_single() {
     if [ -n "$java_pid" ] && kill -0 $java_pid 2>/dev/null; then
         $MONITOR_SCRIPT "$java_pid" "$monitor_log" "$MONITOR_INTERVAL" "$JCMD_BIN" "$log_file" &
         monitor_pid=$!
-        printf "${CYAN}▶${NC} Run %d/%d (GA %s) - Memory monitor started (PID: %s -> %s)\r" \
+        printf "${CYAN}▶${NC} Run %d/%d (Variant %s) - Memory monitor started (PID: %s -> %s)\r" \
             "$run" "$total_runs" "$label" "$java_pid" "$monitor_pid"
         sleep 0.5
     fi
@@ -207,10 +234,10 @@ run_single() {
         fi
         
         if [ -n "$last_iteration" ] && [ -n "$last_phase" ]; then
-            printf "${CYAN}▶${NC} Run %d/%d (GA %s) - Iteration %s, Phase %s    \r" \
+            printf "${CYAN}▶${NC} Run %d/%d (Variant %s) - Iteration %s, Phase %s    \r" \
                 "$run" "$total_runs" "$label" "$last_iteration" "$last_phase"
         elif [ -n "$last_iteration" ]; then
-            printf "${CYAN}▶${NC} Run %d/%d (GA %s) - Iteration %s          \r" \
+            printf "${CYAN}▶${NC} Run %d/%d (Variant %s) - Iteration %s          \r" \
                 "$run" "$total_runs" "$label" "$last_iteration"
         fi
         
@@ -228,11 +255,11 @@ run_single() {
     fi
     
     if [ $exit_code -eq 0 ]; then
-        printf "${GREEN}✓${NC} Run %d/%d (GA %s) - Completed successfully!          \n" \
+        printf "${GREEN}✓${NC} Run %d/%d (Variant %s) - Completed successfully!          \n" \
             "$run" "$total_runs" "$label"
         echo ""
     else
-        printf "${RED}✗${NC} Run %d/%d (GA %s) - Failed with exit code %d\n" \
+        printf "${RED}✗${NC} Run %d/%d (Variant %s) - Failed with exit code %d\n" \
             "$run" "$total_runs" "$label" "$exit_code"
         echo ""
         return $exit_code
@@ -296,8 +323,8 @@ if [ "$WARMUP_ITERATIONS" -gt 0 ]; then
     done
 
     # Discard warm-up output files
-    rm -f output/run_*_warmup_*_${RUN_ID}.log
-    rm -f output/monitor_*_warmup_*_${RUN_ID}.csv
+    rm -f "$(run_logs_dir "$RUN_ID")"/run_*_warmup_*_"${RUN_ID}".log
+    rm -f "$(run_memory_dir "$RUN_ID")"/monitor_*_warmup_*_"${RUN_ID}".csv
     print_success "Warm-up complete, results discarded"
     echo ""
 fi
@@ -369,12 +396,14 @@ print_header "BENCHMARK COMPLETE"
 echo -e "${BOLD}All benchmark runs completed successfully!${NC}"
 echo ""
 echo -e "${GREEN}Output Summary:${NC}"
-echo "  • Benchmark logs:     output/run_${BENCHMARK_NAME}_<variant>_run*_${RUN_ID}.log"
-echo "  • Memory monitoring:  output/monitor_${BENCHMARK_NAME}_<variant>_run*_${RUN_ID}.csv"
+RUN_OUTPUT_DIR="$(run_output_dir "$RUN_ID")"
+echo "  • Run directory:      ${RUN_OUTPUT_DIR}"
+echo "  • Benchmark logs:     ${RUN_OUTPUT_DIR}/logs/run_${BENCHMARK_NAME}_<variant>_run*_${RUN_ID}.log"
+echo "  • Memory monitoring:  ${RUN_OUTPUT_DIR}/memory/monitor_${BENCHMARK_NAME}_<variant>_run*_${RUN_ID}.csv"
 echo "  • Variant images:     ${VARIANT_IMAGE_ROOT}/<variant>-linux-x86_64-server-release"
 if [ -n "$WEAK_FIELDS_BENCHMARK_NAME" ]; then
-    echo "  • Weak-fields config: output/run_${WEAK_FIELDS_BENCHMARK_NAME}_weak_fields_run*_${RUN_ID}.log"
-    echo "                        output/monitor_${WEAK_FIELDS_BENCHMARK_NAME}_weak_fields_run*_${RUN_ID}.csv"
+    echo "  • Weak-fields config: ${RUN_OUTPUT_DIR}/logs/run_${WEAK_FIELDS_BENCHMARK_NAME}_weak_fields_run*_${RUN_ID}.log"
+    echo "                        ${RUN_OUTPUT_DIR}/memory/monitor_${WEAK_FIELDS_BENCHMARK_NAME}_weak_fields_run*_${RUN_ID}.csv"
 fi
 echo ""
 echo -e "${CYAN}Next Steps:${NC}"

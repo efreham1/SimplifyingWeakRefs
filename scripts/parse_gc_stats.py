@@ -4,7 +4,6 @@ Parse continuous memory monitoring data and generate plots.
 Aggregates data across outer runs with run tracking.
 """
 
-import glob
 import re
 import sys
 from pathlib import Path
@@ -12,21 +11,18 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-def get_benchmark_mode_label(benchmark_name):
-    """Return canonical benchmark mode label used in plot names and titles."""
-    single_modes = {"single", "field-single", "single-field"}
-    return "single" if benchmark_name in single_modes else "multi"
+OUTPUT_ROOT = Path("output")
 
 
-def extract_run_num(filename):
-    """Extract run number from filename like 'run_ON_run2_1.log'.
-    
-    Returns run number as int, or None if not found.
-    """
-    match = re.search(r'_run(\d+)_', filename)
-    if match:
-        return int(match.group(1))
-    return None
+def get_run_output_dir(run_id):
+    """Return the per-run output directory for a benchmark execution id."""
+    return OUTPUT_ROOT / f"id_{run_id}"
+
+
+def collect_run_files(run_id, subdir, pattern):
+    """Collect result files from the per-run output layout."""
+    result_dir = get_run_output_dir(run_id) / subdir
+    return [str(path) for path in sorted(result_dir.glob(pattern), key=lambda path: path.name)]
 
 
 def parse_continuous_monitor_data(filename):
@@ -182,63 +178,6 @@ def aggregate_monitor_files(file_list):
     return agg
 
 
-def extract_phases_from_monitor_file(filename):
-    """Extract all unique phases from a monitor file with iteration info.
-    
-    Returns: dict (phase_name, iteration) -> first_occurrence_time_ms
-    """
-    phases = {}
-    data = parse_continuous_monitor_data(filename)
-    for entry in data:
-        phase = entry.get('phase', '')
-        iteration = entry.get('iteration', '')
-        if phase:
-            key = (phase, iteration)
-            if key not in phases:
-                phases[key] = entry['timestamp_ms']
-    return phases
-
-
-def extract_phases_with_iteration(data_list):
-    """Extract phases with their iteration numbers from data.
-    
-    Uses actual iteration data from CSV if available, otherwise detects by Phase 1 occurrences.
-    Returns: list of (time_sec, phase_name_with_iter) tuples
-    """
-    if not data_list:
-        return []
-    
-    phase_marks = []
-    last_phase = ""
-    last_iteration = ""
-    base_time = data_list[0]['timestamp_ms']
-    
-    for d in data_list:
-        phase = d.get('phase', '')
-        iteration = d.get('iteration', '')
-        
-        # Skip empty phases
-        if not phase:
-            continue
-        
-        # Skip phase transitions with empty iterations (orphan phases at end of run)
-        if not iteration:
-            continue
-            
-        # Only add phase marks on phase transitions
-        if phase != last_phase or iteration != last_iteration:
-            t = (d['timestamp_ms'] - base_time) / 1000.0
-            
-            # Build phase label with iteration (always present due to filter above)
-            phase_with_iter = f"{phase} [{iteration}]"
-            
-            phase_marks.append((t, phase_with_iter, phase))
-            last_phase = phase
-            last_iteration = iteration
-    
-    return phase_marks
-
-
 def plot_metric_boxplots(variants_all_metrics, variants, metric_names, run_id=1, benchmark_mode_label="multi"):
     """Plot one boxplot per metric, each saved as a separate PDF.
 
@@ -326,252 +265,6 @@ def plot_metric_boxplots(variants_all_metrics, variants, metric_names, run_id=1,
         plt.savefig(output_file, bbox_inches='tight')
         print(f"  {output_file}")
         plt.close()
-
-
-def plot_continuous_monitoring(on_data, off_data, on_monitor_files=None, off_monitor_files=None,
-                               run_id=1, output_file=None, benchmark_mode_label="multi"):
-    """Plot continuous memory monitoring data over time."""
-    
-    if output_file is None:
-        output_file = f'images/continuous_memory_{benchmark_mode_label}_{run_id}.pdf'
-    
-    # Ensure images directory exists
-    Path('images').mkdir(parents=True, exist_ok=True)
-    
-    if not on_data and not off_data:
-        print("No continuous monitoring data to plot")
-        return
-    
-    # Create figure with three subplots (RSS, GC aux, Java heap)
-    fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(14, 12), sharex=True)
-    
-    # Initialize phase marks - now includes iteration info and original phase
-    on_phase_marks = []
-    off_phase_marks = []
-    
-    # Extract phases with iteration numbers from aggregated data
-    if on_data:
-        on_phase_marks_raw = extract_phases_with_iteration(on_data)
-        # Convert from (t, label_with_iter, original_phase) to (t, label_with_iter) for drawing
-        on_phase_marks = [(t, label) for t, label, _ in on_phase_marks_raw]
-    
-    if off_data:
-        off_phase_marks_raw = extract_phases_with_iteration(off_data)
-        off_phase_marks = [(t, label) for t, label, _ in off_phase_marks_raw]
-    
-    # Always supplement with ALL phases from monitor files to ensure we capture all iteration phases
-    if on_monitor_files and on_data:
-        on_phases_from_files = {}  # (phase_name, iteration_str) -> [relative_time_ms, relative_time_ms, ...]
-        for f in on_monitor_files:
-            # Get first timestamp from this run to normalize relative times
-            run_data = parse_continuous_monitor_data(f)
-            if not run_data:
-                continue
-            run_start_time = run_data[0]['timestamp_ms']
-            
-            # Extract phases and convert to relative time within this run
-            phases = extract_phases_from_monitor_file(f)
-            for (phase_name, iteration_str), abs_time_ms in phases.items():
-                # Skip entries with empty iteration strings (orphan phases at end of run)
-                if not iteration_str:
-                    continue
-                relative_time_ms = abs_time_ms - run_start_time  # Relative to this run's start
-                key = (phase_name, iteration_str)
-                if key not in on_phases_from_files:
-                    on_phases_from_files[key] = []
-                on_phases_from_files[key].append(relative_time_ms)
-        
-        # Create phase marks from monitor file data (averaged relative times)
-        for (phase_name, iteration_str), time_list in sorted(on_phases_from_files.items()):
-            # Average relative times across all on runs
-            avg_relative_time_ms = np.mean(time_list)
-            time_sec = avg_relative_time_ms / 1000.0
-            
-            # Build label
-            if iteration_str:
-                phase_label = f"{phase_name} [{iteration_str}]"
-            else:
-                phase_label = phase_name
-            
-            # Add this phase (replace aggregated if exists)
-            on_phase_marks = [(t, l) for t, l in on_phase_marks if l != phase_label]
-            if time_sec >= 0:
-                on_phase_marks.append((time_sec, phase_label))
-        
-        # Sort by time
-        on_phase_marks.sort(key=lambda x: x[0])
-    
-    if off_monitor_files and off_data:
-        off_phases_from_files = {}  # (phase_name, iteration_str) -> [relative_time_ms, relative_time_ms, ...]
-        for f in off_monitor_files:
-            # Get first timestamp from this run to normalize relative times
-            run_data = parse_continuous_monitor_data(f)
-            if not run_data:
-                continue
-            run_start_time = run_data[0]['timestamp_ms']
-            
-            # Extract phases and convert to relative time within this run
-            phases = extract_phases_from_monitor_file(f)
-            for (phase_name, iteration_str), abs_time_ms in phases.items():
-                # Skip entries with empty iteration strings (orphan phases at end of run)
-                if not iteration_str:
-                    continue
-                relative_time_ms = abs_time_ms - run_start_time  # Relative to this run's start
-                key = (phase_name, iteration_str)
-                if key not in off_phases_from_files:
-                    off_phases_from_files[key] = []
-                off_phases_from_files[key].append(relative_time_ms)
-        
-        # Create phase marks from monitor file data (averaged relative times)
-        for (phase_name, iteration_str), time_list in sorted(off_phases_from_files.items()):
-            # Average relative times across all off runs
-            avg_relative_time_ms = np.mean(time_list)
-            time_sec = avg_relative_time_ms / 1000.0
-            
-            # Build label
-            if iteration_str:
-                phase_label = f"{phase_name} [{iteration_str}]"
-            else:
-                phase_label = phase_name
-            
-            # Add this phase (replace aggregated if exists)
-            off_phase_marks = [(t, l) for t, l in off_phase_marks if l != phase_label]
-            if time_sec >= 0:
-                off_phase_marks.append((time_sec, phase_label))
-        
-        # Sort by time
-        off_phase_marks.sort(key=lambda x: x[0])
-    
-    # Plot RSS (Total Process Memory)
-    if on_data:
-        on_times = [(d['timestamp_ms'] - on_data[0]['timestamp_ms']) / 1000.0 for d in on_data]  # seconds
-        on_rss = [d['rss_kb'] / 1024.0 for d in on_data]  # MB
-        on_rss_std = [d.get('rss_std_kb', 0) / 1024.0 for d in on_data]  # MB
-        ax1.plot(on_times, on_rss, '-', linewidth=1.5, label='GA ON', color='blue', alpha=0.7)
-        ax1.fill_between(on_times, 
-                        [r - s for r, s in zip(on_rss, on_rss_std)],
-                        [r + s for r, s in zip(on_rss, on_rss_std)],
-                        color='blue', alpha=0.2, linewidth=0)
-    
-    if off_data:
-        off_times = [(d['timestamp_ms'] - off_data[0]['timestamp_ms']) / 1000.0 for d in off_data]  # seconds
-        off_rss = [d['rss_kb'] / 1024.0 for d in off_data]  # MB
-        off_rss_std = [d.get('rss_std_kb', 0) / 1024.0 for d in off_data]  # MB
-        ax1.plot(off_times, off_rss, '-', linewidth=1.5, label='GA OFF', color='red', alpha=0.7)
-        ax1.fill_between(off_times,
-                        [r - s for r, s in zip(off_rss, off_rss_std)],
-                        [r + s for r, s in zip(off_rss, off_rss_std)],
-                        color='red', alpha=0.2, linewidth=0)
-    
-    ax1.set_ylabel('Total Process RSS (MB)', fontsize=12)
-    ax1.set_title('Continuous Total Process Memory Usage (Mean ± Std Dev)', fontsize=14, fontweight='bold')
-    ax1.legend(fontsize=11)
-    ax1.grid(True, alpha=0.3)
-    
-    # Plot GC Auxiliary Memory (Committed)
-    if on_data:
-        on_gc = [d['gc_committed_kb'] / 1024.0 for d in on_data]  # MB
-        on_gc_std = [d.get('gc_std_kb', 0) / 1024.0 for d in on_data]  # MB
-        ax2.plot(on_times, on_gc, '-', linewidth=1.5, label='GA ON', color='blue', alpha=0.7)
-        ax2.fill_between(on_times,
-                        [g - s for g, s in zip(on_gc, on_gc_std)],
-                        [g + s for g, s in zip(on_gc, on_gc_std)],
-                        color='blue', alpha=0.2, linewidth=0)
-    
-    if off_data:
-        off_gc = [d['gc_committed_kb'] / 1024.0 for d in off_data]
-        off_gc_std = [d.get('gc_std_kb', 0) / 1024.0 for d in off_data]  # MB
-        ax2.plot(off_times, off_gc, '-', linewidth=1.5, label='GA OFF', color='red', alpha=0.7)
-        ax2.fill_between(off_times,
-                        [g - s for g, s in zip(off_gc, off_gc_std)],
-                        [g + s for g, s in zip(off_gc, off_gc_std)],
-                        color='red', alpha=0.2, linewidth=0)
-    
-    ax2.set_ylabel('GC Auxiliary Memory (MB)', fontsize=12)
-    ax2.set_title('Continuous GC Auxiliary Memory Usage (Mean ± Std Dev)', fontsize=14, fontweight='bold')
-    ax2.legend(fontsize=11)
-    ax2.grid(True, alpha=0.3)
-
-    # Plot Java heap usage
-    if on_data:
-        on_heap = [d['heap_kb'] / 1024.0 for d in on_data]
-        on_heap_std = [d.get('heap_std_kb', 0) / 1024.0 for d in on_data]  # MB
-        ax3.plot(on_times, on_heap, '-', linewidth=1.5, label='GA ON', color='blue', alpha=0.7)
-        ax3.fill_between(on_times,
-                        [h - s for h, s in zip(on_heap, on_heap_std)],
-                        [h + s for h, s in zip(on_heap, on_heap_std)],
-                        color='blue', alpha=0.2, linewidth=0)
-
-    if off_data:
-        off_heap = [d['heap_kb'] / 1024.0 for d in off_data]
-        off_heap_std = [d.get('heap_std_kb', 0) / 1024.0 for d in off_data]  # MB
-        ax3.plot(off_times, off_heap, '-', linewidth=1.5, label='GA OFF', color='red', alpha=0.7)
-        ax3.fill_between(off_times,
-                        [h - s for h, s in zip(off_heap, off_heap_std)],
-                        [h + s for h, s in zip(off_heap, off_heap_std)],
-                        color='red', alpha=0.2, linewidth=0)
-        
-    ax3.set_xlabel('Time (seconds)', fontsize=12)
-    ax3.set_ylabel('Java Heap (MB)', fontsize=12)
-    ax3.set_title('Java Heap Usage (Mean ± Std Dev, from jcmd GC.heap_info)', fontsize=14, fontweight='bold')
-    ax3.legend(fontsize=11)
-    ax3.grid(True, alpha=0.3)
-    
-    # Draw phase markers and shade phase spans (vertical lines + labels + shaded regions)
-    def draw_phase_marks(ax, marks, color):
-        if not marks:
-            return
-        ylim = ax.get_ylim()
-        y_text = ylim[1] * 0.95
-        for t, label in marks:
-            ax.axvline(x=t, color=color, linestyle='--', alpha=0.3)
-            ax.text(t, y_text, label, rotation=90, va='top', ha='center', fontsize=7, color=color, alpha=0.8)
-
-    # Shade phase spans on all subplots - shade variance in same phase/iteration across runs
-    def shade_phase_spans_by_mode(axes_list, on_marks, off_marks, on_phase_times, off_phase_times):
-        # For ON phases: shade between min and max occurrence times for each phase+iteration
-        for (phase_name, iteration_str), time_list in on_phase_times.items():
-            if time_list:
-                t_min = min(time_list)
-                t_max = max(time_list)
-                if t_min < t_max:  # Only shade if there's actually variance
-                    for ax in axes_list:
-                        ax.axvspan(t_min, t_max, alpha=0.06, color='blue')
-        
-        # For OFF phases: shade between min and max occurrence times for each phase+iteration
-        for (phase_name, iteration_str), time_list in off_phase_times.items():
-            if time_list:
-                t_min = min(time_list)
-                t_max = max(time_list)
-                if t_min < t_max:  # Only shade if there's actually variance
-                    for ax in axes_list:
-                        ax.axvspan(t_min, t_max, alpha=0.06, color='red')
-    
-    # Convert phase times from ms to seconds for shading
-    # on_phase_times_sec = {key: [t_ms / 1000.0 for t_ms in times] for key, times in on_phases_from_files.items()} if 'on_phases_from_files' in locals() and on_phases_from_files else {}
-    # off_phase_times_sec = {key: [t_ms / 1000.0 for t_ms in times] for key, times in off_phases_from_files.items()} if 'off_phases_from_files' in locals() and off_phases_from_files else {}
-    # shade_phase_spans_by_mode([ax1, ax2, ax3], 
-    #                           on_phase_marks if on_data else [], 
-    #                           off_phase_marks if off_data else [],
-    #                           on_phase_times_sec,
-    #                           off_phase_times_sec)
-    
-    # draw_phase_marks(ax1, on_phase_marks if on_data else [], 'blue')
-    # draw_phase_marks(ax2, on_phase_marks if on_data else [], 'blue')
-    # draw_phase_marks(ax3, on_phase_marks if on_data else [], 'blue')
-    # draw_phase_marks(ax1, off_phase_marks if off_data else [], 'red')
-    # draw_phase_marks(ax2, off_phase_marks if off_data else [], 'red')
-    # draw_phase_marks(ax3, off_phase_marks if off_data else [], 'red')
-    
-    fig.suptitle(
-        f"Continuous Memory Usage ({benchmark_mode_label.capitalize()} Benchmark)",
-        fontsize=15,
-        fontweight='bold',
-        y=1.01,
-    )
-    plt.tight_layout(rect=[0, 0, 1, 0.98])
-    plt.savefig(output_file, bbox_inches='tight')
-    print(f"Continuous monitoring plot saved to: {output_file}")
 
 
 def parse_gc_stats_file(filename):
@@ -761,47 +454,27 @@ def main():
         elif sys.argv[1].startswith("--id="):
             run_id = sys.argv[1].split("=")[1]
 
-    # Auto-detect benchmark name from output files for this run_id.
-    # When weak-fields is enabled, this run id can contain both gc/single logs
-    # and field/field-single logs. Pick the dominant benchmark family.
-    candidate_files = glob.glob(f"output/run_*_*_run*_{run_id}.log")
+    # Auto-detect benchmark mode from the current per-run output files.
+    # When weak_fields is enabled, this run id contains both primary benchmark
+    # logs and weak_fields logs. Determine whether this is the multi or single mode.
+    candidate_files = collect_run_files(run_id, "logs", f"run_*_*_run*_{run_id}.log")
     benchmark_name = "multi"  # default
     if candidate_files:
-        benchmark_counts = {
-            "multi": 0,
-            "gc": 0,
-            "weakref": 0,
-            "single": 0,
-            "field": 0,
-            "field-single": 0,
-            "single-field": 0,
-        }
-        benchmark_tokens = [
-            "field-single",
-            "single-field",
-            "weakref",
-            "single",
-            "field",
-            "multi",
-            "gc",
-        ]
+        multi_count = 0
+        single_count = 0
         for f in candidate_files:
             base = Path(f).name
-            for token in benchmark_tokens:
-                if base.startswith(f"run_{token}_"):
-                    benchmark_counts[token] += 1
-                    break
+            if base.startswith("run_single_") or base.startswith("run_field-single_"):
+                single_count += 1
+            elif base.startswith("run_multi_") or base.startswith("run_field_"):
+                multi_count += 1
 
-        benchmark_priority = ["multi", "gc", "single", "weakref", "field", "field-single", "single-field"]
-        benchmark_name = max(benchmark_priority, key=lambda b: (benchmark_counts[b], -benchmark_priority.index(b)))
+        if single_count > multi_count:
+            benchmark_name = "single"
     use_max = benchmark_name == "single"
-    benchmark_mode_label = get_benchmark_mode_label(benchmark_name)
+    benchmark_mode_label = benchmark_name
 
-    weak_fields_benchmark_name = None
-    if benchmark_name in ["multi", "gc", "weakref", "field", "weakfield"]:
-        weak_fields_benchmark_name = "field"
-    elif benchmark_name in ["single", "field-single", "single-field"]:
-        weak_fields_benchmark_name = "field-single"
+    weak_fields_benchmark_name = "field-single" if benchmark_name == "single" else "field"
 
     # Canonical variant order (matches scripts/run_benchmark_iterations.sh)
     VARIANTS_ORDERED = [
@@ -810,26 +483,16 @@ def main():
     ]
 
     # Discover which variants actually produced output files for this run_id.
-    # weak_fields has existed with two naming schemes:
-    # 1) output/run_field(_single)_weak_fields_...
-    # 2) output/run_<benchmark_name>_weak_fields_...
     variants_log_files = {}
     variants_monitor_files = {}
     for variant in VARIANTS_ORDERED:
-        if variant == "weak_fields":
-            source_benchmarks = [benchmark_name]
-            if weak_fields_benchmark_name:
-                source_benchmarks.append(weak_fields_benchmark_name)
-            # De-duplicate while preserving order
-            source_benchmarks = list(dict.fromkeys(source_benchmarks))
-        else:
-            source_benchmarks = [benchmark_name]
+        source_benchmarks = [weak_fields_benchmark_name] if variant == "weak_fields" else [benchmark_name]
 
         log_files = []
         monitor_files = []
         for source_benchmark in source_benchmarks:
-            log_files.extend(glob.glob(f"output/run_{source_benchmark}_{variant}_*_{run_id}.log"))
-            monitor_files.extend(glob.glob(f"output/monitor_{source_benchmark}_{variant}_*_{run_id}.csv"))
+            log_files.extend(collect_run_files(run_id, "logs", f"run_{source_benchmark}_{variant}_*_{run_id}.log"))
+            monitor_files.extend(collect_run_files(run_id, "memory", f"monitor_{source_benchmark}_{variant}_*_{run_id}.csv"))
         log_files = sorted(set(log_files))
         monitor_files = sorted(set(monitor_files))
         if log_files:
@@ -838,7 +501,7 @@ def main():
             variants_monitor_files[variant] = monitor_files
 
     if not variants_log_files:
-        print(f"Error: no log files found in output/ for run id '{run_id}'")
+        print(f"Error: no log files found for run id '{run_id}' in {get_run_output_dir(run_id)}")
         print("Make sure you have run:")
         print("  bash scripts/run_benchmark_iterations.sh")
         return 1
