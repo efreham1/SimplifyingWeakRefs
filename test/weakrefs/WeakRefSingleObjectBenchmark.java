@@ -1,4 +1,3 @@
-import java.lang.ref.ReferenceQueue;
 import java.lang.ref.WeakReference;
 import java.util.Random;
 import java.lang.ref.Reference;
@@ -25,6 +24,18 @@ public final class WeakRefSingleObjectBenchmark {
         }
     }
 
+    private static final class WeakRefHolder<T> {
+        private final WeakReference<T> referent;
+
+        WeakRefHolder(T referent) {
+            this.referent = new WeakReference<>(referent);
+        }
+
+        T get() {
+            return referent.get();
+        }
+    }
+
     public static void main(String[] args) throws InterruptedException {
         int weakRefCount  = DEFAULT_OBJECT_COUNT;
         int sleepMillis   = DEFAULT_STRONG_HOLD_MILLIS;
@@ -42,7 +53,7 @@ public final class WeakRefSingleObjectBenchmark {
         System.out.printf("%n=== Iteration 1 ===%n");
 
         @SuppressWarnings("unchecked")
-        WeakReference<BigObject>[] weakRefs = new WeakReference[weakRefCount];
+        WeakRefHolder<BigObject>[] weakRefs = new WeakRefHolder[weakRefCount];
         Random random = new Random(0x5eedcafeL);
 
         // Phase 1: Allocate the single target object
@@ -57,11 +68,11 @@ public final class WeakRefSingleObjectBenchmark {
         int[] storeOrder   = shuffledIndices(weakRefCount, random);
 
         for (int i = 0; i < weakRefCount; i++) {
-            weakRefs[storeOrder[i]] = new WeakReference<>(target);
+            weakRefs[storeOrder[i]] = new WeakRefHolder<>(target);
         }
 
         long allocDuration = System.nanoTime() - allocationStart;
-        System.out.printf("Allocated %d WeakReferences in %.2f seconds%n",
+        System.out.printf("Allocated %d weak ref holders in %.2f seconds%n",
             weakRefCount, allocDuration / 1_000_000_000.0);
 
         // Phase 3: Sleep for a couple of seconds
@@ -101,9 +112,9 @@ public final class WeakRefSingleObjectBenchmark {
         return indices;
     }
 
-    private static int countAlive(WeakReference<BigObject>[] weakRefs) {
+    private static int countAlive(WeakRefHolder<BigObject>[] weakRefs) {
         int alive = 0;
-        for (WeakReference<BigObject> ref : weakRefs) {
+        for (WeakRefHolder<BigObject> ref : weakRefs) {
             if (ref.get() != null) {
                 alive++;
             }

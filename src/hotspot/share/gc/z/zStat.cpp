@@ -1641,7 +1641,6 @@ void ZStatMetaspace::print() {
 //
 ZStatReferences::ZCount ZStatReferences::_soft;
 ZStatReferences::ZCount ZStatReferences::_weak;
-ZStatReferences::ZCount ZStatReferences::_weak_no_queue;
 ZStatReferences::ZCount ZStatReferences::_final;
 ZStatReferences::ZCount ZStatReferences::_phantom;
 
@@ -1659,10 +1658,6 @@ void ZStatReferences::set_weak(size_t encountered, size_t discovered, size_t enq
   set(&_weak, encountered, discovered, enqueued);
 }
 
-void ZStatReferences::set_weak_no_queue(size_t encountered, size_t discovered, size_t enqueued) {
-  set(&_weak_no_queue, encountered, discovered, enqueued);
-}
-
 void ZStatReferences::set_final(size_t encountered, size_t discovered, size_t enqueued) {
   set(&_final, encountered, discovered, enqueued);
 }
@@ -1678,28 +1673,27 @@ void ZStatReferences::print() {
     return;
   }
 
-  ZStatTablePrinter refs(20, 16);
+  ZStatTablePrinter refs(20, 12);
   lt.print("%s", refs()
            .fill()
            .right("Encountered")
            .right("Discovered")
-           .right("Cleared/Enqueued")
+           .right("Enqueued")
            .end());
 
-  auto ref_print = [&] (const char* label, const ZStatReferences::ZCount& ref) {
+  auto ref_print = [&] (const char* name, const ZStatReferences::ZCount& ref) {
     lt.print("%s", refs()
-             .left("%s", label)
+             .left("%s References:", name)
              .right("%zu", ref.encountered)
              .right("%zu", ref.discovered)
              .right("%zu", ref.enqueued)
              .end());
   };
 
-  ref_print("Soft References:", _soft);
-  ref_print("Weak References:", _weak);
-  ref_print("Weak (No Queue):", _weak_no_queue);
-  ref_print("Final References:", _final);
-  ref_print("Phantom References:", _phantom);
+  ref_print("Soft", _soft);
+  ref_print("Weak", _weak);
+  ref_print("Final", _final);
+  ref_print("Phantom", _phantom);
 }
 
 //

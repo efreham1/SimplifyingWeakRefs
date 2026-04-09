@@ -1,9 +1,13 @@
-#!/bin/bash
-# Memory monitoring script that runs on separate cores
-# Monitors total process RSS and GC auxiliary memory from NMT
+#!/usr/bin/env bash
+
+# monitor_memory.sh
+# Monitors total process RSS and GC auxiliary memory from NMT.
+#
+# Usage:
+#   ./scripts/monitor_memory.sh <java_pid> <output_file> [interval] [jcmd_path] [benchmark_log_file]
 
 if [ $# -lt 2 ]; then
-    echo "Usage: $0 <java_pid> <output_file> [jcmd_path] [benchmark_log_file]"
+    echo "Usage: $0 <java_pid> <output_file> [interval] [jcmd_path] [benchmark_log_file]"
     exit 1
 fi
 

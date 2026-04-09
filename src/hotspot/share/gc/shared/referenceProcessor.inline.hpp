@@ -61,8 +61,7 @@ void DiscoveredList::clear() {
 DiscoveredListIterator::DiscoveredListIterator(DiscoveredList&    refs_list,
                                                OopClosure*        keep_alive,
                                                BoolObjectClosure* is_alive,
-                                               EnqueueDiscoveredFieldClosure* enqueue,
-                                               OopHandle          null_queue):
+                                               EnqueueDiscoveredFieldClosure* enqueue):
   _refs_list(refs_list),
   _prev_discovered_addr(refs_list.adr_head()),
   _prev_discovered(nullptr),
@@ -77,8 +76,7 @@ DiscoveredListIterator::DiscoveredListIterator(DiscoveredList&    refs_list,
   _first_seen(refs_list.head()),
 #endif
   _processed(0),
-  _removed(0),
-  _null_queue(null_queue) {
+  _removed(0) {
 }
 
 #endif // SHARE_GC_SHARED_REFERENCEPROCESSOR_INLINE_HPP

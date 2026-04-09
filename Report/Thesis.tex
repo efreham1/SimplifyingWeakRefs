@@ -26,7 +26,7 @@
 \else
 	% Plain LaTeX specific packages and settings
 	% Language, diacritics and hyphenation
-	\usepackage[swedish,english]{babel}
+	\usepackage[swedish,english,provide=*]{babel}
 
 	% Font settings (UTF-8 is now standard, not latin1)
 	\usepackage{type1cm}
@@ -42,7 +42,7 @@
 \usepackage{microtype}
 
 % Graphics path for figures
-\graphicspath{{figures/}{images/}}
+\graphicspath{{figures/}{images/}{../images/}}
 
 % Allow hyphenation and line breaks in monospace (\texttt) text
 \ifxetex
@@ -62,6 +62,9 @@
 \hyphenpenalty=500
 \exhyphenpenalty=500
 
+% Suppress underfull \hbox warnings
+\hbadness=10001
+
 % Allow uneven bottom pages to avoid underfull \vbox warnings
 % (keeps full justification but does not force vertical stretching)
 \raggedbottom
@@ -70,12 +73,51 @@
 \usepackage{listings}
 \usepackage{xcolor}
 \usepackage{float}
+\usepackage{subcaption}
 
 % Define listing as a float type
 \floatstyle{plain}
 \newfloat{listing}{htbp}{lol}
 \floatname{listing}{Listing}
 \newcommand{\listoflistings}{\listof{listing}{List of Listings}}
+
+% Number listings per chapter (e.g. Listing 3.1) like figures and tables
+\makeatletter
+\@addtoreset{listing}{chapter}
+\makeatother
+\renewcommand{\thelisting}{\thechapter.\arabic{listing}}
+
+% Add "Listing" prefix to List of Listings entries, fix figure/table spacing
+\makeatletter
+\newcommand*\listingnumberline[1]{\hb@xt@ \@tempdima {Listing~#1:\hfil}}
+
+% Redefine \listoflistings to bypass \listof (which resets \l@listing)
+\renewcommand{\listoflistings}{%
+	\chapter*{List of Listings}%
+	\def\l@listing##1##2{%
+		\let\numberline\listingnumberline%
+		\customtocline{##1}{##2}{\z@}{6.5em}{0}%
+		\renewcommand{\numberline}{\stdnumberline}%
+	}%
+	\begingroup\setlength{\parskip}{\z@}%
+		\@starttoc{lol}%
+	\endgroup%
+}
+
+% Widen figure number box so "Figure X.X:" has space before the caption
+\renewcommand*\l@figure[2]{%
+	\let\numberline\figurenumberline%
+	\customtocline{#1}{#2}{\z@}{5.5em}{0}%
+	\renewcommand{\numberline}{\stdnumberline}%
+}
+
+% Remove extra \addvspace from table entries
+\renewcommand*\l@table[2]{%
+	\let\numberline\tablenumberline%
+	\customtocline{#1}{#2}{\z@}{5em}{0}%
+	\renewcommand{\numberline}{\stdnumberline}%
+}
+\makeatother
 
 % Configure listings for Java code
 \lstset{
@@ -108,6 +150,11 @@
 % Tables
 \usepackage{booktabs}
 \usepackage{tabularx}
+\usepackage{longtable}
+% Left-align longtables by default to remove centering glue that
+% produces spurious underfull \hbox warnings in alignment rows.
+\setlength\LTleft{0pt}
+\setlength\LTright{0pt}
 
 % Symbols (checkmark etc.)
 \usepackage{amssymb}
@@ -148,6 +195,9 @@
 \Crefname{table}{Table}{Tables}
 \crefname{listing}{Listing}{Listings}
 \Crefname{listing}{Listing}{Listings}
+\newcounter{researchquestion}
+\crefname{researchquestion}{Research Question}{Research Questions}
+\Crefname{researchquestion}{Research Question}{Research Questions}
 
 % Numbering of headings down to the subsection level
 \numberingdepth{subsection}
@@ -158,7 +208,7 @@
 
 % Define thesis metadata
 \title{Optimising Weak Reference Processing in the JVM Z Garbage Collector}
-\subtitle{A Performance Analysis and Optimisation of the ZGC Reference Processing Pipeline}
+\subtitle{Reference Pipeline Optimisations and an Exploratory Weak-Field Mechanism for the JVM}
 \author{Fredrik Hammarberg}
 \authorshort{Hammarberg, F.}
 \date{June 2026}
@@ -170,7 +220,13 @@
 % Abstract
 \abstractdummy{
 	\begin{abstract}
-        PLACEHOLDER
+	Reference processing can be a critical component of Java garbage collection latency, particularly in workloads with large numbers of weakly reachable objects. This thesis investigates how the Z Garbage Collector (ZGC) can reduce overhead when processing \texttt{WeakReference} objects that are not associated with a \texttt{ReferenceQueue}. Three orthogonal implementation strategies are developed in an OpenJDK research fork: a queue-less fast path that skips enqueue handling, a cache-friendlier dynamic-array representation for discovered references, and an optimised clear path that removes unnecessary per-reference work.
+
+	To evaluate these changes, a controlled benchmarking framework was constructed with repeated runs, CPU isolation, memory monitoring, and GC-log analysis. The evaluation compares all combinations of the three optimisation strategies against a baseline configuration using both single-object stress and multi-object phased-release workloads.
+
+	In addition to \texttt{WeakReference}-based optimisations, the thesis introduces an exploratory weak-field mechanism via a Java field annotation and corresponding VM support. This allows a representation-level comparison between object-based weak references and field-based weak semantics under the same experimental setup.
+
+	To be continued...
     \end{abstract}
 }
 
@@ -180,7 +236,9 @@
     % Creates the front matter (title page(s), abstract, list of papers)
     % frontmatterCS = Comprehensive Summary (no half-title, good for Master's)
     % frontmatterMonograph = Monograph (includes half-title, typically for PhD)
-    \frontmatterCS 
+    \frontmatterCS
+    \setcounter{page}{1}  % Start Roman numbering at i after the title/abstract
+    \pagestyle{plain}     % Show Roman numerals from Acknowledgements onward
     
     % Dedication (optional)
     %\cleardoublepage
@@ -194,13 +252,13 @@
     \chapter*{Acknowledgments}
     \addcontentsline{toc}{chapter}{Acknowledgments}
     
-    I would like to express my sincere gratitude to my supervisor for his guidance and support throughout this thesis work. It is through his help, encouragement, and expertise that I was able to learn so much about the JVM and bring this thesis to completion.
+    I want to express my sincere gratitude to my supervisor for his support throughout this thesis work. It is through his help and expertise that I was able to learn so much about the JVM and complete this thesis.
     
-	I would also like to thank my subject reviewer for his valuable academic guidance and thoughtful feedback, which helped strengthen the structure and quality of this thesis.
+	I also want to thank my subject reviewer for his academic guidance and overall feedback, which helped strengthen the structure and quality of this thesis.
     
-	Additionally, I would like to thank the Department of Information Technology at Uppsala University for providing the resources necessary to conduct the performance evaluations and experiments described in this thesis.
+	Additionally, I want to thank the Uppsala Multidisciplinary Center for Advanced Computational Science at Uppsala University for providing access to the resources necessary to conduct the performance evaluations and experiments described in this thesis.
 
-	Lastly, I would also like to thank my colleagues at Oracle for their insights and feedback on my work throughout the development process. Without their help, I would not have been able to achieve the results presented in this thesis.
+	Lastly, I want to thank my colleagues at Oracle for their insights and feedback on my work throughout the development process. Without their help, I would not have been able to achieve the results presented in this thesis.
     
     \vspace{1cm}
     
@@ -215,7 +273,7 @@
         \tableofcontents
     \endgroup
     
-    % Lists of tables and figures
+    % Lists of tables, figures, and listings
     \listoftables
     \listoffigures
 	\listoflistings
@@ -225,12 +283,13 @@
     % Main thesis chapters
     \input{Introduction}
     \input{Background}
-    \input{Method}
-    \input{Results}
+    \input{DesignAndImplementation}
+    \input{Evaluation}
+    \input{AnalysisOfResults}
+    \input{RelatedWork}
     \input{Discussion}
     \input{Conclusion}
 
-	
 	
 \backmatter
     % References
@@ -241,6 +300,16 @@
 	
 	% Appendices
 	\appendix
+	\setcounter{secnumdepth}{2}  % Re-enable section numbering after \backmatter
+	% Reset appendix section numbers per appendix letter in this template.
+	\makeatletter
+	\@addtoreset{section}{appendix}
+	\makeatother
+	\renewcommand{\thesection}{\theappendix.\arabic{section}}
+	\renewcommand{\thesubsection}{\thesection.\arabic{subsection}}
+	\providecommand{\theHappendix}{\arabic{appendix}}
+	\renewcommand{\theHsection}{\theHappendix.\arabic{section}}
+	\renewcommand{\theHsubsection}{\theHsection.\arabic{subsection}}
 	\input{Appendices}
 
 \end{document}

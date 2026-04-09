@@ -29,7 +29,6 @@
 #include "gc/shared/referencePolicy.hpp"
 #include "gc/shared/referenceProcessorStats.hpp"
 #include "gc/shared/workerThread.hpp"
-#include "memory/allocation.hpp"
 #include "memory/referenceType.hpp"
 #include "oops/instanceRefKlass.hpp"
 
@@ -107,15 +106,12 @@ class DiscoveredListIterator {
 
   size_t             _processed;
   size_t             _removed;
-  
-  OopHandle          _null_queue;
 
 public:
   inline DiscoveredListIterator(DiscoveredList&    refs_list,
                                 OopClosure*        keep_alive,
                                 BoolObjectClosure* is_alive,
-                                EnqueueDiscoveredFieldClosure* enqueue,
-                                OopHandle          null_queue);
+                                EnqueueDiscoveredFieldClosure* enqueue);
 
   // End Of List.
   inline bool has_next() const { return _current_discovered != nullptr; }
@@ -159,8 +155,6 @@ public:
 
   // null out referent pointer.
   void clear_referent();
-
-  bool has_reference_queue() const;
 
   // Statistics
   inline size_t processed() const { return _processed; }
@@ -212,12 +206,7 @@ public:
     RefPhaseMax
   };
 
-  OopHandle  _null_queue_handle;
-  
-  private:
-
-  void initialize_null_queue_handle();
-
+private:
   size_t total_count(DiscoveredList lists[]) const;
   void verify_total_count_zero(DiscoveredList lists[], const char* type) NOT_DEBUG_RETURN;
 
@@ -264,8 +253,6 @@ public:
   DiscoveredList* _discoveredWeakRefs;
   DiscoveredList* _discoveredFinalRefs;
   DiscoveredList* _discoveredPhantomRefs;
-
-  
 
   void run_task(RefProcTask& task, RefProcProxyTask& proxy_task, WorkerThreads* threads, bool marks_oops_alive);
 
@@ -321,7 +308,6 @@ public:
   void start_discovery(bool always_clear) {
     enable_discovery();
     setup_policy(always_clear);
-    initialize_null_queue_handle();
   }
 
   // "Preclean" all the discovered reference lists by removing references whose

@@ -1,81 +1,399 @@
-\chapter{Changed Source Code}
+\chapter{Source Code}
 \label{app:changed-source-code}
 
-This appendix lists the complete source files changed to implement the weak-reference processing optimisations evaluated in this thesis. For readability and to keep the thesis build stable, representative changed regions are included below.
+This appendix provides the key source code for the implemented optimisations. The code for the three core optimisations is from the combined (\texttt{all}) configuration variant, which includes all three optimisations. The code for the weak-field mechanism is from the \texttt{weak\_fields} configuration variant. Complete sources for all variants are available in the \texttt{patches/} directory of the project repository.
 
-Full changed source files:
-\begin{itemize}
-		\item \texttt{src/hotspot/share/gc/z/zConfFlags.h}
-		\item \texttt{src/hotspot/share/gc/z/zAddressArray.hpp}
-		\item \texttt{src/hotspot/share/gc/z/zReferenceProcessor.hpp}
-		\item \texttt{src/hotspot/share/gc/z/zReferenceProcessor.cpp}
-\end{itemize}
-
-\section{Configuration Flags}
-\label{app:conf-flags}
-
-\noindent\textbf{File:} \texttt{src/hotspot/share/gc/z/zConfFlags.h}
-
-\lstinputlisting[
-	nolol,
-	language=C++
-]{../src/hotspot/share/gc/z/zConfFlags.h}
+\lstset{basicstyle=\ttfamily\footnotesize,columns=flexible}
 
 \section{Dynamic-array Data Structure}
 \label{app:dynamic-array-source}
 
-\noindent\textbf{File:} \texttt{src/hotspot/share/gc/z/zAddressArray.hpp}
+\noindent\textbf{File:} \texttt{zWeakRefArray.hpp}
 
 \lstinputlisting[
 	nolol,
 	language=C++
-]{../src/hotspot/share/gc/z/zAddressArray.hpp}
+]{../patches/all/src/hotspot/share/gc/z/zWeakRefArray.hpp}
 
-\section{Reference Processor Interface}
-\label{app:refproc-interface-source}
-
-\noindent\textbf{File:} \texttt{src/hotspot/share/gc/z/zReferenceProcessor.hpp}
-
-\lstinputlisting[
-	nolol,
-	language=C++
-]{../src/hotspot/share/gc/z/zReferenceProcessor.hpp}
-
-\section{Reference Processor Implementation (Excerpts)}
+\section{Reference Processor}
 \label{app:refproc-impl-source}
 
-\noindent\textbf{Excerpt:} \texttt{src/hotspot/share/gc/z/zReferenceProcessor.cpp} (constructor and per-worker storage setup)
+\subsection{Interface}
+\label{app:refproc-interface}
+
+\noindent\textbf{File:} \texttt{zReferenceProcessor.hpp}
+
+\lstinputlisting[
+	nolol,
+	language=C++
+]{../patches/all/src/hotspot/share/gc/z/zReferenceProcessor.hpp}
+
+\subsection{Implementation Excerpts}
+\label{app:refproc-excerpts}
+
+The following excerpts from \texttt{zReferenceProcessor.cpp} show the constructor and per-worker storage setup, the discovery path with queue-less weak-reference routing, the processing paths, and the queue sentinel initialisation.
+
+\medskip
+\noindent\textbf{Constructor and per-worker storage:}
 
 \lstinputlisting[
 	nolol,
 	language=C++,
-	firstline=120,
-	lastline=190
-]{../src/hotspot/share/gc/z/zReferenceProcessor.cpp}
+	firstline=132,
+	lastline=170
+]{../patches/all/src/hotspot/share/gc/z/zReferenceProcessor.cpp}
 
-\noindent\textbf{Excerpt:} \texttt{src/hotspot/share/gc/z/zReferenceProcessor.cpp} (discovery path with queue-less weak-reference routing)
-
-\lstinputlisting[
-	nolol,
-	language=C++,
-	firstline=300,
-	lastline=390
-]{../src/hotspot/share/gc/z/zReferenceProcessor.cpp}
-
-\noindent\textbf{Excerpt:} \texttt{src/hotspot/share/gc/z/zReferenceProcessor.cpp} (processing paths for separate lists and dynamic-array variants)
+\noindent\textbf{Discovery path with queue-less routing:}
 
 \lstinputlisting[
 	nolol,
 	language=C++,
-	firstline=500,
-	lastline=705
-]{../src/hotspot/share/gc/z/zReferenceProcessor.cpp}
+	firstline=288,
+	lastline=370
+]{../patches/all/src/hotspot/share/gc/z/zReferenceProcessor.cpp}
 
-\noindent\textbf{Excerpt:} \texttt{src/hotspot/share/gc/z/zReferenceProcessor.cpp} (queue sentinel initialisation and queue checks)
+\noindent\textbf{Processing paths for separate discovered lists and dynamic arrays:}
 
 \lstinputlisting[
 	nolol,
 	language=C++,
-	firstline=920,
-	lastline=980
-]{../src/hotspot/share/gc/z/zReferenceProcessor.cpp}
+	firstline=419,
+	lastline=475
+]{../patches/all/src/hotspot/share/gc/z/zReferenceProcessor.cpp}
+
+\noindent\textbf{Queue sentinel initialisation and queue checks:}
+
+\lstinputlisting[
+	nolol,
+	language=C++,
+	firstline=680,
+	lastline=713
+]{../patches/all/src/hotspot/share/gc/z/zReferenceProcessor.cpp}
+
+\section{Weak Fields}
+\label{app:weak-fields}
+
+\subsection{Annotation}
+\label{app:weak-fields-annotation}
+
+\noindent\textbf{File:} \texttt{java/lang/ref/weak.java}
+
+\lstinputlisting[
+	nolol,
+	language=Java
+]{../patches/weak_fields/src/java.base/share/classes/java/lang/ref/weak.java}
+
+\subsection{Data Structure}
+\label{app:weak-fields-array}
+
+\noindent\textbf{File:} \texttt{zWeakFieldArray.hpp}
+
+\lstinputlisting[
+	nolol,
+	language=C++
+]{../patches/weak_fields/src/hotspot/share/gc/z/zWeakFieldArray.hpp}
+
+\subsection{Reference Processor}
+\label{app:weak-fields-refproc}
+
+\noindent\textbf{File:} \texttt{zReferenceProcessor.hpp}
+
+\lstinputlisting[
+	nolol,
+	language=C++
+]{../patches/weak_fields/src/hotspot/share/gc/z/zReferenceProcessor.hpp}
+
+\medskip
+The following excerpts from \texttt{zReferenceProcessor.cpp} show the discovery filtering, the discovery function, and the processing function.
+
+\medskip
+\noindent\textbf{Discovery filtering:}
+
+\lstinputlisting[
+	nolol,
+	language=C++,
+	firstline=212,
+	lastline=226
+]{../patches/weak_fields/src/hotspot/share/gc/z/zReferenceProcessor.cpp}
+
+\noindent\textbf{Weak-field discovery:}
+
+\lstinputlisting[
+	nolol,
+	language=C++,
+	firstline=326,
+	lastline=360
+]{../patches/weak_fields/src/hotspot/share/gc/z/zReferenceProcessor.cpp}
+
+\noindent\textbf{Weak-field processing:}
+
+\lstinputlisting[
+	nolol,
+	language=C++,
+	firstline=393,
+	lastline=433
+]{../patches/weak_fields/src/hotspot/share/gc/z/zReferenceProcessor.cpp}
+
+\subsection{Marking Closure}
+\label{app:weak-fields-marking}
+
+The following excerpt from \texttt{zMark.cpp} shows how weak-annotated fields are detected and diverted to the weak-field discovery path during object marking.
+
+\medskip
+\noindent\textbf{Field annotation check and discovery diversion:}
+
+\lstinputlisting[
+	nolol,
+	language=C++,
+	firstline=297,
+	lastline=362
+]{../patches/weak_fields/src/hotspot/share/gc/z/zMark.cpp}
+
+\chapter{Per-Variant Patch Details}
+\label{app:patch-details}
+
+The following tables list every modified or added file in each patch variant, together with its insertion and deletion counts relative to the upstream OpenJDK \texttt{master} branch. New files (not present in the upstream source) are listed with their total line count and no deletion count. For variants that use the shared base patch, its files are listed first under a ``Base patch'' heading within each table. The \texttt{dyn\_only} and \texttt{weak\_fields} variants do not include the base patch.
+
+\section{\texttt{all}}
+
+\begin{longtable}{lrr}
+\toprule
+\textbf{File} & \textbf{$+$} & \textbf{$-$} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{File} & \textbf{$+$} & \textbf{$-$} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\multicolumn{3}{l}{\textit{Base patch}} \\
+\texttt{gc/shared/collectedHeap.hpp}     & +9  & $-$3 \\
+\texttt{gc/z/zCollectedHeap.cpp}         & +7  & $-$0 \\
+\texttt{gc/z/zCollectedHeap.hpp}         & +1  & $-$0 \\
+\texttt{gc/z/zGeneration.hpp}            & +6  & $-$4 \\
+\texttt{gc/z/zGeneration.inline.hpp}     & +3  & $-$0 \\
+\texttt{gc/z/zStat.cpp}                  & +13 & $-$8 \\
+\texttt{gc/z/zStat.hpp}                  & +2  & $-$1 \\
+\texttt{runtime/threads.cpp}             & +2  & $-$0 \\
+\multicolumn{3}{l}{\textit{Variant-specific patch}} \\
+\texttt{gc/z/zReferenceProcessor.cpp}   & +184 & $-$40 \\
+\texttt{gc/z/zReferenceProcessor.hpp}   & +27  & $-$12 \\
+\texttt{gc/z/zWeakRefArray.hpp} (new)   & +143 & --- \\
+\midrule
+\textbf{Total} & \textbf{+397} & \textbf{$-$68} \\
+\end{longtable}
+
+\section{\texttt{clear\_path\_dyn}}
+
+\begin{longtable}{lrr}
+\toprule
+\textbf{File} & \textbf{$+$} & \textbf{$-$} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{File} & \textbf{$+$} & \textbf{$-$} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\multicolumn{3}{l}{\textit{Base patch}} \\
+\texttt{gc/shared/collectedHeap.hpp}     & +9  & $-$3 \\
+\texttt{gc/z/zCollectedHeap.cpp}         & +7  & $-$0 \\
+\texttt{gc/z/zCollectedHeap.hpp}         & +1  & $-$0 \\
+\texttt{gc/z/zGeneration.hpp}            & +6  & $-$4 \\
+\texttt{gc/z/zGeneration.inline.hpp}     & +3  & $-$0 \\
+\texttt{gc/z/zStat.cpp}                  & +13 & $-$8 \\
+\texttt{gc/z/zStat.hpp}                  & +2  & $-$1 \\
+\texttt{runtime/threads.cpp}             & +2  & $-$0 \\
+\multicolumn{3}{l}{\textit{Variant-specific patch}} \\
+\texttt{gc/z/zReferenceProcessor.cpp}   & +175 & $-$55 \\
+\texttt{gc/z/zReferenceProcessor.hpp}   & +26  & $-$13 \\
+\texttt{gc/z/zWeakRefArray.hpp} (new)   & +155 & --- \\
+\midrule
+\textbf{Total} & \textbf{+399} & \textbf{$-$84} \\
+\end{longtable}
+
+\section{\texttt{clear\_path\_only}}
+
+\begin{longtable}{lrr}
+\toprule
+\textbf{File} & \textbf{$+$} & \textbf{$-$} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{File} & \textbf{$+$} & \textbf{$-$} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\multicolumn{3}{l}{\textit{Base patch}} \\
+\texttt{gc/shared/collectedHeap.hpp}     & +9  & $-$3 \\
+\texttt{gc/z/zCollectedHeap.cpp}         & +7  & $-$0 \\
+\texttt{gc/z/zCollectedHeap.hpp}         & +1  & $-$0 \\
+\texttt{gc/z/zGeneration.hpp}            & +6  & $-$4 \\
+\texttt{gc/z/zGeneration.inline.hpp}     & +3  & $-$0 \\
+\texttt{gc/z/zStat.cpp}                  & +13 & $-$8 \\
+\texttt{gc/z/zStat.hpp}                  & +2  & $-$1 \\
+\texttt{runtime/threads.cpp}             & +2  & $-$0 \\
+\multicolumn{3}{l}{\textit{Variant-specific patch}} \\
+\texttt{gc/z/zReferenceProcessor.cpp}   & +129 & $-$25 \\
+\texttt{gc/z/zReferenceProcessor.hpp}   & +16  & $-$0  \\
+\midrule
+\textbf{Total} & \textbf{+188} & \textbf{$-$41} \\
+\end{longtable}
+
+\section{\texttt{clear\_path\_sep}}
+
+\begin{longtable}{lrr}
+\toprule
+\textbf{File} & \textbf{$+$} & \textbf{$-$} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{File} & \textbf{$+$} & \textbf{$-$} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\multicolumn{3}{l}{\textit{Base patch}} \\
+\texttt{gc/shared/collectedHeap.hpp}     & +9  & $-$3 \\
+\texttt{gc/z/zCollectedHeap.cpp}         & +7  & $-$0 \\
+\texttt{gc/z/zCollectedHeap.hpp}         & +1  & $-$0 \\
+\texttt{gc/z/zGeneration.hpp}            & +6  & $-$4 \\
+\texttt{gc/z/zGeneration.inline.hpp}     & +3  & $-$0 \\
+\texttt{gc/z/zStat.cpp}                  & +13 & $-$8 \\
+\texttt{gc/z/zStat.hpp}                  & +2  & $-$1 \\
+\texttt{runtime/threads.cpp}             & +2  & $-$0 \\
+\multicolumn{3}{l}{\textit{Variant-specific patch}} \\
+\texttt{gc/z/zReferenceProcessor.cpp}   & +153 & $-$30 \\
+\texttt{gc/z/zReferenceProcessor.hpp}   & +18  & $-$0  \\
+\midrule
+\textbf{Total} & \textbf{+214} & \textbf{$-$46} \\
+\end{longtable}
+
+\section{\texttt{dyn\_only}}
+
+\begin{longtable}{lrr}
+\toprule
+\textbf{File} & \textbf{$+$} & \textbf{$-$} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{File} & \textbf{$+$} & \textbf{$-$} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\texttt{gc/z/zReferenceProcessor.cpp}   & +39  & $-$56 \\
+\texttt{gc/z/zReferenceProcessor.hpp}   & +17  & $-$13 \\
+\texttt{gc/z/zWeakRefArray.hpp} (new)   & +149 & --- \\
+\midrule
+\textbf{Total} & \textbf{+205} & \textbf{$-$69} \\
+\end{longtable}
+
+\section{\texttt{sep\_dyn}}
+
+\begin{longtable}{lrr}
+\toprule
+\textbf{File} & \textbf{$+$} & \textbf{$-$} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{File} & \textbf{$+$} & \textbf{$-$} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\multicolumn{3}{l}{\textit{Base patch}} \\
+\texttt{gc/shared/collectedHeap.hpp}     & +9  & $-$3 \\
+\texttt{gc/z/zCollectedHeap.cpp}         & +7  & $-$0 \\
+\texttt{gc/z/zCollectedHeap.hpp}         & +1  & $-$0 \\
+\texttt{gc/z/zGeneration.hpp}            & +6  & $-$4 \\
+\texttt{gc/z/zGeneration.inline.hpp}     & +3  & $-$0 \\
+\texttt{gc/z/zStat.cpp}                  & +13 & $-$8 \\
+\texttt{gc/z/zStat.hpp}                  & +2  & $-$1 \\
+\texttt{runtime/threads.cpp}             & +2  & $-$0 \\
+\multicolumn{3}{l}{\textit{Variant-specific patch}} \\
+\texttt{gc/z/zReferenceProcessor.cpp}   & +144 & $-$35 \\
+\texttt{gc/z/zReferenceProcessor.hpp}   & +24  & $-$10 \\
+\texttt{gc/z/zWeakRefArray.hpp} (new)   & +149 & --- \\
+\midrule
+\textbf{Total} & \textbf{+360} & \textbf{$-$61} \\
+\end{longtable}
+
+\section{\texttt{sep\_only}}
+
+\begin{longtable}{lrr}
+\toprule
+\textbf{File} & \textbf{$+$} & \textbf{$-$} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{File} & \textbf{$+$} & \textbf{$-$} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\multicolumn{3}{l}{\textit{Base patch}} \\
+\texttt{gc/shared/collectedHeap.hpp}     & +9  & $-$3 \\
+\texttt{gc/z/zCollectedHeap.cpp}         & +7  & $-$0 \\
+\texttt{gc/z/zCollectedHeap.hpp}         & +1  & $-$0 \\
+\texttt{gc/z/zGeneration.hpp}            & +6  & $-$4 \\
+\texttt{gc/z/zGeneration.inline.hpp}     & +3  & $-$0 \\
+\texttt{gc/z/zStat.cpp}                  & +13 & $-$8 \\
+\texttt{gc/z/zStat.hpp}                  & +2  & $-$1 \\
+\texttt{runtime/threads.cpp}             & +2  & $-$0 \\
+\multicolumn{3}{l}{\textit{Variant-specific patch}} \\
+\texttt{gc/z/zReferenceProcessor.cpp}   & +118 & $-$27 \\
+\texttt{gc/z/zReferenceProcessor.hpp}   & +12  & $-$0  \\
+\midrule
+\textbf{Total} & \textbf{+173} & \textbf{$-$43} \\
+\end{longtable}
+
+\section{\texttt{weak\_fields}}
+
+\begin{longtable}{lrr}
+\toprule
+\textbf{File} & \textbf{$+$} & \textbf{$-$} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{File} & \textbf{$+$} & \textbf{$-$} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\texttt{cpu/x86/templateTable\_x86.cpp}         & +34  & $-$13 \\
+\texttt{cpu/x86/templateTable\_x86.hpp}         & +1   & $-$1  \\
+\texttt{c1/c1\_LIRGenerator.cpp}               & +5   & $-$0  \\
+\texttt{c1/c1\_Runtime1.cpp}                   & +12  & $-$3  \\
+\texttt{ci/ciField.cpp}                         & +7   & $-$11 \\
+\texttt{ci/ciField.hpp}                         & +1   & $-$0  \\
+\texttt{ci/ciFlags.hpp}                         & +5   & $-$3  \\
+\texttt{classfile/classFileParser.cpp}          & +42  & $-$7  \\
+\texttt{classfile/vmSymbols.hpp}                & +4   & $-$7  \\
+\texttt{gc/shared/accessBarrierSupport.cpp}     & +25  & $-$6  \\
+\texttt{gc/z/zBarrier.cpp}                      & +39  & $-$6  \\
+\texttt{gc/z/zBarrier.hpp}                      & +1   & $-$0  \\
+\texttt{gc/z/zBarrier.inline.hpp}               & +4   & $-$0  \\
+\texttt{gc/z/zGeneration.hpp}                   & +6   & $-$4  \\
+\texttt{gc/z/zGeneration.inline.hpp}            & +3   & $-$0  \\
+\texttt{gc/z/zMark.cpp}                         & +57  & $-$8  \\
+\texttt{gc/z/zReferenceProcessor.cpp}           & +110 & $-$34 \\
+\texttt{gc/z/zReferenceProcessor.hpp}           & +18  & $-$12 \\
+\texttt{gc/z/zStat.cpp}                         & +12  & $-$7  \\
+\texttt{gc/z/zStat.hpp}                         & +2   & $-$1  \\
+\texttt{gc/z/zWeakFieldArray.hpp} (new)         & +149 & ---   \\
+\texttt{oops/fieldInfo.hpp}                     & +5   & $-$2  \\
+\texttt{oops/resolvedFieldEntry.cpp}            & +32  & $-$1  \\
+\texttt{oops/resolvedFieldEntry.hpp}            & +17  & $-$16 \\
+\texttt{opto/library\_call.cpp}                & +82  & $-$77 \\
+\texttt{opto/parse3.cpp}                        & +11  & $-$0  \\
+\texttt{prims/jvmtiTagMap.cpp}                  & +15  & $-$8  \\
+\texttt{runtime/fieldDescriptor.hpp}            & +1   & $-$0  \\
+\texttt{services/heapDumper.cpp}                & +13  & $-$5  \\
+\texttt{java.base/.../ref/weak.java} (new)      & +35  & ---   \\
+\midrule
+\textbf{Total} & \textbf{+748} & \textbf{$-$232} \\
+\end{longtable}
