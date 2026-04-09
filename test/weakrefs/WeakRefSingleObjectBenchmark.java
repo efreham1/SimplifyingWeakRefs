@@ -49,8 +49,6 @@ public final class WeakRefSingleObjectBenchmark {
         System.out.printf(
             "WeakRefSingleObjectBenchmark: weakRefCount=%d sleepMillis=%d%n",
             weakRefCount, sleepMillis);
-            
-        System.out.printf("%n=== Iteration 1 ===%n");
 
         @SuppressWarnings("unchecked")
         WeakRefHolder<BigObject>[] weakRefs = new WeakRefHolder[weakRefCount];

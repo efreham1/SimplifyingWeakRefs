@@ -36,7 +36,7 @@ def parse_continuous_monitor_data(filename):
     with open(filename) as f:
         for line in f:
             if "[monitor_data]" in line:
-                # Format: [monitor_data] timestamp_ms,rss_kb,gc_reserved_kb,gc_committed_kb,heap_kb,phase,iteration
+                # Format: [monitor_data] timestamp_ms,rss_kb,gc_reserved_kb,gc_committed_kb,heap_kb,phase
                 parts = line.split(']', 1)[1].strip().split(',')
                 # Need at least 5 parts (timestamp, rss, gc_reserved, gc_committed, heap)
                 if len(parts) >= 5:
@@ -54,8 +54,6 @@ def parse_continuous_monitor_data(filename):
                             'heap_kb': int(parts[4]) if parts[4].strip() else 0
                         }
                         entry['phase'] = parts[5].strip() if len(parts) >= 6 else ""
-                        # Parse iteration from 7th column if present
-                        entry['iteration'] = parts[6].strip() if len(parts) >= 7 else ""
                         monitor_data.append(entry)
                     except (ValueError, IndexError):
                         continue

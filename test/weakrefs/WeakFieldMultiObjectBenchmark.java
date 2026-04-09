@@ -1,7 +1,6 @@
 import java.lang.ref.Reference;
 import java.lang.ref.weak;
 import java.util.Random;
-import java.util.concurrent.TimeUnit;
 
 public final class WeakFieldMultiObjectBenchmark {
 
@@ -9,7 +8,6 @@ public final class WeakFieldMultiObjectBenchmark {
     private static final int DEFAULT_MIN_SIZE = 509;
     private static final int DEFAULT_MAX_SIZE = 1097;
     private static final int DEFAULT_STRONG_HOLD_MILLIS = 3000;
-    private static final int DEFAULT_ITERATIONS = 3;
 
     private static final class BigObject {
         final int id;
@@ -39,7 +37,6 @@ public final class WeakFieldMultiObjectBenchmark {
         int minSize = DEFAULT_MIN_SIZE;
         int maxSize = DEFAULT_MAX_SIZE;
         int sleepMillis = DEFAULT_STRONG_HOLD_MILLIS;
-        int iterations = DEFAULT_ITERATIONS;
 
         if (args.length > 0) {
             objectCount = Integer.parseInt(args[0]);
@@ -52,9 +49,6 @@ public final class WeakFieldMultiObjectBenchmark {
         }
         if (args.length > 3) {
             sleepMillis = Integer.parseInt(args[3]);
-        }
-        if (args.length > 4) {
-            iterations = Integer.parseInt(args[4]);
         }
 
         if (objectCount < 1) {
@@ -69,30 +63,19 @@ public final class WeakFieldMultiObjectBenchmark {
         if (sleepMillis < 0) {
             sleepMillis = 0;
         }
-        if (iterations < 1) {
-            iterations = 1;
-        }
 
-        System.out.printf("WeakFieldMultiObjectBenchmark: objects=%d minSize=%d maxSize=%d sleepMillis=%d iterations=%d%n",
-            objectCount, minSize, maxSize, sleepMillis, iterations);
+        System.out.printf("WeakFieldMultiObjectBenchmark: objects=%d minSize=%d maxSize=%d sleepMillis=%d%n",
+            objectCount, minSize, maxSize, sleepMillis);
 
-        for (int iter = 0; iter < iterations; iter++) {
-            runIteration(iter, objectCount, minSize, maxSize, sleepMillis);
-
-            System.out.println("Cooling down for 5 seconds...");
-            Thread.sleep(TimeUnit.SECONDS.toMillis(5));
-        }
+        runBenchmark(objectCount, minSize, maxSize, sleepMillis);
     }
 
     @SuppressWarnings("unchecked")
-    private static void runIteration(int iter, int objectCount, int minSize, int maxSize,
-                                     int sleepMillis)
+    private static void runBenchmark(int objectCount, int minSize, int maxSize, int sleepMillis)
             throws InterruptedException {
-        System.out.printf("%n=== Iteration %d ===%n", iter + 1);
-
         BigObject[] strongRefs = new BigObject[objectCount];
         WeakRefHolder<BigObject>[] weakRefHolders = new WeakRefHolder[objectCount];
-        Random random = new Random(0x5eedcafeL + iter);
+        Random random = new Random(0x5eedcafeL);
 
         System.out.println("Phase 1: Allocating references and objects...");
         long allocationStart = System.nanoTime();

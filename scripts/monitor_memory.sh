@@ -19,7 +19,7 @@ LOG_FILE="${5:-}" # optional benchmark log file to extract current phase
 
 # Create output file with header (add heap_kb and phase columns)
 echo "[monitor_start] Monitoring PID $JAVA_PID at ${INTERVAL}s intervals" > "$OUTPUT_FILE"
-echo "[monitor_header] timestamp_ms,rss_kb,gc_reserved_kb,gc_committed_kb,heap_kb,phase,iteration" >> "$OUTPUT_FILE"
+echo "[monitor_header] timestamp_ms,rss_kb,gc_reserved_kb,gc_committed_kb,heap_kb,phase" >> "$OUTPUT_FILE"
 
 # Function to get RSS from /proc
 get_rss() {
@@ -104,24 +104,10 @@ get_heap_used_kb() {
 # Function to get current phase from benchmark log (if provided)
 get_phase() {
     if [ -n "$LOG_FILE" ] && [ -f "$LOG_FILE" ]; then
-        # Look for lines like 'Phase 1:' or 'Phase 4-1:' and return the latest 'Phase X' token
-        local phase=$(tail -n 200 "$LOG_FILE" | grep -oP 'Phase\s+\d+(?:-\d+)?' | tail -1 || true)
+        # Look for lines like 'Phase 1:', 'Phase 3.1:' or 'Phase 4-1:' and return the latest token.
+        local phase=$(tail -n 200 "$LOG_FILE" | grep -oP 'Phase\s+\d+(?:[.-]\d+)?' | tail -1 || true)
         if [ -n "$phase" ]; then
             echo "$phase"
-            return
-        fi
-    else
-        echo ""
-    fi
-}
-
-# Function to get current iteration from benchmark log (if provided)
-get_iteration() {
-    if [ -n "$LOG_FILE" ] && [ -f "$LOG_FILE" ]; then
-        # Look for lines like 'Iteration 1' and return the latest iteration number
-        local iter=$(tail -n 200 "$LOG_FILE" | grep -oP 'Iteration\s+\d+' | tail -1 || true)
-        if [ -n "$iter" ]; then
-            echo "$iter"
             return
         fi
     else
@@ -136,9 +122,8 @@ while kill -0 $JAVA_PID 2>/dev/null; do
     GC_MEM=$(get_gc_memory)
     HEAP_KB=$(get_heap_used_kb)
     PHASE=$(get_phase)
-    ITER=$(get_iteration)
 
-    echo "[monitor_data] $TIMESTAMP,$RSS,$GC_MEM,$HEAP_KB,$PHASE,$ITER" >> "$OUTPUT_FILE"
+    echo "[monitor_data] $TIMESTAMP,$RSS,$GC_MEM,$HEAP_KB,$PHASE" >> "$OUTPUT_FILE"
     
     sleep $INTERVAL
 done

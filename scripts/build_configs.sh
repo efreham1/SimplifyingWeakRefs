@@ -20,13 +20,17 @@ MAPPING_FILE="${SCRIPT_DIR}/variants.conf"
 LOCK_FILE="${REPO_ROOT}/build/.build_configs.lock"
 MAKE_TARGET="exploded-image"
 JOBS="${JOBS:-$(nproc)}"
+BUILD_RETRY_COUNT="${BUILD_RETRY_COUNT:-2}"
+BUILD_RETRY_SLEEP_SECONDS="${BUILD_RETRY_SLEEP_SECONDS:-5}"
 DEBUG_LEVEL=""
 DEBUG_LEVEL_SET=false
 SRC_BACKUP=""
 ACTIVE_SHARED_LEVEL=""
 SHARED_SOURCE_REFRESH_REQUIRED=false
 DEDICATED_SOURCE_REFRESH_REQUIRED=false
+SHARED_REUSED_EXACT_CACHE=false
 NONE_SIGNATURE=""
+KEEP_SHARED_VARIANT_CACHES="${KEEP_SHARED_VARIANT_CACHES:-0}"
 
 mkdir -p "${REPO_ROOT}/build"
 exec 9>"${LOCK_FILE}"
@@ -72,9 +76,17 @@ case "${DEBUG_LEVEL}" in
     ;;
 esac
 
+refresh_configured_builds() {
+  echo "Preparing configured build directories"
+  bash "${SCRIPT_DIR}/create_configs.sh"
+}
+
+if [ ! -f "${MAPPING_FILE}" ]; then
+  refresh_configured_builds
+fi
+
 if [ ! -f "${MAPPING_FILE}" ]; then
   echo "Missing mapping file: ${MAPPING_FILE}" >&2
-  echo "Run scripts/create_configs.sh first." >&2
   exit 1
 fi
 
@@ -114,6 +126,88 @@ append_build_index() {
     build_indices+=("${index}")
     seen_images["${image_name}"]=1
   fi
+}
+
+conf_failure_log_dir() {
+  local conf="$1"
+
+  printf '%s/build/%s/make-support/failure-logs\n' "${REPO_ROOT}" "${conf}"
+}
+
+clear_conf_failure_logs() {
+  local conf="$1"
+  local failure_dir
+
+  failure_dir="$(conf_failure_log_dir "${conf}")"
+  rm -rf "${failure_dir}"
+}
+
+build_has_retryable_resource_failure() {
+  local conf="$1"
+  local failure_dir
+
+  failure_dir="$(conf_failure_log_dir "${conf}")"
+  if [ ! -d "${failure_dir}" ]; then
+    return 1
+  fi
+
+  find "${failure_dir}" -type f -name '*.log' -print0 | xargs -0 -r grep -Fq 'Resource temporarily unavailable'
+}
+
+run_make_target() {
+  local conf="$1"
+  local attempt=1
+  local max_attempts=$((BUILD_RETRY_COUNT + 1))
+  local attempt_jobs="$JOBS"
+  local make_status=0
+  local retryable=false
+  local next_jobs=0
+
+  while true; do
+    clear_conf_failure_logs "${conf}"
+
+    if [ "${attempt}" -eq 1 ]; then
+      echo "Running: make CONF=${conf} ${MAKE_TARGET} JOBS=${attempt_jobs}"
+    else
+      echo "Running: make CONF=${conf} ${MAKE_TARGET} JOBS=${attempt_jobs} (attempt ${attempt}/${max_attempts})"
+    fi
+
+    set +e
+    make CONF="${conf}" "${MAKE_TARGET}" JOBS="${attempt_jobs}"
+    make_status=$?
+    set -e
+
+    if [ "${make_status}" -eq 0 ]; then
+      if [ "${attempt_jobs}" -ne "${JOBS}" ]; then
+        echo "Build succeeded after retry; continuing with JOBS=${attempt_jobs}"
+        JOBS="${attempt_jobs}"
+      fi
+      return 0
+    fi
+
+    retryable=false
+    if build_has_retryable_resource_failure "${conf}"; then
+      retryable=true
+    fi
+
+    if [ "${retryable}" = false ] || [ "${attempt}" -ge "${max_attempts}" ]; then
+      return "${make_status}"
+    fi
+
+    next_jobs=$((attempt_jobs / 2))
+    if [ "${next_jobs}" -lt 1 ]; then
+      next_jobs=1
+    fi
+    if [ "${next_jobs}" -ge "${attempt_jobs}" ] && [ "${attempt_jobs}" -gt 1 ]; then
+      next_jobs=$((attempt_jobs - 1))
+    fi
+
+    echo "Retrying ${conf} after transient resource failure; sleeping ${BUILD_RETRY_SLEEP_SECONDS}s and reducing JOBS from ${attempt_jobs} to ${next_jobs}"
+    sleep "${BUILD_RETRY_SLEEP_SECONDS}"
+
+    attempt=$((attempt + 1))
+    attempt_jobs="${next_jobs}"
+  done
 }
 
 if [ "${#requested[@]}" -eq 0 ] || [ "${requested[0]:-}" = "everything" ]; then
@@ -217,41 +311,72 @@ remove_obsolete_per_variant_build_dirs() {
   done
 }
 
-ensure_configured_confs_exist() {
-  local conf
-  declare -A seen_confs=()
+prune_shared_variant_caches() {
+  local level_dir="${VARIANT_STATE_ROOT}/${DEBUG_LEVEL}"
+  local variant
+  local variant_cache_dir_path
+  local pruned_any=false
 
-  for conf in "${actual_confs[@]}"; do
-    if [ -n "${seen_confs[$conf]+x}" ]; then
+  if [ "${KEEP_SHARED_VARIANT_CACHES}" = "1" ] || [ ! -d "${level_dir}" ]; then
+    return 0
+  fi
+
+  for variant in "${VARIANT_LIST[@]}"; do
+    if [ "${variant}" = "none" ] || [ "${variant}" = "weak_fields" ]; then
       continue
     fi
 
-    if [ ! -f "${REPO_ROOT}/build/${conf}/spec.gmk" ]; then
-      echo "Missing configured build directory: build/${conf}" >&2
-      echo "Run scripts/create_configs.sh first." >&2
-      exit 1
+    variant_cache_dir_path="$(variant_cache_dir "${variant}" "${DEBUG_LEVEL}")"
+    if [ ! -d "${variant_cache_dir_path}" ]; then
+      continue
     fi
 
-    seen_confs["${conf}"]=1
+    if [ "${pruned_any}" = false ]; then
+      echo "Pruning shared HotSpot caches for ${DEBUG_LEVEL}; keeping only the none seed cache"
+      pruned_any=true
+    fi
+
+    echo "  ${variant_cache_dir_path#${REPO_ROOT}/}"
+    rm -rf "${variant_cache_dir_path}"
   done
 }
 
-restore_src() {
-  local restore_dir
+ensure_configured_confs_exist() {
+  local conf
+  local missing_conf=false
+  local refresh_attempted=false
+  declare -A seen_confs=()
 
-  if [ ! -d "${SRC_BACKUP}" ]; then
-    echo "Error: src backup directory is missing: ${SRC_BACKUP}" >&2
-    return 1
-  fi
+  while true; do
+    missing_conf=false
 
-  restore_dir="$(mktemp -d "${REPO_ROOT}/.src_restore.XXXXXX")"
-  if ! cp -a "${SRC_BACKUP}/." "${restore_dir}/"; then
-    rm -rf "${restore_dir}"
-    return 1
-  fi
+    for conf in "${actual_confs[@]}"; do
+      if [ -n "${seen_confs[$conf]+x}" ]; then
+        continue
+      fi
 
-  rm -rf "${REPO_ROOT}/src"
-  mv "${restore_dir}" "${REPO_ROOT}/src"
+      if [ ! -f "${REPO_ROOT}/build/${conf}/spec.gmk" ]; then
+        echo "Missing configured build directory: build/${conf}" >&2
+        missing_conf=true
+        break
+      fi
+
+      seen_confs["${conf}"]=1
+    done
+
+    if [ "${missing_conf}" = false ]; then
+      return 0
+    fi
+
+    if [ "${refresh_attempted}" = true ]; then
+      echo "Failed to prepare the configured build directories." >&2
+      exit 1
+    fi
+
+    refresh_configured_builds
+    refresh_attempted=true
+    seen_confs=()
+  done
 }
 
 cleanup() {
@@ -263,7 +388,7 @@ cleanup() {
   fi
 
   if [ -n "${SRC_BACKUP}" ] && [ -d "${SRC_BACKUP}" ]; then
-    restore_src || restore_status=$?
+    restore_src_from_backup "${SRC_BACKUP}" || restore_status=$?
     if [ "${restore_status}" -eq 0 ]; then
       rm -rf "${SRC_BACKUP}"
     else
@@ -309,6 +434,7 @@ prepare_shared_variant_workspace() {
   local none_cached_signature=""
 
   SHARED_SOURCE_REFRESH_REQUIRED=false
+  SHARED_REUSED_EXACT_CACHE=false
   recover_shared_hotspot "${DEBUG_LEVEL}"
 
   shared_hotspot="$(shared_hotspot_dir "${DEBUG_LEVEL}")"
@@ -323,6 +449,7 @@ prepare_shared_variant_workspace() {
     echo "Reusing exact HotSpot cache for ${variant}"
     mkdir -p "$(dirname "${shared_hotspot}")"
     mv "${cache_hotspot}" "${shared_hotspot}"
+    SHARED_REUSED_EXACT_CACHE=true
     return 0
   fi
 
@@ -379,10 +506,16 @@ store_shared_variant_cache() {
   cache_signature_file="$(variant_cache_signature_file "${variant}" "${DEBUG_LEVEL}")"
   work_state_dir="$(shared_work_state_dir "${DEBUG_LEVEL}")"
 
-  rm -rf "${cache_hotspot}"
-  mkdir -p "$(dirname "${cache_hotspot}")"
-  mv "${shared_hotspot}" "${cache_hotspot}"
-  printf '%s\n' "${signature}" > "${cache_signature_file}"
+  if [ "${variant}" = "none" ] || [ "${KEEP_SHARED_VARIANT_CACHES}" = "1" ]; then
+    rm -rf "${cache_hotspot}"
+    mkdir -p "$(dirname "${cache_hotspot}")"
+    mv "${shared_hotspot}" "${cache_hotspot}"
+    printf '%s\n' "${signature}" > "${cache_signature_file}"
+  else
+    rm -rf "${shared_hotspot}" "${cache_hotspot}"
+    rm -f "${cache_signature_file}"
+  fi
+
   rm -rf "${work_state_dir}"
 }
 
@@ -437,10 +570,13 @@ build_shared_variant() {
     touch_variant_sources "${variant}"
   fi
 
-  echo "Running: make CONF=${conf} ${MAKE_TARGET} JOBS=${JOBS}"
-  make CONF="${conf}" "${MAKE_TARGET}" JOBS="${JOBS}"
+  run_make_target "${conf}"
 
-  snapshot_variant_image "${image_name}" "${REPO_ROOT}/build/${conf}"
+  if [ "${SHARED_REUSED_EXACT_CACHE}" = true ] && [ -d "$(variant_image_dir_by_name "${image_name}")" ]; then
+    echo "Reusing existing image snapshot for ${variant}"
+  else
+    snapshot_variant_image "${image_name}" "${REPO_ROOT}/build/${conf}" "${variant}" "shared-hotspot"
+  fi
   store_shared_variant_cache "${variant}" "${signature}"
   ACTIVE_SHARED_LEVEL=""
 
@@ -460,11 +596,10 @@ build_dedicated_variant() {
     touch_variant_sources "${variant}"
   fi
 
-  echo "Running: make CONF=${conf} ${MAKE_TARGET} JOBS=${JOBS}"
-  make CONF="${conf}" "${MAKE_TARGET}" JOBS="${JOBS}"
+  run_make_target "${conf}"
 
   mark_dedicated_variant_success "${conf}" "${signature}"
-  snapshot_variant_image "${image_name}" "${REPO_ROOT}/build/${conf}"
+  snapshot_variant_image "${image_name}" "${REPO_ROOT}/build/${conf}" "${variant}" "dedicated"
 
   echo "Finished build: build/variant-images/${image_name}"
 }
@@ -474,10 +609,17 @@ clean_other_debug_level_builds
 remove_obsolete_per_variant_build_dirs
 ensure_configured_confs_exist
 recover_shared_hotspot "${DEBUG_LEVEL}"
+prune_shared_variant_caches
 
 SRC_BACKUP="$(mktemp -d "${REPO_ROOT}/.src_backup.XXXXXX")"
-echo "Backing up src/ to ${SRC_BACKUP}"
-cp -a "${REPO_ROOT}/src/." "${SRC_BACKUP}/"
+requested_backup_variants=()
+for index in "${build_indices[@]}"; do
+  variant="${variants_arr[$index]}"
+  requested_backup_variants+=("${variant}")
+done
+
+backup_variant_sources "${SRC_BACKUP}" "${requested_backup_variants[@]}" >/dev/null
+echo "Backing up $(count_src_backup_paths "${SRC_BACKUP}") affected src file(s) to ${SRC_BACKUP}"
 
 NONE_SIGNATURE="$(compute_variant_signature "none")"
 
@@ -491,7 +633,7 @@ for index in "${build_indices[@]}"; do
   echo
   echo "=== Building: ${image_name} (variant: ${variant}, mode: ${mode}) ==="
 
-  restore_src
+  restore_src_from_backup "${SRC_BACKUP}"
   echo "Installing variant files: ${variant}"
   install_variant_files "${variant}"
 
@@ -509,5 +651,4 @@ for index in "${build_indices[@]}"; do
   esac
 done
 
-restore_src
 echo "All requested builds complete."

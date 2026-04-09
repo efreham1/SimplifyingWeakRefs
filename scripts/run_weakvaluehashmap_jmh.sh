@@ -7,6 +7,7 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 DEBUG_LEVEL="release"
 RESULT_ROOT="${REPO_ROOT}/output/weakvaluehashmap_jmh"
+JMH_JAR_DIR="${JMH_JAR_DIR:-${REPO_ROOT}/build/jmh/jars}"
 LIVE_SET="4096"
 KEY_PAYLOAD_SIZE="64"
 VALUE_PAYLOAD_SIZE="256"
@@ -87,8 +88,23 @@ done
 
 find_latest_jar() {
   local pattern="$1"
-  find "${HOME}/.m2/repository" "${HOME}/.gradle/caches/modules-2/files-2.1" \
-    -type f -name "$pattern" 2>/dev/null | LC_ALL=C sort | tail -1
+  local -a search_roots=()
+
+  if [ -d "$JMH_JAR_DIR" ]; then
+    search_roots+=("$JMH_JAR_DIR")
+  fi
+  if [ -d "${HOME}/.m2/repository" ]; then
+    search_roots+=("${HOME}/.m2/repository")
+  fi
+  if [ -d "${HOME}/.gradle/caches/modules-2/files-2.1" ]; then
+    search_roots+=("${HOME}/.gradle/caches/modules-2/files-2.1")
+  fi
+
+  if [ "${#search_roots[@]}" -eq 0 ]; then
+    return 0
+  fi
+
+  find "${search_roots[@]}" -type f -name "$pattern" 2>/dev/null | LC_ALL=C sort | tail -1
 }
 
 JMH_CORE_JAR="$(find_latest_jar 'jmh-core-*.jar')"
@@ -98,7 +114,7 @@ COMMONS_MATH_JAR="$(find_latest_jar 'commons-math3-*.jar')"
 
 for jar in "$JMH_CORE_JAR" "$JMH_GENERATOR_JAR" "$JOPT_SIMPLE_JAR" "$COMMONS_MATH_JAR"; do
   if [ -z "$jar" ] || [ ! -f "$jar" ]; then
-    echo "Missing required JMH dependency jar" >&2
+    echo "Missing required JMH dependency jar. Run 'sh make/devkit/createJMHBundle.sh' to populate ${REPO_ROOT}/build/jmh/jars, or set JMH_JAR_DIR to a directory containing jmh-core, jmh-generator-annprocess, jopt-simple, and commons-math3 jars." >&2
     exit 1
   fi
 done

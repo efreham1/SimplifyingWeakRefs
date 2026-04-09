@@ -1683,7 +1683,7 @@ void ZStatReferences::print() {
            .fill()
            .right("Encountered")
            .right("Discovered")
-           .right("Cleared/Enqueued")
+           .right("Cleared")
            .end());
 
   auto ref_print = [&] (const char* label, const ZStatReferences::ZCount& ref) {
