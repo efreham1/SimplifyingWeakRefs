@@ -8,7 +8,7 @@
 #SBATCH --exclusive
 #SBATCH --mem=0
 #SBATCH --hint=nomultithread
-#SBATCH --time=08:00:00
+#SBATCH --time=30:00:00
 #SBATCH --output=/dev/shm/weakref-bench-%j.out
 #SBATCH --error=/dev/shm/weakref-bench-%j.err
 

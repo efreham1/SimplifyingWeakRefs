@@ -1,0 +1,1360 @@
+
+=== Instance 2/8, outer iteration 11/48 (Variant all) ===
+
+Affinity: allowed=12,13,14,15,16,17,18,19,20,21,22,23 jvm=12,13,14,15,16,17,18,19,20,21 aux=22,23
+Benchmark args: 146800180
+Command: /gorilla/home/fredrha/SimplifyingWeakRefs/build/variant-images/all-linux-x86_64-server-release/jdk/bin/java -Xms160g -Xmx160g -XX:+UseZGC -Xlog:gc+stats,gc+ref -XX:InitialTenuringThreshold=1 -XX:MaxTenuringThreshold=1 -XX:ZCollectionIntervalMajor=0.5 -XX:+ZCollectionIntervalOnly -XX:NativeMemoryTracking=summary /gorilla/home/fredrha/SimplifyingWeakRefs/test/weakrefs/WeakRefMultiObjectBenchmark.java 146800180
+
+[0.004s][warning][gc] ***** WARNING! INCORRECT SYSTEM CONFIGURATION DETECTED! *****
+[0.004s][warning][gc] The system limit on number of memory mappings per process might be too low for the given
+[0.004s][warning][gc] max Java heap size (163840M). Please adjust /proc/sys/vm/max_map_count to allow for at
+[0.004s][warning][gc] least 294912 mappings (current limit is 65530). Continuing execution with the current
+[0.004s][warning][gc] limit could lead to a premature OutOfMemoryError being thrown, due to failure to map memory.
+[0.004s][info   ][gc,ref] Reference Processor created, Config: All optimisations
+2026-04-17 22:28:46
+Full thread dump OpenJDK 64-Bit Server VM (27-internal-adhoc.fredrha.SimplifyingWeakRefs mixed mode)
+                 JDK version: OpenJDK Runtime Environment (27.0) (build 27-internal-adhoc.fredrha.SimplifyingWeakRefs)
+
+Threads class SMR info:
+_java_thread_list=0x00001472541a1460, length=6, elements={
+0x00001472540ba880, 0x0000147254197aa0, 0x00001472541998b0, 0x000014725419ba30,
+0x000014725419d8a0, 0x000014725419f700
+}
+
+"main" #3 [2695413] prio=5 os_prio=0 cpu=37020.42ms elapsed=37.19s tid=0x00001472540ba880 nid=2695413 runnable  [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+
+"Reference Handler" #23 [2710664] daemon prio=10 os_prio=0 cpu=0.14ms elapsed=0.00s tid=0x0000147254197aa0 nid=2710664 waiting on condition  [0x000014723e7f6000]
+   java.lang.Thread.State: RUNNABLE
+	at java.lang.ref.Reference.waitForReferencePendingList(java.base/Native Method)
+	at java.lang.ref.Reference.processPendingReferences(java.base/Reference.java:240)
+	at java.lang.ref.Reference$ReferenceHandler.run(java.base/Reference.java:202)
+
+"Finalizer" #24 [2710665] daemon prio=8 os_prio=0 cpu=0.15ms elapsed=0.00s tid=0x00001472541998b0 nid=2710665 in Object.wait()  [0x000014723e3fe000]
+   java.lang.Thread.State: WAITING (on object monitor)
+	at java.lang.Object.wait0(java.base/Native Method)
+	- waiting on <0x000004000000f8a8> (a java.lang.Object)
+	at java.lang.Object.wait(java.base/Object.java:391)
+	at java.lang.Object.wait(java.base/Object.java:353)
+	at java.lang.ref.ReferenceQueue.remove0(java.base/ReferenceQueue.java:136)
+	at java.lang.ref.ReferenceQueue.remove(java.base/ReferenceQueue.java:214)
+	- locked <0x000004000000f8a8> (a java.lang.Object)
+	at java.lang.ref.Finalizer$FinalizerThread.run(java.base/Finalizer.java:165)
+
+"Signal Dispatcher" #25 [2710666] daemon prio=9 os_prio=0 cpu=0.11ms elapsed=0.00s tid=0x000014725419ba30 nid=2710666 waiting on condition  [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+
+"Service Thread" #26 [2710667] daemon prio=9 os_prio=0 cpu=0.12ms elapsed=0.00s tid=0x000014725419d8a0 nid=2710667 runnable  [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+
+"Monitor Deflation Thread" #27 [2710668] daemon prio=9 os_prio=0 cpu=0.09ms elapsed=0.00s tid=0x000014725419f700 nid=2710668 runnable  [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+
+"VM Thread" os_prio=0 cpu=0.39ms elapsed=0.01s tid=0x0000147254132ed0 nid=2710663 runnable  
+
+"VM Periodic Task Thread" os_prio=0 cpu=0.06ms elapsed=0.03s tid=0x000014725410b000 nid=2710662 runnable  
+
+"RuntimeWorker#5" os_prio=0 cpu=0.03ms elapsed=0.03s tid=0x00001472540ef930 nid=2710661 runnable  
+
+"RuntimeWorker#4" os_prio=0 cpu=0.03ms elapsed=0.03s tid=0x00001472540ee340 nid=2710660 runnable  
+
+"RuntimeWorker#3" os_prio=0 cpu=0.03ms elapsed=0.03s tid=0x00001472540ecd50 nid=2710659 runnable  
+
+"RuntimeWorker#2" os_prio=0 cpu=0.03ms elapsed=0.03s tid=0x00001472540eb760 nid=2710658 runnable  
+
+"RuntimeWorker#1" os_prio=0 cpu=0.04ms elapsed=0.03s tid=0x00001472540ea170 nid=2710657 runnable  
+
+"RuntimeWorker#0" os_prio=0 cpu=0.03ms elapsed=0.03s tid=0x00001472540e8b80 nid=2710656 runnable  
+
+"ZStat" os_prio=0 cpu=0.16ms elapsed=0.03s tid=0x00001472540e7440 nid=2710655 runnable  
+
+"ZDirector" os_prio=0 cpu=0.05ms elapsed=0.03s tid=0x00001472540e5e00 nid=2710654 runnable  
+
+"ZDriverMajor" os_prio=0 cpu=0.05ms elapsed=0.03s tid=0x00001472540e4430 nid=2710653 runnable  
+
+"ZDriverMinor" os_prio=0 cpu=0.15ms elapsed=0.03s tid=0x00001472540e2ad0 nid=2710652 runnable  
+
+"ZWorkerYoung#2" os_prio=0 cpu=0.03ms elapsed=37.19s tid=0x00001472540e1380 nid=2695420 runnable  
+
+"ZWorkerYoung#1" os_prio=0 cpu=0.04ms elapsed=37.19s tid=0x00001472540dfd90 nid=2695419 runnable  
+
+"ZWorkerYoung#0" os_prio=0 cpu=0.04ms elapsed=37.19s tid=0x00001472540de7a0 nid=2695418 runnable  
+
+"ZWorkerOld#2" os_prio=0 cpu=0.03ms elapsed=37.19s tid=0x00001472540dd0b0 nid=2695417 runnable  
+
+"ZWorkerOld#1" os_prio=0 cpu=0.04ms elapsed=37.19s tid=0x00001472540dbac0 nid=2695416 runnable  
+
+"ZWorkerOld#0" os_prio=0 cpu=0.05ms elapsed=37.19s tid=0x00001472540da8e0 nid=2695415 runnable  
+
+"ZUncommitter#0" os_prio=0 cpu=0.09ms elapsed=37.19s tid=0x00001472540d4250 nid=2695414 runnable  
+
+JNI global refs: 3, weak refs: 0
+
+Heap
+ ZHeap           used 2M, capacity 163840M, max capacity 163840M
+  Cache          163838M (1)
+   size classes  16G (1)
+ Metaspace       used 2802K, committed 2880K, reserved 1114112K
+  class space    used 201K, committed 256K, reserved 1048576K
+
+2026-04-17 22:28:46
+Full thread dump OpenJDK 64-Bit Server VM (27-internal-adhoc.fredrha.SimplifyingWeakRefs mixed mode)
+                 JDK version: OpenJDK Runtime Environment (27.0) (build 27-internal-adhoc.fredrha.SimplifyingWeakRefs)
+
+Threads class SMR info:
+_java_thread_list=0x00001472541add10, length=8, elements={
+0x00001472540ba880, 0x0000147254197aa0, 0x00001472541998b0, 0x000014725419ba30,
+0x000014725419d8a0, 0x000014725419f700, 0x00001472541a1f40, 0x00001472541abf60
+}
+
+"main" #3 [2695413] prio=5 os_prio=0 cpu=37020.59ms elapsed=37.20s tid=0x00001472540ba880 nid=2695413 runnable  [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+
+"Reference Handler" #23 [2710664] daemon prio=10 os_prio=0 cpu=0.14ms elapsed=0.01s tid=0x0000147254197aa0 nid=2710664 waiting on condition  [0x000014723e7f6000]
+   java.lang.Thread.State: RUNNABLE
+	at java.lang.ref.Reference.waitForReferencePendingList(java.base/Native Method)
+	at java.lang.ref.Reference.processPendingReferences(java.base/Reference.java:240)
+	at java.lang.ref.Reference$ReferenceHandler.run(java.base/Reference.java:202)
+
+"Finalizer" #24 [2710665] daemon prio=8 os_prio=0 cpu=0.15ms elapsed=0.01s tid=0x00001472541998b0 nid=2710665 in Object.wait()  [0x000014723e3fe000]
+   java.lang.Thread.State: WAITING (on object monitor)
+	at java.lang.Object.wait0(java.base/Native Method)
+	- waiting on <0x000004000000f8a8> (a java.lang.Object)
+	at java.lang.Object.wait(java.base/Object.java:391)
+	at java.lang.Object.wait(java.base/Object.java:353)
+	at java.lang.ref.ReferenceQueue.remove0(java.base/ReferenceQueue.java:136)
+	at java.lang.ref.ReferenceQueue.remove(java.base/ReferenceQueue.java:214)
+	- locked <0x000004000000f8a8> (a java.lang.Object)
+	at java.lang.ref.Finalizer$FinalizerThread.run(java.base/Finalizer.java:165)
+
+"Signal Dispatcher" #25 [2710666] daemon prio=9 os_prio=0 cpu=0.18ms elapsed=0.00s tid=0x000014725419ba30 nid=2710666 waiting on condition  [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+
+"Service Thread" #26 [2710667] daemon prio=9 os_prio=0 cpu=0.12ms elapsed=0.00s tid=0x000014725419d8a0 nid=2710667 runnable  [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+
+"Monitor Deflation Thread" #27 [2710668] daemon prio=9 os_prio=0 cpu=0.09ms elapsed=0.00s tid=0x000014725419f700 nid=2710668 runnable  [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+
+"C2 CompilerThread0" #28 [2710669] daemon prio=9 os_prio=0 cpu=3.32ms elapsed=0.00s tid=0x00001472541a1f40 nid=2710669 runnable  [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+   No compile task
+
+"C1 CompilerThread0" #31 [2710670] daemon prio=9 os_prio=0 cpu=0.08ms elapsed=0.00s tid=0x00001472541abf60 nid=2710670 runnable  [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+   No compile task
+
+"VM Thread" os_prio=0 cpu=1.12ms elapsed=0.02s tid=0x0000147254132ed0 nid=2710663 runnable  
+
+"VM Periodic Task Thread" os_prio=0 cpu=0.06ms elapsed=0.03s tid=0x000014725410b000 nid=2710662 runnable  
+
+"RuntimeWorker#5" os_prio=0 cpu=0.03ms elapsed=0.03s tid=0x00001472540ef930 nid=2710661 runnable  
+
+"RuntimeWorker#4" os_prio=0 cpu=0.03ms elapsed=0.03s tid=0x00001472540ee340 nid=2710660 runnable  
+
+"RuntimeWorker#3" os_prio=0 cpu=0.03ms elapsed=0.03s tid=0x00001472540ecd50 nid=2710659 runnable  
+
+"RuntimeWorker#2" os_prio=0 cpu=0.03ms elapsed=0.03s tid=0x00001472540eb760 nid=2710658 runnable  
+
+"RuntimeWorker#1" os_prio=0 cpu=0.04ms elapsed=0.03s tid=0x00001472540ea170 nid=2710657 runnable  
+
+"RuntimeWorker#0" os_prio=0 cpu=0.03ms elapsed=0.03s tid=0x00001472540e8b80 nid=2710656 runnable  
+
+"ZStat" os_prio=0 cpu=0.16ms elapsed=0.03s tid=0x00001472540e7440 nid=2710655 runnable  
+
+"ZDirector" os_prio=0 cpu=0.05ms elapsed=0.03s tid=0x00001472540e5e00 nid=2710654 runnable  
+
+"ZDriverMajor" os_prio=0 cpu=0.05ms elapsed=0.03s tid=0x00001472540e4430 nid=2710653 runnable  
+
+"ZDriverMinor" os_prio=0 cpu=0.15ms elapsed=0.03s tid=0x00001472540e2ad0 nid=2710652 runnable  
+
+"ZWorkerYoung#2" os_prio=0 cpu=0.03ms elapsed=37.20s tid=0x00001472540e1380 nid=2695420 runnable  
+
+"ZWorkerYoung#1" os_prio=0 cpu=0.04ms elapsed=37.20s tid=0x00001472540dfd90 nid=2695419 runnable  
+
+"ZWorkerYoung#0" os_prio=0 cpu=0.04ms elapsed=37.20s tid=0x00001472540de7a0 nid=2695418 runnable  
+
+"ZWorkerOld#2" os_prio=0 cpu=0.03ms elapsed=37.20s tid=0x00001472540dd0b0 nid=2695417 runnable  
+
+"ZWorkerOld#1" os_prio=0 cpu=0.04ms elapsed=37.20s tid=0x00001472540dbac0 nid=2695416 runnable  
+
+"ZWorkerOld#0" os_prio=0 cpu=0.05ms elapsed=37.20s tid=0x00001472540da8e0 nid=2695415 runnable  
+
+"ZUncommitter#0" os_prio=0 cpu=0.09ms elapsed=37.20s tid=0x00001472540d4250 nid=2695414 runnable  
+
+JNI global refs: 6, weak refs: 0
+
+Heap
+ ZHeap           used 2M, capacity 163840M, max capacity 163840M
+  Cache          163838M (1)
+   size classes  16G (1)
+ Metaspace       used 2814K, committed 2880K, reserved 1114112K
+  class space    used 202K, committed 256K, reserved 1048576K
+
+2026-04-17 22:28:46
+Full thread dump OpenJDK 64-Bit Server VM (27-internal-adhoc.fredrha.SimplifyingWeakRefs mixed mode)
+                 JDK version: OpenJDK Runtime Environment (27.0) (build 27-internal-adhoc.fredrha.SimplifyingWeakRefs)
+
+Threads class SMR info:
+_java_thread_list=0x00001472541add10, length=8, elements={
+0x00001472540ba880, 0x0000147254197aa0, 0x00001472541998b0, 0x000014725419ba30,
+0x000014725419d8a0, 0x000014725419f700, 0x00001472541a1f40, 0x00001472541abf60
+}
+
+"main" #3 [2695413] prio=5 os_prio=0 cpu=37020.76ms elapsed=37.20s tid=0x00001472540ba880 nid=2695413 runnable  [0x000014725a3fb000]
+   java.lang.Thread.State: RUNNABLE
+	at java.lang.invoke.MethodHandleStatics.<clinit>(java.base/MethodHandleStatics.java:50)
+	at java.lang.invoke.MethodHandle.<clinit>(java.base/MethodHandle.java:1906)
+
+"Reference Handler" #23 [2710664] daemon prio=10 os_prio=0 cpu=0.14ms elapsed=0.01s tid=0x0000147254197aa0 nid=2710664 waiting on condition  [0x000014723e7f6000]
+   java.lang.Thread.State: RUNNABLE
+	at java.lang.ref.Reference.waitForReferencePendingList(java.base/Native Method)
+	at java.lang.ref.Reference.processPendingReferences(java.base/Reference.java:240)
+	at java.lang.ref.Reference$ReferenceHandler.run(java.base/Reference.java:202)
+
+"Finalizer" #24 [2710665] daemon prio=8 os_prio=0 cpu=0.15ms elapsed=0.01s tid=0x00001472541998b0 nid=2710665 in Object.wait()  [0x000014723e3fe000]
+   java.lang.Thread.State: WAITING (on object monitor)
+	at java.lang.Object.wait0(java.base/Native Method)
+	- waiting on <0x000004000000f8a8> (a java.lang.Object)
+	at java.lang.Object.wait(java.base/Object.java:391)
+	at java.lang.Object.wait(java.base/Object.java:353)
+	at java.lang.ref.ReferenceQueue.remove0(java.base/ReferenceQueue.java:136)
+	at java.lang.ref.ReferenceQueue.remove(java.base/ReferenceQueue.java:214)
+	- locked <0x000004000000f8a8> (a java.lang.Object)
+	at java.lang.ref.Finalizer$FinalizerThread.run(java.base/Finalizer.java:165)
+
+"Signal Dispatcher" #25 [2710666] daemon prio=9 os_prio=0 cpu=0.23ms elapsed=0.01s tid=0x000014725419ba30 nid=2710666 waiting on condition  [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+
+"Service Thread" #26 [2710667] daemon prio=9 os_prio=0 cpu=0.12ms elapsed=0.01s tid=0x000014725419d8a0 nid=2710667 runnable  [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+
+"Monitor Deflation Thread" #27 [2710668] daemon prio=9 os_prio=0 cpu=0.09ms elapsed=0.01s tid=0x000014725419f700 nid=2710668 runnable  [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+
+"C2 CompilerThread0" #28 [2710669] daemon prio=9 os_prio=0 cpu=3.32ms elapsed=0.01s tid=0x00001472541a1f40 nid=2710669 waiting on condition  [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+   No compile task
+
+"C1 CompilerThread0" #31 [2710670] daemon prio=9 os_prio=0 cpu=0.41ms elapsed=0.00s tid=0x00001472541abf60 nid=2710670 waiting on condition  [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+   No compile task
+
+"VM Thread" os_prio=0 cpu=1.75ms elapsed=0.02s tid=0x0000147254132ed0 nid=2710663 runnable  
+
+"VM Periodic Task Thread" os_prio=0 cpu=0.06ms elapsed=0.03s tid=0x000014725410b000 nid=2710662 runnable  
+
+"RuntimeWorker#5" os_prio=0 cpu=0.03ms elapsed=0.03s tid=0x00001472540ef930 nid=2710661 runnable  
+
+"RuntimeWorker#4" os_prio=0 cpu=0.03ms elapsed=0.03s tid=0x00001472540ee340 nid=2710660 runnable  
+
+"RuntimeWorker#3" os_prio=0 cpu=0.03ms elapsed=0.03s tid=0x00001472540ecd50 nid=2710659 runnable  
+
+"RuntimeWorker#2" os_prio=0 cpu=0.03ms elapsed=0.03s tid=0x00001472540eb760 nid=2710658 runnable  
+
+"RuntimeWorker#1" os_prio=0 cpu=0.04ms elapsed=0.03s tid=0x00001472540ea170 nid=2710657 runnable  
+
+"RuntimeWorker#0" os_prio=0 cpu=0.03ms elapsed=0.03s tid=0x00001472540e8b80 nid=2710656 runnable  
+
+"ZStat" os_prio=0 cpu=0.16ms elapsed=0.03s tid=0x00001472540e7440 nid=2710655 runnable  
+
+"ZDirector" os_prio=0 cpu=0.05ms elapsed=0.03s tid=0x00001472540e5e00 nid=2710654 runnable  
+
+"ZDriverMajor" os_prio=0 cpu=0.05ms elapsed=0.03s tid=0x00001472540e4430 nid=2710653 runnable  
+
+"ZDriverMinor" os_prio=0 cpu=0.15ms elapsed=0.03s tid=0x00001472540e2ad0 nid=2710652 runnable  
+
+"ZWorkerYoung#2" os_prio=0 cpu=0.03ms elapsed=37.20s tid=0x00001472540e1380 nid=2695420 runnable  
+
+"ZWorkerYoung#1" os_prio=0 cpu=0.04ms elapsed=37.20s tid=0x00001472540dfd90 nid=2695419 runnable  
+
+"ZWorkerYoung#0" os_prio=0 cpu=0.04ms elapsed=37.20s tid=0x00001472540de7a0 nid=2695418 runnable  
+
+"ZWorkerOld#2" os_prio=0 cpu=0.03ms elapsed=37.20s tid=0x00001472540dd0b0 nid=2695417 runnable  
+
+"ZWorkerOld#1" os_prio=0 cpu=0.04ms elapsed=37.20s tid=0x00001472540dbac0 nid=2695416 runnable  
+
+"ZWorkerOld#0" os_prio=0 cpu=0.05ms elapsed=37.20s tid=0x00001472540da8e0 nid=2695415 runnable  
+
+"ZUncommitter#0" os_prio=0 cpu=0.09ms elapsed=37.20s tid=0x00001472540d4250 nid=2695414 runnable  
+
+JNI global refs: 6, weak refs: 0
+
+Heap
+ ZHeap           used 2M, capacity 163840M, max capacity 163840M
+  Cache          163838M (1)
+   size classes  16G (1)
+ Metaspace       used 2822K, committed 2880K, reserved 1114112K
+  class space    used 202K, committed 256K, reserved 1048576K
+
+2026-04-17 22:28:46
+Full thread dump OpenJDK 64-Bit Server VM (27-internal-adhoc.fredrha.SimplifyingWeakRefs mixed mode)
+                 JDK version: OpenJDK Runtime Environment (27.0) (build 27-internal-adhoc.fredrha.SimplifyingWeakRefs)
+
+Threads class SMR info:
+_java_thread_list=0x00001472541add10, length=8, elements={
+0x00001472540ba880, 0x0000147254197aa0, 0x00001472541998b0, 0x000014725419ba30,
+0x000014725419d8a0, 0x000014725419f700, 0x00001472541a1f40, 0x00001472541abf60
+}
+
+"main" #3 [2695413] prio=5 os_prio=0 cpu=37020.84ms elapsed=37.20s tid=0x00001472540ba880 nid=2695413 runnable  [0x000014725a3fb000]
+   java.lang.Thread.State: RUNNABLE
+	at java.lang.Boolean.parseBoolean(java.base/Boolean.java:144)
+	at java.lang.invoke.MethodHandleStatics.<clinit>(java.base/MethodHandleStatics.java:69)
+	at java.lang.invoke.MethodHandle.<clinit>(java.base/MethodHandle.java:1906)
+
+"Reference Handler" #23 [2710664] daemon prio=10 os_prio=0 cpu=0.14ms elapsed=0.01s tid=0x0000147254197aa0 nid=2710664 waiting on condition  [0x000014723e7f6000]
+   java.lang.Thread.State: RUNNABLE
+	at java.lang.ref.Reference.waitForReferencePendingList(java.base/Native Method)
+	at java.lang.ref.Reference.processPendingReferences(java.base/Reference.java:240)
+	at java.lang.ref.Reference$ReferenceHandler.run(java.base/Reference.java:202)
+
+"Finalizer" #24 [2710665] daemon prio=8 os_prio=0 cpu=0.15ms elapsed=0.01s tid=0x00001472541998b0 nid=2710665 in Object.wait()  [0x000014723e3fe000]
+   java.lang.Thread.State: WAITING (on object monitor)
+	at java.lang.Object.wait0(java.base/Native Method)
+	- waiting on <0x000004000000f8a8> (a java.lang.Object)
+	at java.lang.Object.wait(java.base/Object.java:391)
+	at java.lang.Object.wait(java.base/Object.java:353)
+	at java.lang.ref.ReferenceQueue.remove0(java.base/ReferenceQueue.java:136)
+	at java.lang.ref.ReferenceQueue.remove(java.base/ReferenceQueue.java:214)
+	- locked <0x000004000000f8a8> (a java.lang.Object)
+	at java.lang.ref.Finalizer$FinalizerThread.run(java.base/Finalizer.java:165)
+
+"Signal Dispatcher" #25 [2710666] daemon prio=9 os_prio=0 cpu=0.28ms elapsed=0.01s tid=0x000014725419ba30 nid=2710666 waiting on condition  [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+
+"Service Thread" #26 [2710667] daemon prio=9 os_prio=0 cpu=0.12ms elapsed=0.01s tid=0x000014725419d8a0 nid=2710667 runnable  [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+
+"Monitor Deflation Thread" #27 [2710668] daemon prio=9 os_prio=0 cpu=0.09ms elapsed=0.01s tid=0x000014725419f700 nid=2710668 runnable  [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+
+"C2 CompilerThread0" #28 [2710669] daemon prio=9 os_prio=0 cpu=3.34ms elapsed=0.01s tid=0x00001472541a1f40 nid=2710669 waiting on condition  [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+   No compile task
+
+"C1 CompilerThread0" #31 [2710670] daemon prio=9 os_prio=0 cpu=0.47ms elapsed=0.01s tid=0x00001472541abf60 nid=2710670 runnable  [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+   Compiling:    1       3       java.lang.Object::<init> (1 bytes)
+
+"VM Thread" os_prio=0 cpu=2.38ms elapsed=0.02s tid=0x0000147254132ed0 nid=2710663 runnable  
+
+"VM Periodic Task Thread" os_prio=0 cpu=0.06ms elapsed=0.03s tid=0x000014725410b000 nid=2710662 runnable  
+
+"RuntimeWorker#5" os_prio=0 cpu=0.03ms elapsed=0.03s tid=0x00001472540ef930 nid=2710661 runnable  
+
+"RuntimeWorker#4" os_prio=0 cpu=0.03ms elapsed=0.03s tid=0x00001472540ee340 nid=2710660 runnable  
+
+"RuntimeWorker#3" os_prio=0 cpu=0.03ms elapsed=0.03s tid=0x00001472540ecd50 nid=2710659 runnable  
+
+"RuntimeWorker#2" os_prio=0 cpu=0.03ms elapsed=0.03s tid=0x00001472540eb760 nid=2710658 runnable  
+
+"RuntimeWorker#1" os_prio=0 cpu=0.04ms elapsed=0.03s tid=0x00001472540ea170 nid=2710657 runnable  
+
+"RuntimeWorker#0" os_prio=0 cpu=0.03ms elapsed=0.03s tid=0x00001472540e8b80 nid=2710656 runnable  
+
+"ZStat" os_prio=0 cpu=0.16ms elapsed=0.03s tid=0x00001472540e7440 nid=2710655 runnable  
+
+"ZDirector" os_prio=0 cpu=0.05ms elapsed=0.03s tid=0x00001472540e5e00 nid=2710654 runnable  
+
+"ZDriverMajor" os_prio=0 cpu=0.05ms elapsed=0.03s tid=0x00001472540e4430 nid=2710653 runnable  
+
+"ZDriverMinor" os_prio=0 cpu=0.15ms elapsed=0.03s tid=0x00001472540e2ad0 nid=2710652 runnable  
+
+"ZWorkerYoung#2" os_prio=0 cpu=0.03ms elapsed=37.20s tid=0x00001472540e1380 nid=2695420 runnable  
+
+"ZWorkerYoung#1" os_prio=0 cpu=0.04ms elapsed=37.20s tid=0x00001472540dfd90 nid=2695419 runnable  
+
+"ZWorkerYoung#0" os_prio=0 cpu=0.04ms elapsed=37.20s tid=0x00001472540de7a0 nid=2695418 runnable  
+
+"ZWorkerOld#2" os_prio=0 cpu=0.03ms elapsed=37.20s tid=0x00001472540dd0b0 nid=2695417 runnable  
+
+"ZWorkerOld#1" os_prio=0 cpu=0.04ms elapsed=37.20s tid=0x00001472540dbac0 nid=2695416 runnable  
+
+"ZWorkerOld#0" os_prio=0 cpu=0.05ms elapsed=37.20s tid=0x00001472540da8e0 nid=2695415 runnable  
+
+"ZUncommitter#0" os_prio=0 cpu=0.09ms elapsed=37.20s tid=0x00001472540d4250 nid=2695414 runnable  
+
+JNI global refs: 6, weak refs: 0
+
+Heap
+ ZHeap           used 2M, capacity 163840M, max capacity 163840M
+  Cache          163838M (1)
+   size classes  16G (1)
+ Metaspace       used 2823K, committed 2880K, reserved 1114112K
+  class space    used 203K, committed 256K, reserved 1048576K
+
+2026-04-17 22:28:46
+Full thread dump OpenJDK 64-Bit Server VM (27-internal-adhoc.fredrha.SimplifyingWeakRefs mixed mode)
+                 JDK version: OpenJDK Runtime Environment (27.0) (build 27-internal-adhoc.fredrha.SimplifyingWeakRefs)
+
+Threads class SMR info:
+_java_thread_list=0x00001472541add10, length=8, elements={
+0x00001472540ba880, 0x0000147254197aa0, 0x00001472541998b0, 0x000014725419ba30,
+0x000014725419d8a0, 0x000014725419f700, 0x00001472541a1f40, 0x00001472541abf60
+}
+
+"main" #3 [2695413] prio=5 os_prio=0 cpu=37020.94ms elapsed=37.20s tid=0x00001472540ba880 nid=2695413 runnable  [0x000014725a3fb000]
+   java.lang.Thread.State: RUNNABLE
+	at java.lang.Integer.parseInt(java.base/Integer.java:512)
+	at java.lang.Integer.parseInt(java.base/Integer.java:626)
+	at java.lang.invoke.MethodHandleStatics.<clinit>(java.base/MethodHandleStatics.java:78)
+	at java.lang.invoke.MethodHandle.<clinit>(java.base/MethodHandle.java:1906)
+
+"Reference Handler" #23 [2710664] daemon prio=10 os_prio=0 cpu=0.14ms elapsed=0.01s tid=0x0000147254197aa0 nid=2710664 waiting on condition  [0x000014723e7f6000]
+   java.lang.Thread.State: RUNNABLE
+	at java.lang.ref.Reference.waitForReferencePendingList(java.base/Native Method)
+	at java.lang.ref.Reference.processPendingReferences(java.base/Reference.java:240)
+	at java.lang.ref.Reference$ReferenceHandler.run(java.base/Reference.java:202)
+
+"Finalizer" #24 [2710665] daemon prio=8 os_prio=0 cpu=0.15ms elapsed=0.01s tid=0x00001472541998b0 nid=2710665 in Object.wait()  [0x000014723e3fe000]
+   java.lang.Thread.State: WAITING (on object monitor)
+	at java.lang.Object.wait0(java.base/Native Method)
+	- waiting on <0x000004000000f8a8> (a java.lang.Object)
+	at java.lang.Object.wait(java.base/Object.java:391)
+	at java.lang.Object.wait(java.base/Object.java:353)
+	at java.lang.ref.ReferenceQueue.remove0(java.base/ReferenceQueue.java:136)
+	at java.lang.ref.ReferenceQueue.remove(java.base/ReferenceQueue.java:214)
+	- locked <0x000004000000f8a8> (a java.lang.Object)
+	at java.lang.ref.Finalizer$FinalizerThread.run(java.base/Finalizer.java:165)
+
+"Signal Dispatcher" #25 [2710666] daemon prio=9 os_prio=0 cpu=0.34ms elapsed=0.01s tid=0x000014725419ba30 nid=2710666 waiting on condition  [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+
+"Service Thread" #26 [2710667] daemon prio=9 os_prio=0 cpu=0.12ms elapsed=0.01s tid=0x000014725419d8a0 nid=2710667 runnable  [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+
+"Monitor Deflation Thread" #27 [2710668] daemon prio=9 os_prio=0 cpu=0.09ms elapsed=0.01s tid=0x000014725419f700 nid=2710668 runnable  [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+
+"C2 CompilerThread0" #28 [2710669] daemon prio=9 os_prio=0 cpu=3.35ms elapsed=0.01s tid=0x00001472541a1f40 nid=2710669 waiting on condition  [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+   No compile task
+
+"C1 CompilerThread0" #31 [2710670] daemon prio=9 os_prio=0 cpu=0.54ms elapsed=0.01s tid=0x00001472541abf60 nid=2710670 runnable  [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+   Compiling:    1       3       java.lang.Object::<init> (1 bytes)
+
+"VM Thread" os_prio=0 cpu=3.01ms elapsed=0.02s tid=0x0000147254132ed0 nid=2710663 runnable  
+
+"VM Periodic Task Thread" os_prio=0 cpu=0.06ms elapsed=0.03s tid=0x000014725410b000 nid=2710662 runnable  
+
+"RuntimeWorker#5" os_prio=0 cpu=0.03ms elapsed=0.03s tid=0x00001472540ef930 nid=2710661 runnable  
+
+"RuntimeWorker#4" os_prio=0 cpu=0.03ms elapsed=0.03s tid=0x00001472540ee340 nid=2710660 runnable  
+
+"RuntimeWorker#3" os_prio=0 cpu=0.03ms elapsed=0.03s tid=0x00001472540ecd50 nid=2710659 runnable  
+
+"RuntimeWorker#2" os_prio=0 cpu=0.03ms elapsed=0.03s tid=0x00001472540eb760 nid=2710658 runnable  
+
+"RuntimeWorker#1" os_prio=0 cpu=0.04ms elapsed=0.03s tid=0x00001472540ea170 nid=2710657 runnable  
+
+"RuntimeWorker#0" os_prio=0 cpu=0.03ms elapsed=0.03s tid=0x00001472540e8b80 nid=2710656 runnable  
+
+"ZStat" os_prio=0 cpu=0.16ms elapsed=0.03s tid=0x00001472540e7440 nid=2710655 runnable  
+
+"ZDirector" os_prio=0 cpu=0.05ms elapsed=0.03s tid=0x00001472540e5e00 nid=2710654 runnable  
+
+"ZDriverMajor" os_prio=0 cpu=0.05ms elapsed=0.03s tid=0x00001472540e4430 nid=2710653 runnable  
+
+"ZDriverMinor" os_prio=0 cpu=0.15ms elapsed=0.03s tid=0x00001472540e2ad0 nid=2710652 runnable  
+
+"ZWorkerYoung#2" os_prio=0 cpu=0.03ms elapsed=37.20s tid=0x00001472540e1380 nid=2695420 runnable  
+
+"ZWorkerYoung#1" os_prio=0 cpu=0.04ms elapsed=37.20s tid=0x00001472540dfd90 nid=2695419 runnable  
+
+"ZWorkerYoung#0" os_prio=0 cpu=0.04ms elapsed=37.20s tid=0x00001472540de7a0 nid=2695418 runnable  
+
+"ZWorkerOld#2" os_prio=0 cpu=0.03ms elapsed=37.20s tid=0x00001472540dd0b0 nid=2695417 runnable  
+
+"ZWorkerOld#1" os_prio=0 cpu=0.04ms elapsed=37.20s tid=0x00001472540dbac0 nid=2695416 runnable  
+
+"ZWorkerOld#0" os_prio=0 cpu=0.05ms elapsed=37.20s tid=0x00001472540da8e0 nid=2695415 runnable  
+
+"ZUncommitter#0" os_prio=0 cpu=0.09ms elapsed=37.20s tid=0x00001472540d4250 nid=2695414 runnable  
+
+JNI global refs: 6, weak refs: 0
+
+Heap
+ ZHeap           used 2M, capacity 163840M, max capacity 163840M
+  Cache          163838M (1)
+   size classes  16G (1)
+ Metaspace       used 2833K, committed 2944K, reserved 1114112K
+  class space    used 204K, committed 256K, reserved 1048576K
+
+2026-04-17 22:28:46
+Full thread dump OpenJDK 64-Bit Server VM (27-internal-adhoc.fredrha.SimplifyingWeakRefs mixed mode)
+                 JDK version: OpenJDK Runtime Environment (27.0) (build 27-internal-adhoc.fredrha.SimplifyingWeakRefs)
+
+Threads class SMR info:
+_java_thread_list=0x00001472541add10, length=8, elements={
+0x00001472540ba880, 0x0000147254197aa0, 0x00001472541998b0, 0x000014725419ba30,
+0x000014725419d8a0, 0x000014725419f700, 0x00001472541a1f40, 0x00001472541abf60
+}
+
+"main" #3 [2695413] prio=5 os_prio=0 cpu=37021.12ms elapsed=37.20s tid=0x00001472540ba880 nid=2695413 runnable  [0x000014725a3fb000]
+   java.lang.Thread.State: RUNNABLE
+	at java.lang.CharacterData.of(java.base/CharacterData.java:81)
+	at java.lang.Character.digit(java.base/Character.java:11656)
+	at java.lang.Character.digit(java.base/Character.java:11604)
+	at java.lang.Integer.parseInt(java.base/Integer.java:512)
+	at java.lang.Integer.parseInt(java.base/Integer.java:626)
+	at java.lang.invoke.MethodHandleStatics.<clinit>(java.base/MethodHandleStatics.java:78)
+	at java.lang.invoke.MethodHandle.<clinit>(java.base/MethodHandle.java:1906)
+
+"Reference Handler" #23 [2710664] daemon prio=10 os_prio=0 cpu=0.14ms elapsed=0.01s tid=0x0000147254197aa0 nid=2710664 waiting on condition  [0x000014723e7f6000]
+   java.lang.Thread.State: RUNNABLE
+	at java.lang.ref.Reference.waitForReferencePendingList(java.base/Native Method)
+	at java.lang.ref.Reference.processPendingReferences(java.base/Reference.java:240)
+	at java.lang.ref.Reference$ReferenceHandler.run(java.base/Reference.java:202)
+
+"Finalizer" #24 [2710665] daemon prio=8 os_prio=0 cpu=0.15ms elapsed=0.01s tid=0x00001472541998b0 nid=2710665 in Object.wait()  [0x000014723e3fe000]
+   java.lang.Thread.State: WAITING (on object monitor)
+	at java.lang.Object.wait0(java.base/Native Method)
+	- waiting on <0x000004000000f8a8> (a java.lang.Object)
+	at java.lang.Object.wait(java.base/Object.java:391)
+	at java.lang.Object.wait(java.base/Object.java:353)
+	at java.lang.ref.ReferenceQueue.remove0(java.base/ReferenceQueue.java:136)
+	at java.lang.ref.ReferenceQueue.remove(java.base/ReferenceQueue.java:214)
+	- locked <0x000004000000f8a8> (a java.lang.Object)
+	at java.lang.ref.Finalizer$FinalizerThread.run(java.base/Finalizer.java:165)
+
+"Signal Dispatcher" #25 [2710666] daemon prio=9 os_prio=0 cpu=0.39ms elapsed=0.01s tid=0x000014725419ba30 nid=2710666 waiting on condition  [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+
+"Service Thread" #26 [2710667] daemon prio=9 os_prio=0 cpu=0.12ms elapsed=0.01s tid=0x000014725419d8a0 nid=2710667 runnable  [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+
+"Monitor Deflation Thread" #27 [2710668] daemon prio=9 os_prio=0 cpu=0.09ms elapsed=0.01s tid=0x000014725419f700 nid=2710668 runnable  [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+
+"C2 CompilerThread0" #28 [2710669] daemon prio=9 os_prio=0 cpu=3.35ms elapsed=0.01s tid=0x00001472541a1f40 nid=2710669 waiting on condition  [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+   No compile task
+
+"C1 CompilerThread0" #31 [2710670] daemon prio=9 os_prio=0 cpu=0.75ms elapsed=0.01s tid=0x00001472541abf60 nid=2710670 runnable  [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+   Compiling:    1       3       java.lang.Object::<init> (1 bytes)
+
+"VM Thread" os_prio=0 cpu=3.66ms elapsed=0.02s tid=0x0000147254132ed0 nid=2710663 runnable  
+
+"VM Periodic Task Thread" os_prio=0 cpu=0.06ms elapsed=0.03s tid=0x000014725410b000 nid=2710662 runnable  
+
+"RuntimeWorker#5" os_prio=0 cpu=0.03ms elapsed=0.03s tid=0x00001472540ef930 nid=2710661 runnable  
+
+"RuntimeWorker#4" os_prio=0 cpu=0.03ms elapsed=0.03s tid=0x00001472540ee340 nid=2710660 runnable  
+
+"RuntimeWorker#3" os_prio=0 cpu=0.03ms elapsed=0.03s tid=0x00001472540ecd50 nid=2710659 runnable  
+
+"RuntimeWorker#2" os_prio=0 cpu=0.03ms elapsed=0.04s tid=0x00001472540eb760 nid=2710658 runnable  
+
+"RuntimeWorker#1" os_prio=0 cpu=0.04ms elapsed=0.04s tid=0x00001472540ea170 nid=2710657 runnable  
+
+"RuntimeWorker#0" os_prio=0 cpu=0.03ms elapsed=0.04s tid=0x00001472540e8b80 nid=2710656 runnable  
+
+"ZStat" os_prio=0 cpu=0.16ms elapsed=0.04s tid=0x00001472540e7440 nid=2710655 runnable  
+
+"ZDirector" os_prio=0 cpu=0.05ms elapsed=0.04s tid=0x00001472540e5e00 nid=2710654 runnable  
+
+"ZDriverMajor" os_prio=0 cpu=0.05ms elapsed=0.04s tid=0x00001472540e4430 nid=2710653 runnable  
+
+"ZDriverMinor" os_prio=0 cpu=0.15ms elapsed=0.04s tid=0x00001472540e2ad0 nid=2710652 runnable  
+
+"ZWorkerYoung#2" os_prio=0 cpu=0.03ms elapsed=37.20s tid=0x00001472540e1380 nid=2695420 runnable  
+
+"ZWorkerYoung#1" os_prio=0 cpu=0.04ms elapsed=37.20s tid=0x00001472540dfd90 nid=2695419 runnable  
+
+"ZWorkerYoung#0" os_prio=0 cpu=0.04ms elapsed=37.20s tid=0x00001472540de7a0 nid=2695418 runnable  
+
+"ZWorkerOld#2" os_prio=0 cpu=0.03ms elapsed=37.20s tid=0x00001472540dd0b0 nid=2695417 runnable  
+
+"ZWorkerOld#1" os_prio=0 cpu=0.04ms elapsed=37.20s tid=0x00001472540dbac0 nid=2695416 runnable  
+
+"ZWorkerOld#0" os_prio=0 cpu=0.05ms elapsed=37.20s tid=0x00001472540da8e0 nid=2695415 runnable  
+
+"ZUncommitter#0" os_prio=0 cpu=0.09ms elapsed=37.20s tid=0x00001472540d4250 nid=2695414 runnable  
+
+JNI global refs: 6, weak refs: 0
+
+Heap
+ ZHeap           used 2M, capacity 163840M, max capacity 163840M
+  Cache          163838M (1)
+   size classes  16G (1)
+ Metaspace       used 2848K, committed 2944K, reserved 1114112K
+  class space    used 204K, committed 256K, reserved 1048576K
+
+2026-04-17 22:28:46
+Full thread dump OpenJDK 64-Bit Server VM (27-internal-adhoc.fredrha.SimplifyingWeakRefs mixed mode)
+                 JDK version: OpenJDK Runtime Environment (27.0) (build 27-internal-adhoc.fredrha.SimplifyingWeakRefs)
+
+Threads class SMR info:
+_java_thread_list=0x00001472541add10, length=8, elements={
+0x00001472540ba880, 0x0000147254197aa0, 0x00001472541998b0, 0x000014725419ba30,
+0x000014725419d8a0, 0x000014725419f700, 0x00001472541a1f40, 0x00001472541abf60
+}
+
+"main" #3 [2695413] prio=5 os_prio=0 cpu=37021.19ms elapsed=37.20s tid=0x00001472540ba880 nid=2695413 runnable  [0x000014725a3fb000]
+   java.lang.Thread.State: RUNNABLE
+	at java.lang.invoke.MethodHandleStatics.<clinit>(java.base/MethodHandleStatics.java:98)
+	at java.lang.invoke.MethodHandle.<clinit>(java.base/MethodHandle.java:1906)
+
+"Reference Handler" #23 [2710664] daemon prio=10 os_prio=0 cpu=0.14ms elapsed=0.01s tid=0x0000147254197aa0 nid=2710664 waiting on condition  [0x000014723e7f6000]
+   java.lang.Thread.State: RUNNABLE
+	at java.lang.ref.Reference.waitForReferencePendingList(java.base/Native Method)
+	at java.lang.ref.Reference.processPendingReferences(java.base/Reference.java:240)
+	at java.lang.ref.Reference$ReferenceHandler.run(java.base/Reference.java:202)
+
+"Finalizer" #24 [2710665] daemon prio=8 os_prio=0 cpu=0.15ms elapsed=0.01s tid=0x00001472541998b0 nid=2710665 in Object.wait()  [0x000014723e3fe000]
+   java.lang.Thread.State: WAITING (on object monitor)
+	at java.lang.Object.wait0(java.base/Native Method)
+	- waiting on <0x000004000000f8a8> (a java.lang.Object)
+	at java.lang.Object.wait(java.base/Object.java:391)
+	at java.lang.Object.wait(java.base/Object.java:353)
+	at java.lang.ref.ReferenceQueue.remove0(java.base/ReferenceQueue.java:136)
+	at java.lang.ref.ReferenceQueue.remove(java.base/ReferenceQueue.java:214)
+	- locked <0x000004000000f8a8> (a java.lang.Object)
+	at java.lang.ref.Finalizer$FinalizerThread.run(java.base/Finalizer.java:165)
+
+"Signal Dispatcher" #25 [2710666] daemon prio=9 os_prio=0 cpu=0.44ms elapsed=0.01s tid=0x000014725419ba30 nid=2710666 waiting on condition  [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+
+"Service Thread" #26 [2710667] daemon prio=9 os_prio=0 cpu=0.12ms elapsed=0.01s tid=0x000014725419d8a0 nid=2710667 runnable  [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+
+"Monitor Deflation Thread" #27 [2710668] daemon prio=9 os_prio=0 cpu=0.09ms elapsed=0.01s tid=0x000014725419f700 nid=2710668 runnable  [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+
+"C2 CompilerThread0" #28 [2710669] daemon prio=9 os_prio=0 cpu=3.35ms elapsed=0.01s tid=0x00001472541a1f40 nid=2710669 waiting on condition  [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+   No compile task
+
+"C1 CompilerThread0" #31 [2710670] daemon prio=9 os_prio=0 cpu=0.87ms elapsed=0.01s tid=0x00001472541abf60 nid=2710670 runnable  [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+   Compiling:    2       3       java.lang.Byte::toUnsignedInt (6 bytes)
+
+"VM Thread" os_prio=0 cpu=4.28ms elapsed=0.02s tid=0x0000147254132ed0 nid=2710663 runnable  
+
+"VM Periodic Task Thread" os_prio=0 cpu=0.06ms elapsed=0.03s tid=0x000014725410b000 nid=2710662 runnable  
+
+"RuntimeWorker#5" os_prio=0 cpu=0.03ms elapsed=0.04s tid=0x00001472540ef930 nid=2710661 runnable  
+
+"RuntimeWorker#4" os_prio=0 cpu=0.03ms elapsed=0.04s tid=0x00001472540ee340 nid=2710660 runnable  
+
+"RuntimeWorker#3" os_prio=0 cpu=0.03ms elapsed=0.04s tid=0x00001472540ecd50 nid=2710659 runnable  
+
+"RuntimeWorker#2" os_prio=0 cpu=0.03ms elapsed=0.04s tid=0x00001472540eb760 nid=2710658 runnable  
+
+"RuntimeWorker#1" os_prio=0 cpu=0.04ms elapsed=0.04s tid=0x00001472540ea170 nid=2710657 runnable  
+
+"RuntimeWorker#0" os_prio=0 cpu=0.03ms elapsed=0.04s tid=0x00001472540e8b80 nid=2710656 runnable  
+
+"ZStat" os_prio=0 cpu=0.16ms elapsed=0.04s tid=0x00001472540e7440 nid=2710655 runnable  
+
+"ZDirector" os_prio=0 cpu=0.05ms elapsed=0.04s tid=0x00001472540e5e00 nid=2710654 runnable  
+
+"ZDriverMajor" os_prio=0 cpu=0.05ms elapsed=0.04s tid=0x00001472540e4430 nid=2710653 runnable  
+
+"ZDriverMinor" os_prio=0 cpu=0.15ms elapsed=0.04s tid=0x00001472540e2ad0 nid=2710652 runnable  
+
+"ZWorkerYoung#2" os_prio=0 cpu=0.03ms elapsed=37.20s tid=0x00001472540e1380 nid=2695420 runnable  
+
+"ZWorkerYoung#1" os_prio=0 cpu=0.04ms elapsed=37.20s tid=0x00001472540dfd90 nid=2695419 runnable  
+
+"ZWorkerYoung#0" os_prio=0 cpu=0.04ms elapsed=37.20s tid=0x00001472540de7a0 nid=2695418 runnable  
+
+"ZWorkerOld#2" os_prio=0 cpu=0.03ms elapsed=37.20s tid=0x00001472540dd0b0 nid=2695417 runnable  
+
+"ZWorkerOld#1" os_prio=0 cpu=0.04ms elapsed=37.20s tid=0x00001472540dbac0 nid=2695416 runnable  
+
+"ZWorkerOld#0" os_prio=0 cpu=0.05ms elapsed=37.20s tid=0x00001472540da8e0 nid=2695415 runnable  
+
+"ZUncommitter#0" os_prio=0 cpu=0.09ms elapsed=37.20s tid=0x00001472540d4250 nid=2695414 runnable  
+
+JNI global refs: 6, weak refs: 0
+
+Heap
+ ZHeap           used 2M, capacity 163840M, max capacity 163840M
+  Cache          163838M (1)
+   size classes  16G (1)
+ Metaspace       used 2856K, committed 2944K, reserved 1114112K
+  class space    used 205K, committed 256K, reserved 1048576K
+
+2026-04-17 22:28:46
+Full thread dump OpenJDK 64-Bit Server VM (27-internal-adhoc.fredrha.SimplifyingWeakRefs mixed mode)
+                 JDK version: OpenJDK Runtime Environment (27.0) (build 27-internal-adhoc.fredrha.SimplifyingWeakRefs)
+
+Threads class SMR info:
+_java_thread_list=0x00001472541add10, length=8, elements={
+0x00001472540ba880, 0x0000147254197aa0, 0x00001472541998b0, 0x000014725419ba30,
+0x000014725419d8a0, 0x000014725419f700, 0x00001472541a1f40, 0x00001472541abf60
+}
+
+"main" #3 [2695413] prio=5 os_prio=0 cpu=37021.40ms elapsed=37.20s tid=0x00001472540ba880 nid=2695413 runnable  [0x000014725a3fb000]
+   java.lang.Thread.State: RUNNABLE
+	at jdk.internal.util.ClassFileDumper.<clinit>(java.base/ClassFileDumper.java:164)
+	at java.lang.invoke.MethodHandleStatics.<clinit>(java.base/MethodHandleStatics.java:101)
+	at java.lang.invoke.MethodHandle.<clinit>(java.base/MethodHandle.java:1906)
+
+"Reference Handler" #23 [2710664] daemon prio=10 os_prio=0 cpu=0.14ms elapsed=0.01s tid=0x0000147254197aa0 nid=2710664 waiting on condition  [0x000014723e7f6000]
+   java.lang.Thread.State: RUNNABLE
+	at java.lang.ref.Reference.waitForReferencePendingList(java.base/Native Method)
+	at java.lang.ref.Reference.processPendingReferences(java.base/Reference.java:240)
+	at java.lang.ref.Reference$ReferenceHandler.run(java.base/Reference.java:202)
+
+"Finalizer" #24 [2710665] daemon prio=8 os_prio=0 cpu=0.15ms elapsed=0.01s tid=0x00001472541998b0 nid=2710665 in Object.wait()  [0x000014723e3fe000]
+   java.lang.Thread.State: WAITING (on object monitor)
+	at java.lang.Object.wait0(java.base/Native Method)
+	- waiting on <0x000004000000f8a8> (a java.lang.Object)
+	at java.lang.Object.wait(java.base/Object.java:391)
+	at java.lang.Object.wait(java.base/Object.java:353)
+	at java.lang.ref.ReferenceQueue.remove0(java.base/ReferenceQueue.java:136)
+	at java.lang.ref.ReferenceQueue.remove(java.base/ReferenceQueue.java:214)
+	- locked <0x000004000000f8a8> (a java.lang.Object)
+	at java.lang.ref.Finalizer$FinalizerThread.run(java.base/Finalizer.java:165)
+
+"Signal Dispatcher" #25 [2710666] daemon prio=9 os_prio=0 cpu=0.50ms elapsed=0.01s tid=0x000014725419ba30 nid=2710666 waiting on condition  [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+
+"Service Thread" #26 [2710667] daemon prio=9 os_prio=0 cpu=0.12ms elapsed=0.01s tid=0x000014725419d8a0 nid=2710667 runnable  [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+
+"Monitor Deflation Thread" #27 [2710668] daemon prio=9 os_prio=0 cpu=0.09ms elapsed=0.01s tid=0x000014725419f700 nid=2710668 runnable  [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+
+"C2 CompilerThread0" #28 [2710669] daemon prio=9 os_prio=0 cpu=3.35ms elapsed=0.01s tid=0x00001472541a1f40 nid=2710669 waiting on condition  [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+   No compile task
+
+"C1 CompilerThread0" #31 [2710670] daemon prio=9 os_prio=0 cpu=0.88ms elapsed=0.01s tid=0x00001472541abf60 nid=2710670 waiting on condition  [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+   No compile task
+
+"VM Thread" os_prio=0 cpu=4.89ms elapsed=0.02s tid=0x0000147254132ed0 nid=2710663 runnable  
+
+"VM Periodic Task Thread" os_prio=0 cpu=0.06ms elapsed=0.04s tid=0x000014725410b000 nid=2710662 runnable  
+
+"RuntimeWorker#5" os_prio=0 cpu=0.03ms elapsed=0.04s tid=0x00001472540ef930 nid=2710661 runnable  
+
+"RuntimeWorker#4" os_prio=0 cpu=0.03ms elapsed=0.04s tid=0x00001472540ee340 nid=2710660 runnable  
+
+"RuntimeWorker#3" os_prio=0 cpu=0.03ms elapsed=0.04s tid=0x00001472540ecd50 nid=2710659 runnable  
+
+"RuntimeWorker#2" os_prio=0 cpu=0.03ms elapsed=0.04s tid=0x00001472540eb760 nid=2710658 runnable  
+
+"RuntimeWorker#1" os_prio=0 cpu=0.04ms elapsed=0.04s tid=0x00001472540ea170 nid=2710657 runnable  
+
+"RuntimeWorker#0" os_prio=0 cpu=0.03ms elapsed=0.04s tid=0x00001472540e8b80 nid=2710656 runnable  
+
+"ZStat" os_prio=0 cpu=0.16ms elapsed=0.04s tid=0x00001472540e7440 nid=2710655 runnable  
+
+"ZDirector" os_prio=0 cpu=0.07ms elapsed=0.04s tid=0x00001472540e5e00 nid=2710654 runnable  
+
+"ZDriverMajor" os_prio=0 cpu=0.09ms elapsed=0.04s tid=0x00001472540e4430 nid=2710653 runnable  
+
+"ZDriverMinor" os_prio=0 cpu=0.15ms elapsed=0.04s tid=0x00001472540e2ad0 nid=2710652 runnable  
+
+"ZWorkerYoung#2" os_prio=0 cpu=0.03ms elapsed=37.20s tid=0x00001472540e1380 nid=2695420 runnable  
+
+"ZWorkerYoung#1" os_prio=0 cpu=0.04ms elapsed=37.20s tid=0x00001472540dfd90 nid=2695419 runnable  
+
+"ZWorkerYoung#0" os_prio=0 cpu=0.04ms elapsed=37.20s tid=0x00001472540de7a0 nid=2695418 runnable  
+
+"ZWorkerOld#2" os_prio=0 cpu=0.03ms elapsed=37.20s tid=0x00001472540dd0b0 nid=2695417 runnable  
+
+"ZWorkerOld#1" os_prio=0 cpu=0.04ms elapsed=37.20s tid=0x00001472540dbac0 nid=2695416 runnable  
+
+"ZWorkerOld#0" os_prio=0 cpu=0.05ms elapsed=37.20s tid=0x00001472540da8e0 nid=2695415 runnable  
+
+"ZUncommitter#0" os_prio=0 cpu=0.09ms elapsed=37.20s tid=0x00001472540d4250 nid=2695414 runnable  
+
+JNI global refs: 6, weak refs: 0
+
+Heap
+ ZHeap           used 2M, capacity 163840M, max capacity 163840M
+  Cache          163838M (1)
+   size classes  16G (1)
+ Metaspace       used 2877K, committed 2944K, reserved 1114112K
+  class space    used 206K, committed 256K, reserved 1048576K
+
+2026-04-17 22:28:46
+Full thread dump OpenJDK 64-Bit Server VM (27-internal-adhoc.fredrha.SimplifyingWeakRefs mixed mode)
+                 JDK version: OpenJDK Runtime Environment (27.0) (build 27-internal-adhoc.fredrha.SimplifyingWeakRefs)
+
+Threads class SMR info:
+_java_thread_list=0x00001472541add10, length=8, elements={
+0x00001472540ba880, 0x0000147254197aa0, 0x00001472541998b0, 0x000014725419ba30,
+0x000014725419d8a0, 0x000014725419f700, 0x00001472541a1f40, 0x00001472541abf60
+}
+
+"main" #3 [2695413] prio=5 os_prio=0 cpu=37021.70ms elapsed=37.20s tid=0x00001472540ba880 nid=2695413 runnable  [0x000014725a3fb000]
+   java.lang.Thread.State: RUNNABLE
+	at jdk.internal.util.ClassFileDumper.<init>(java.base/ClassFileDumper.java:77)
+	at jdk.internal.util.ClassFileDumper.getInstance(java.base/ClassFileDumper.java:63)
+	at java.lang.invoke.MethodHandleStatics.<clinit>(java.base/MethodHandleStatics.java:101)
+	at java.lang.invoke.MethodHandle.<clinit>(java.base/MethodHandle.java:1906)
+
+"Reference Handler" #23 [2710664] daemon prio=10 os_prio=0 cpu=0.14ms elapsed=0.01s tid=0x0000147254197aa0 nid=2710664 waiting on condition  [0x000014723e7f6000]
+   java.lang.Thread.State: RUNNABLE
+	at java.lang.ref.Reference.waitForReferencePendingList(java.base/Native Method)
+	at java.lang.ref.Reference.processPendingReferences(java.base/Reference.java:240)
+	at java.lang.ref.Reference$ReferenceHandler.run(java.base/Reference.java:202)
+
+"Finalizer" #24 [2710665] daemon prio=8 os_prio=0 cpu=0.15ms elapsed=0.01s tid=0x00001472541998b0 nid=2710665 in Object.wait()  [0x000014723e3fe000]
+   java.lang.Thread.State: WAITING (on object monitor)
+	at java.lang.Object.wait0(java.base/Native Method)
+	- waiting on <0x000004000000f8a8> (a java.lang.Object)
+	at java.lang.Object.wait(java.base/Object.java:391)
+	at java.lang.Object.wait(java.base/Object.java:353)
+	at java.lang.ref.ReferenceQueue.remove0(java.base/ReferenceQueue.java:136)
+	at java.lang.ref.ReferenceQueue.remove(java.base/ReferenceQueue.java:214)
+	- locked <0x000004000000f8a8> (a java.lang.Object)
+	at java.lang.ref.Finalizer$FinalizerThread.run(java.base/Finalizer.java:165)
+
+"Signal Dispatcher" #25 [2710666] daemon prio=9 os_prio=0 cpu=0.56ms elapsed=0.01s tid=0x000014725419ba30 nid=2710666 waiting on condition  [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+
+"Service Thread" #26 [2710667] daemon prio=9 os_prio=0 cpu=0.12ms elapsed=0.01s tid=0x000014725419d8a0 nid=2710667 runnable  [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+
+"Monitor Deflation Thread" #27 [2710668] daemon prio=9 os_prio=0 cpu=0.09ms elapsed=0.01s tid=0x000014725419f700 nid=2710668 runnable  [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+
+"C2 CompilerThread0" #28 [2710669] daemon prio=9 os_prio=0 cpu=3.35ms elapsed=0.01s tid=0x00001472541a1f40 nid=2710669 waiting on condition  [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+   No compile task
+
+"C1 CompilerThread0" #31 [2710670] daemon prio=9 os_prio=0 cpu=0.88ms elapsed=0.01s tid=0x00001472541abf60 nid=2710670 waiting on condition  [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+   No compile task
+
+"VM Thread" os_prio=0 cpu=5.62ms elapsed=0.02s tid=0x0000147254132ed0 nid=2710663 runnable  
+
+"VM Periodic Task Thread" os_prio=0 cpu=0.06ms elapsed=0.04s tid=0x000014725410b000 nid=2710662 runnable  
+
+"RuntimeWorker#5" os_prio=0 cpu=0.03ms elapsed=0.04s tid=0x00001472540ef930 nid=2710661 runnable  
+
+"RuntimeWorker#4" os_prio=0 cpu=0.03ms elapsed=0.04s tid=0x00001472540ee340 nid=2710660 runnable  
+
+"RuntimeWorker#3" os_prio=0 cpu=0.03ms elapsed=0.04s tid=0x00001472540ecd50 nid=2710659 runnable  
+
+"RuntimeWorker#2" os_prio=0 cpu=0.03ms elapsed=0.04s tid=0x00001472540eb760 nid=2710658 runnable  
+
+"RuntimeWorker#1" os_prio=0 cpu=0.04ms elapsed=0.04s tid=0x00001472540ea170 nid=2710657 runnable  
+
+"RuntimeWorker#0" os_prio=0 cpu=0.03ms elapsed=0.04s tid=0x00001472540e8b80 nid=2710656 runnable  
+
+"ZStat" os_prio=0 cpu=0.16ms elapsed=0.04s tid=0x00001472540e7440 nid=2710655 runnable  
+
+"ZDirector" os_prio=0 cpu=0.07ms elapsed=0.04s tid=0x00001472540e5e00 nid=2710654 runnable  
+
+"ZDriverMajor" os_prio=0 cpu=0.15ms elapsed=0.04s tid=0x00001472540e4430 nid=2710653 runnable  
+
+"ZDriverMinor" os_prio=0 cpu=0.15ms elapsed=0.04s tid=0x00001472540e2ad0 nid=2710652 runnable  
+
+"ZWorkerYoung#2" os_prio=0 cpu=0.07ms elapsed=37.20s tid=0x00001472540e1380 nid=2695420 runnable  
+
+"ZWorkerYoung#1" os_prio=0 cpu=0.14ms elapsed=37.20s tid=0x00001472540dfd90 nid=2695419 runnable  
+
+"ZWorkerYoung#0" os_prio=0 cpu=0.11ms elapsed=37.20s tid=0x00001472540de7a0 nid=2695418 runnable  
+
+"ZWorkerOld#2" os_prio=0 cpu=0.03ms elapsed=37.20s tid=0x00001472540dd0b0 nid=2695417 runnable  
+
+"ZWorkerOld#1" os_prio=0 cpu=0.04ms elapsed=37.20s tid=0x00001472540dbac0 nid=2695416 runnable  
+
+"ZWorkerOld#0" os_prio=0 cpu=0.05ms elapsed=37.20s tid=0x00001472540da8e0 nid=2695415 runnable  
+
+"ZUncommitter#0" os_prio=0 cpu=0.09ms elapsed=37.20s tid=0x00001472540d4250 nid=2695414 runnable  
+
+JNI global refs: 6, weak refs: 0
+
+Heap
+ ZHeap           used 4M, capacity 163840M, max capacity 163840M
+  Cache          163836M (1)
+   size classes  16G (1)
+ Metaspace       used 2893K, committed 2944K, reserved 1114112K
+  class space    used 207K, committed 256K, reserved 1048576K
+
+2026-04-17 22:28:46
+Full thread dump OpenJDK 64-Bit Server VM (27-internal-adhoc.fredrha.SimplifyingWeakRefs mixed mode)
+                 JDK version: OpenJDK Runtime Environment (27.0) (build 27-internal-adhoc.fredrha.SimplifyingWeakRefs)
+
+Threads class SMR info:
+_java_thread_list=0x00001472541add10, length=8, elements={
+0x00001472540ba880, 0x0000147254197aa0, 0x00001472541998b0, 0x000014725419ba30,
+0x000014725419d8a0, 0x000014725419f700, 0x00001472541a1f40, 0x00001472541abf60
+}
+
+"main" #3 [2695413] prio=5 os_prio=0 cpu=37021.87ms elapsed=37.21s tid=0x00001472540ba880 nid=2695413 runnable  [0x000014725a3fc000]
+   java.lang.Thread.State: RUNNABLE
+	at java.lang.invoke.MethodHandleNatives.<clinit>(java.base/MethodHandleNatives.java:220)
+
+"Reference Handler" #23 [2710664] daemon prio=10 os_prio=0 cpu=0.14ms elapsed=0.01s tid=0x0000147254197aa0 nid=2710664 waiting on condition  [0x000014723e7f6000]
+   java.lang.Thread.State: RUNNABLE
+	at java.lang.ref.Reference.waitForReferencePendingList(java.base/Native Method)
+	at java.lang.ref.Reference.processPendingReferences(java.base/Reference.java:240)
+	at java.lang.ref.Reference$ReferenceHandler.run(java.base/Reference.java:202)
+
+"Finalizer" #24 [2710665] daemon prio=8 os_prio=0 cpu=0.15ms elapsed=0.01s tid=0x00001472541998b0 nid=2710665 in Object.wait()  [0x000014723e3fe000]
+   java.lang.Thread.State: WAITING (on object monitor)
+	at java.lang.Object.wait0(java.base/Native Method)
+	- waiting on <0x000004000000f8a8> (a java.lang.Object)
+	at java.lang.Object.wait(java.base/Object.java:391)
+	at java.lang.Object.wait(java.base/Object.java:353)
+	at java.lang.ref.ReferenceQueue.remove0(java.base/ReferenceQueue.java:136)
+	at java.lang.ref.ReferenceQueue.remove(java.base/ReferenceQueue.java:214)
+	- locked <0x000004000000f8a8> (a java.lang.Object)
+	at java.lang.ref.Finalizer$FinalizerThread.run(java.base/Finalizer.java:165)
+
+"Signal Dispatcher" #25 [2710666] daemon prio=9 os_prio=0 cpu=0.62ms elapsed=0.01s tid=0x000014725419ba30 nid=2710666 waiting on condition  [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+
+"Service Thread" #26 [2710667] daemon prio=9 os_prio=0 cpu=0.12ms elapsed=0.01s tid=0x000014725419d8a0 nid=2710667 runnable  [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+
+"Monitor Deflation Thread" #27 [2710668] daemon prio=9 os_prio=0 cpu=0.09ms elapsed=0.01s tid=0x000014725419f700 nid=2710668 runnable  [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+
+"C2 CompilerThread0" #28 [2710669] daemon prio=9 os_prio=0 cpu=3.35ms elapsed=0.01s tid=0x00001472541a1f40 nid=2710669 waiting on condition  [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+   No compile task
+
+"C1 CompilerThread0" #31 [2710670] daemon prio=9 os_prio=0 cpu=0.88ms elapsed=0.01s tid=0x00001472541abf60 nid=2710670 waiting on condition  [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+   No compile task
+
+"VM Thread" os_prio=0 cpu=6.27ms elapsed=0.02s tid=0x0000147254132ed0 nid=2710663 runnable  
+
+"VM Periodic Task Thread" os_prio=0 cpu=0.06ms elapsed=0.04s tid=0x000014725410b000 nid=2710662 runnable  
+
+"RuntimeWorker#5" os_prio=0 cpu=0.03ms elapsed=0.04s tid=0x00001472540ef930 nid=2710661 runnable  
+
+"RuntimeWorker#4" os_prio=0 cpu=0.03ms elapsed=0.04s tid=0x00001472540ee340 nid=2710660 runnable  
+
+"RuntimeWorker#3" os_prio=0 cpu=0.03ms elapsed=0.04s tid=0x00001472540ecd50 nid=2710659 runnable  
+
+"RuntimeWorker#2" os_prio=0 cpu=0.03ms elapsed=0.04s tid=0x00001472540eb760 nid=2710658 runnable  
+
+"RuntimeWorker#1" os_prio=0 cpu=0.04ms elapsed=0.04s tid=0x00001472540ea170 nid=2710657 runnable  
+
+"RuntimeWorker#0" os_prio=0 cpu=0.03ms elapsed=0.04s tid=0x00001472540e8b80 nid=2710656 runnable  
+
+"ZStat" os_prio=0 cpu=0.16ms elapsed=0.04s tid=0x00001472540e7440 nid=2710655 runnable  
+
+"ZDirector" os_prio=0 cpu=0.07ms elapsed=0.04s tid=0x00001472540e5e00 nid=2710654 runnable  
+
+"ZDriverMajor" os_prio=0 cpu=0.15ms elapsed=0.04s tid=0x00001472540e4430 nid=2710653 runnable  
+
+"ZDriverMinor" os_prio=0 cpu=0.15ms elapsed=0.04s tid=0x00001472540e2ad0 nid=2710652 runnable  
+
+"ZWorkerYoung#2" os_prio=0 cpu=0.15ms elapsed=37.20s tid=0x00001472540e1380 nid=2695420 runnable  
+
+"ZWorkerYoung#1" os_prio=0 cpu=0.24ms elapsed=37.20s tid=0x00001472540dfd90 nid=2695419 runnable  
+
+"ZWorkerYoung#0" os_prio=0 cpu=0.20ms elapsed=37.20s tid=0x00001472540de7a0 nid=2695418 runnable  
+
+"ZWorkerOld#2" os_prio=0 cpu=0.03ms elapsed=37.20s tid=0x00001472540dd0b0 nid=2695417 runnable  
+
+"ZWorkerOld#1" os_prio=0 cpu=0.04ms elapsed=37.20s tid=0x00001472540dbac0 nid=2695416 runnable  
+
+"ZWorkerOld#0" os_prio=0 cpu=0.05ms elapsed=37.20s tid=0x00001472540da8e0 nid=2695415 runnable  
+
+"ZUncommitter#0" os_prio=0 cpu=0.09ms elapsed=37.20s tid=0x00001472540d4250 nid=2695414 runnable  
+
+JNI global refs: 6, weak refs: 0
+
+Heap
+ ZHeap           used 4M, capacity 163840M, max capacity 163840M
+  Cache          163836M (1)
+   size classes  16G (1)
+ Metaspace       used 2931K, committed 3008K, reserved 1114112K
+  class space    used 207K, committed 256K, reserved 1048576K
+
+2026-04-17 22:28:46
+Full thread dump OpenJDK 64-Bit Server VM (27-internal-adhoc.fredrha.SimplifyingWeakRefs mixed mode)
+                 JDK version: OpenJDK Runtime Environment (27.0) (build 27-internal-adhoc.fredrha.SimplifyingWeakRefs)
+
+Threads class SMR info:
+_java_thread_list=0x00001472541add10, length=8, elements={
+0x00001472540ba880, 0x0000147254197aa0, 0x00001472541998b0, 0x000014725419ba30,
+0x000014725419d8a0, 0x000014725419f700, 0x00001472541a1f40, 0x00001472541abf60
+}
+
+"main" #3 [2695413] prio=5 os_prio=0 cpu=37022.63ms elapsed=37.21s tid=0x00001472540ba880 nid=2695413 runnable  [0x000014725a3fb000]
+   java.lang.Thread.State: RUNNABLE
+	at jdk.internal.access.SharedSecrets.ensureClassInitialized(java.base/SharedSecrets.java:504)
+	at jdk.internal.access.SharedSecrets.getJavaLangModuleAccess(java.base/SharedSecrets.java:198)
+	at jdk.internal.module.ModuleBootstrap.<clinit>(java.base/ModuleBootstrap.java:91)
+	at java.lang.System.initPhase2(java.base/System.java:1932)
+
+"Reference Handler" #23 [2710664] daemon prio=10 os_prio=0 cpu=0.14ms elapsed=0.01s tid=0x0000147254197aa0 nid=2710664 waiting on condition  [0x000014723e7f6000]
+   java.lang.Thread.State: RUNNABLE
+	at java.lang.ref.Reference.waitForReferencePendingList(java.base/Native Method)
+	at java.lang.ref.Reference.processPendingReferences(java.base/Reference.java:240)
+	at java.lang.ref.Reference$ReferenceHandler.run(java.base/Reference.java:202)
+
+"Finalizer" #24 [2710665] daemon prio=8 os_prio=0 cpu=0.15ms elapsed=0.01s tid=0x00001472541998b0 nid=2710665 in Object.wait()  [0x000014723e3fe000]
+   java.lang.Thread.State: WAITING (on object monitor)
+	at java.lang.Object.wait0(java.base/Native Method)
+	- waiting on <0x000004000000f8a8> (a java.lang.Object)
+	at java.lang.Object.wait(java.base/Object.java:391)
+	at java.lang.Object.wait(java.base/Object.java:353)
+	at java.lang.ref.ReferenceQueue.remove0(java.base/ReferenceQueue.java:136)
+	at java.lang.ref.ReferenceQueue.remove(java.base/ReferenceQueue.java:214)
+	- locked <0x000004000000f8a8> (a java.lang.Object)
+	at java.lang.ref.Finalizer$FinalizerThread.run(java.base/Finalizer.java:165)
+
+"Signal Dispatcher" #25 [2710666] daemon prio=9 os_prio=0 cpu=0.68ms elapsed=0.01s tid=0x000014725419ba30 nid=2710666 waiting on condition  [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+
+"Service Thread" #26 [2710667] daemon prio=9 os_prio=0 cpu=0.12ms elapsed=0.01s tid=0x000014725419d8a0 nid=2710667 runnable  [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+
+"Monitor Deflation Thread" #27 [2710668] daemon prio=9 os_prio=0 cpu=0.09ms elapsed=0.01s tid=0x000014725419f700 nid=2710668 runnable  [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+
+"C2 CompilerThread0" #28 [2710669] daemon prio=9 os_prio=0 cpu=3.35ms elapsed=0.01s tid=0x00001472541a1f40 nid=2710669 waiting on condition  [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+   No compile task
+
+"C1 CompilerThread0" #31 [2710670] daemon prio=9 os_prio=0 cpu=0.88ms elapsed=0.01s tid=0x00001472541abf60 nid=2710670 waiting on condition  [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+   No compile task
+
+"VM Thread" os_prio=0 cpu=7.01ms elapsed=0.03s tid=0x0000147254132ed0 nid=2710663 runnable  
+
+"VM Periodic Task Thread" os_prio=0 cpu=0.06ms elapsed=0.04s tid=0x000014725410b000 nid=2710662 runnable  
+
+"RuntimeWorker#5" os_prio=0 cpu=0.03ms elapsed=0.04s tid=0x00001472540ef930 nid=2710661 runnable  
+
+"RuntimeWorker#4" os_prio=0 cpu=0.03ms elapsed=0.04s tid=0x00001472540ee340 nid=2710660 runnable  
+
+"RuntimeWorker#3" os_prio=0 cpu=0.03ms elapsed=0.04s tid=0x00001472540ecd50 nid=2710659 runnable  
+
+"RuntimeWorker#2" os_prio=0 cpu=0.03ms elapsed=0.04s tid=0x00001472540eb760 nid=2710658 runnable  
+
+"RuntimeWorker#1" os_prio=0 cpu=0.04ms elapsed=0.04s tid=0x00001472540ea170 nid=2710657 runnable  
+
+"RuntimeWorker#0" os_prio=0 cpu=0.03ms elapsed=0.04s tid=0x00001472540e8b80 nid=2710656 runnable  
+
+"ZStat" os_prio=0 cpu=0.16ms elapsed=0.04s tid=0x00001472540e7440 nid=2710655 runnable  
+
+"ZDirector" os_prio=0 cpu=0.07ms elapsed=0.04s tid=0x00001472540e5e00 nid=2710654 runnable  
+
+"ZDriverMajor" os_prio=0 cpu=0.15ms elapsed=0.04s tid=0x00001472540e4430 nid=2710653 runnable  
+
+"ZDriverMinor" os_prio=0 cpu=0.15ms elapsed=0.04s tid=0x00001472540e2ad0 nid=2710652 runnable  
+
+"ZWorkerYoung#2" os_prio=0 cpu=0.16ms elapsed=37.21s tid=0x00001472540e1380 nid=2695420 runnable  
+
+"ZWorkerYoung#1" os_prio=0 cpu=0.25ms elapsed=37.21s tid=0x00001472540dfd90 nid=2695419 runnable  
+
+"ZWorkerYoung#0" os_prio=0 cpu=0.23ms elapsed=37.21s tid=0x00001472540de7a0 nid=2695418 runnable  
+
+"ZWorkerOld#2" os_prio=0 cpu=0.03ms elapsed=37.21s tid=0x00001472540dd0b0 nid=2695417 runnable  
+
+"ZWorkerOld#1" os_prio=0 cpu=0.04ms elapsed=37.21s tid=0x00001472540dbac0 nid=2695416 runnable  
+
+"ZWorkerOld#0" os_prio=0 cpu=0.05ms elapsed=37.21s tid=0x00001472540da8e0 nid=2695415 runnable  
+
+"ZUncommitter#0" os_prio=0 cpu=0.09ms elapsed=37.21s tid=0x00001472540d4250 nid=2695414 runnable  
+
+JNI global refs: 6, weak refs: 0
+
+Heap
+ ZHeap           used 4M, capacity 163840M, max capacity 163840M
+  Cache          163836M (1)
+   size classes  16G (1)
+ Metaspace       used 3011K, committed 3072K, reserved 1114112K
+  class space    used 210K, committed 256K, reserved 1048576K
+
+2026-04-17 22:28:46
+Full thread dump OpenJDK 64-Bit Server VM (27-internal-adhoc.fredrha.SimplifyingWeakRefs mixed mode)
+                 JDK version: OpenJDK Runtime Environment (27.0) (build 27-internal-adhoc.fredrha.SimplifyingWeakRefs)
+
+Threads class SMR info:
+_java_thread_list=0x00001472541add10, length=8, elements={
+0x00001472540ba880, 0x0000147254197aa0, 0x00001472541998b0, 0x000014725419ba30,
+0x000014725419d8a0, 0x000014725419f700, 0x00001472541a1f40, 0x00001472541abf60
+}
+
+"main" #3 [2695413] prio=5 os_prio=0 cpu=37023.17ms elapsed=37.21s tid=0x00001472540ba880 nid=2695413 runnable  [0x000014725a3fb000]
+   java.lang.Thread.State: RUNNABLE
+	at java.lang.invoke.MethodHandles.lookup(java.base/MethodHandles.java:131)
+	at jdk.internal.access.SharedSecrets.ensureClassInitialized(java.base/SharedSecrets.java:504)
+	at jdk.internal.access.SharedSecrets.getJavaLangModuleAccess(java.base/SharedSecrets.java:198)
+	at jdk.internal.module.ModuleBootstrap.<clinit>(java.base/ModuleBootstrap.java:91)
+	at java.lang.System.initPhase2(java.base/System.java:1932)
+
+"Reference Handler" #23 [2710664] daemon prio=10 os_prio=0 cpu=0.14ms elapsed=0.01s tid=0x0000147254197aa0 nid=2710664 waiting on condition  [0x000014723e7f6000]
+   java.lang.Thread.State: RUNNABLE
+	at java.lang.ref.Reference.waitForReferencePendingList(java.base/Native Method)
+	at java.lang.ref.Reference.processPendingReferences(java.base/Reference.java:240)
+	at java.lang.ref.Reference$ReferenceHandler.run(java.base/Reference.java:202)
+
+"Finalizer" #24 [2710665] daemon prio=8 os_prio=0 cpu=0.15ms elapsed=0.01s tid=0x00001472541998b0 nid=2710665 in Object.wait()  [0x000014723e3fe000]
+   java.lang.Thread.State: WAITING (on object monitor)
+	at java.lang.Object.wait0(java.base/Native Method)
+	- waiting on <0x000004000000f8a8> (a java.lang.Object)
+	at java.lang.Object.wait(java.base/Object.java:391)
+	at java.lang.Object.wait(java.base/Object.java:353)
+	at java.lang.ref.ReferenceQueue.remove0(java.base/ReferenceQueue.java:136)
+	at java.lang.ref.ReferenceQueue.remove(java.base/ReferenceQueue.java:214)
+	- locked <0x000004000000f8a8> (a java.lang.Object)
+	at java.lang.ref.Finalizer$FinalizerThread.run(java.base/Finalizer.java:165)
+
+"Signal Dispatcher" #25 [2710666] daemon prio=9 os_prio=0 cpu=0.75ms elapsed=0.01s tid=0x000014725419ba30 nid=2710666 waiting on condition  [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+
+"Service Thread" #26 [2710667] daemon prio=9 os_prio=0 cpu=0.12ms elapsed=0.01s tid=0x000014725419d8a0 nid=2710667 runnable  [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+
+"Monitor Deflation Thread" #27 [2710668] daemon prio=9 os_prio=0 cpu=0.09ms elapsed=0.01s tid=0x000014725419f700 nid=2710668 runnable  [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+
+"C2 CompilerThread0" #28 [2710669] daemon prio=9 os_prio=0 cpu=3.35ms elapsed=0.01s tid=0x00001472541a1f40 nid=2710669 waiting on condition  [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+   No compile task
+
+"C1 CompilerThread0" #31 [2710670] daemon prio=9 os_prio=0 cpu=0.88ms elapsed=0.01s tid=0x00001472541abf60 nid=2710670 waiting on condition  [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+   No compile task
+
+"VM Thread" os_prio=0 cpu=7.72ms elapsed=0.03s tid=0x0000147254132ed0 nid=2710663 runnable  
+
+"VM Periodic Task Thread" os_prio=0 cpu=0.06ms elapsed=0.04s tid=0x000014725410b000 nid=2710662 runnable  
+
+"RuntimeWorker#5" os_prio=0 cpu=0.03ms elapsed=0.04s tid=0x00001472540ef930 nid=2710661 runnable  
+
+"RuntimeWorker#4" os_prio=0 cpu=0.03ms elapsed=0.04s tid=0x00001472540ee340 nid=2710660 runnable  
+
+"RuntimeWorker#3" os_prio=0 cpu=0.03ms elapsed=0.04s tid=0x00001472540ecd50 nid=2710659 runnable  
+
+"RuntimeWorker#2" os_prio=0 cpu=0.03ms elapsed=0.04s tid=0x00001472540eb760 nid=2710658 runnable  
+
+"RuntimeWorker#1" os_prio=0 cpu=0.04ms elapsed=0.04s tid=0x00001472540ea170 nid=2710657 runnable  
+
+"RuntimeWorker#0" os_prio=0 cpu=0.03ms elapsed=0.04s tid=0x00001472540e8b80 nid=2710656 runnable  
+
+"ZStat" os_prio=0 cpu=0.16ms elapsed=0.04s tid=0x00001472540e7440 nid=2710655 runnable  
+
+"ZDirector" os_prio=0 cpu=0.07ms elapsed=0.04s tid=0x00001472540e5e00 nid=2710654 runnable  
+
+"ZDriverMajor" os_prio=0 cpu=0.16ms elapsed=0.04s tid=0x00001472540e4430 nid=2710653 runnable  
+
+"ZDriverMinor" os_prio=0 cpu=0.15ms elapsed=0.04s tid=0x00001472540e2ad0 nid=2710652 runnable  
+
+"ZWorkerYoung#2" os_prio=0 cpu=0.16ms elapsed=37.21s tid=0x00001472540e1380 nid=2695420 runnable  
+
+"ZWorkerYoung#1" os_prio=0 cpu=0.26ms elapsed=37.21s tid=0x00001472540dfd90 nid=2695419 runnable  
+
+"ZWorkerYoung#0" os_prio=0 cpu=0.25ms elapsed=37.21s tid=0x00001472540de7a0 nid=2695418 runnable  
+
+"ZWorkerOld#2" os_prio=0 cpu=0.03ms elapsed=37.21s tid=0x00001472540dd0b0 nid=2695417 runnable  
+
+"ZWorkerOld#1" os_prio=0 cpu=0.04ms elapsed=37.21s tid=0x00001472540dbac0 nid=2695416 runnable  
+
+"ZWorkerOld#0" os_prio=0 cpu=0.05ms elapsed=37.21s tid=0x00001472540da8e0 nid=2695415 runnable  
+
+"ZUncommitter#0" os_prio=0 cpu=0.09ms elapsed=37.21s tid=0x00001472540d4250 nid=2695414 runnable  
+
+JNI global refs: 6, weak refs: 0
+
+Heap
+ ZHeap           used 4M, capacity 163840M, max capacity 163840M
+  Cache          163836M (1)
+   size classes  16G (1)
+ Metaspace       used 3068K, committed 3136K, reserved 1114112K
+  class space    used 211K, committed 256K, reserved 1048576K
+
+[37.217s][info   ][gc,ref] GC(0) O:                           Encountered       Discovered Cleared/Enqueued 
+[37.217s][info   ][gc,ref] GC(0) O: Soft References:                    0                0                0 
+[37.217s][info   ][gc,ref] GC(0) O: Weak References:                    0                0                0 
+[37.217s][info   ][gc,ref] GC(0) O: Weak (No Queue):                    0                0                0 
+[37.217s][info   ][gc,ref] GC(0) O: Final References:                   0                0                0 
+[37.217s][info   ][gc,ref] GC(0) O: Phantom References:                 0                0                0 
+[37.729s][info   ][gc,ref] GC(1) O:                           Encountered       Discovered Cleared/Enqueued 
+[37.729s][info   ][gc,ref] GC(1) O: Soft References:                  148                0                0 
+[37.729s][info   ][gc,ref] GC(1) O: Weak References:                  605                0                0 
+[37.729s][info   ][gc,ref] GC(1) O: Weak (No Queue):                    3                0                0 
+[37.729s][info   ][gc,ref] GC(1) O: Final References:                   0                0                0 
+[37.729s][info   ][gc,ref] GC(1) O: Phantom References:                 1                0                0 
+[38.245s][info   ][gc,ref] GC(2) O:                           Encountered       Discovered Cleared/Enqueued 
+[38.245s][info   ][gc,ref] GC(2) O: Soft References:                  148                0                0 
+[38.245s][info   ][gc,ref] GC(2) O: Weak References:                  605                0                0 
+[38.245s][info   ][gc,ref] GC(2) O: Weak (No Queue):                    3                0                0 
+[38.245s][info   ][gc,ref] GC(2) O: Final References:                   0                0                0 
+[38.245s][info   ][gc,ref] GC(2) O: Phantom References:                 1                0                0 
+[38.757s][info   ][gc,ref] GC(3) O:                           Encountered       Discovered Cleared/Enqueued 
+[38.757s][info   ][gc,ref] GC(3) O: Soft References:                  148                0                0 
+[38.757s][info   ][gc,ref] GC(3) O: Weak References:                  605              515              130 
+[38.757s][info   ][gc,ref] GC(3) O: Weak (No Queue):                    3                3                0 
+[38.757s][info   ][gc,ref] GC(3) O: Final References:                   0                0                0 
+[38.757s][info   ][gc,ref] GC(3) O: Phantom References:                 1                1                0 
+WeakRefMultiObjectBenchmark: objects=146800180 minSize=509 maxSize=1097 sleepMillis=3000
+[39.277s][info   ][gc,ref] GC(4) O:                           Encountered       Discovered Cleared/Enqueued 
+[39.277s][info   ][gc,ref] GC(4) O: Soft References:                  238                0                0 
+[39.277s][info   ][gc,ref] GC(4) O: Weak References:                 1201              211                0 
+[39.277s][info   ][gc,ref] GC(4) O: Weak (No Queue):                    3                3                0 
+[39.277s][info   ][gc,ref] GC(4) O: Final References:                   0                0                0 
+[39.277s][info   ][gc,ref] GC(4) O: Phantom References:                 1                1                0 
+Phase 1: Allocating references and objects...
+[40.726s][info   ][gc,ref] GC(5) O:                           Encountered       Discovered Cleared/Enqueued 
+[40.726s][info   ][gc,ref] GC(5) O: Soft References:                  238                0                0 
+[40.726s][info   ][gc,ref] GC(5) O: Weak References:                 1201              294                0 
+[40.726s][info   ][gc,ref] GC(5) O: Weak (No Queue):                    3                3                0 
+[40.726s][info   ][gc,ref] GC(5) O: Final References:                   0                0                0 
+[40.726s][info   ][gc,ref] GC(5) O: Phantom References:                 1                1                0 
+[42.621s][info   ][gc,ref] GC(6) O:                           Encountered       Discovered Cleared/Enqueued 
+[42.621s][info   ][gc,ref] GC(6) O: Soft References:                  238                0                0 
+[42.621s][info   ][gc,ref] GC(6) O: Weak References:                 1201              830              201 
+[42.621s][info   ][gc,ref] GC(6) O: Weak (No Queue):                    3                3                0 
+[42.621s][info   ][gc,ref] GC(6) O: Final References:                   0                0                0 
+[42.621s][info   ][gc,ref] GC(6) O: Phantom References:                 1                1                0 
+[43.987s][info   ][gc,ref] GC(7) O:                           Encountered       Discovered Cleared/Enqueued 
+[43.987s][info   ][gc,ref] GC(7) O: Soft References:                  238                0                0 
+[43.987s][info   ][gc,ref] GC(7) O: Weak References:                 1000              393                0 
+[43.987s][info   ][gc,ref] GC(7) O: Weak (No Queue):                    3                0                0 
+[43.987s][info   ][gc,ref] GC(7) O: Final References:                   0                0                0 
+[43.987s][info   ][gc,ref] GC(7) O: Phantom References:                 1                1                0 
+[44.993s][info   ][gc,ref] GC(8) O:                           Encountered       Discovered Cleared/Enqueued 
+[44.993s][info   ][gc,ref] GC(8) O: Soft References:                  238                0                0 
+[44.993s][info   ][gc,ref] GC(8) O: Weak References:                 1000              686                0 
+[44.993s][info   ][gc,ref] GC(8) O: Weak (No Queue):                    3                0                0 
+[44.993s][info   ][gc,ref] GC(8) O: Final References:                   0                0                0 
+[44.993s][info   ][gc,ref] GC(8) O: Phantom References:                 1                0                0 
+[46.404s][info   ][gc,ref] GC(9) O:                           Encountered       Discovered Cleared/Enqueued 
+[46.404s][info   ][gc,ref] GC(9) O: Soft References:                  238                0                0 
+[46.404s][info   ][gc,ref] GC(9) O: Weak References:                 1000              689                0 
+[46.404s][info   ][gc,ref] GC(9) O: Weak (No Queue):                    3                0                0 
+[46.404s][info   ][gc,ref] GC(9) O: Final References:                   0                0                0 
+[46.404s][info   ][gc,ref] GC(9) O: Phantom References:                 1                0                0 
+[47.953s][info   ][gc,ref] GC(10) O:                           Encountered       Discovered Cleared/Enqueued 
+[47.953s][info   ][gc,ref] GC(10) O: Soft References:                  238                0                0 
+[47.953s][info   ][gc,ref] GC(10) O: Weak References:                 1000              439                0 
+[47.953s][info   ][gc,ref] GC(10) O: Weak (No Queue):               201202                0                0 
+[47.953s][info   ][gc,ref] GC(10) O: Final References:                   0                0                0 
+[47.953s][info   ][gc,ref] GC(10) O: Phantom References:                 1                1                0 
+[50.824s][info   ][gc,ref] GC(11) O:                           Encountered       Discovered Cleared/Enqueued 
+[50.824s][info   ][gc,ref] GC(11) O: Soft References:                  238                0                0 
+[50.824s][info   ][gc,ref] GC(11) O: Weak References:                 1000              838                0 
+[50.824s][info   ][gc,ref] GC(11) O: Weak (No Queue):              3167063                3                0 
+[50.824s][info   ][gc,ref] GC(11) O: Final References:                   0                0                0 
+[50.824s][info   ][gc,ref] GC(11) O: Phantom References:                 1                1                0 
+[56.508s][info   ][gc,ref] GC(12) O:                           Encountered       Discovered Cleared/Enqueued 
+[56.508s][info   ][gc,ref] GC(12) O: Soft References:                  238                0                0 
+[56.508s][info   ][gc,ref] GC(12) O: Weak References:                 1000              822                0 
+[56.508s][info   ][gc,ref] GC(12) O: Weak (No Queue):              8567151                3                0 
+[56.508s][info   ][gc,ref] GC(12) O: Final References:                   0                0                0 
+[56.508s][info   ][gc,ref] GC(12) O: Phantom References:                 1                1                0 
+[69.937s][info   ][gc,ref] GC(13) O:                           Encountered       Discovered Cleared/Enqueued 
+[69.937s][info   ][gc,ref] GC(13) O: Soft References:                  238                0                0 
+[69.937s][info   ][gc,ref] GC(13) O: Weak References:                 1000               81                0 
+[69.937s][info   ][gc,ref] GC(13) O: Weak (No Queue):             19192596                0                0 
+[69.937s][info   ][gc,ref] GC(13) O: Final References:                   0                0                0 
+[69.937s][info   ][gc,ref] GC(13) O: Phantom References:                 1                1                0 
+[100.868s][info   ][gc,ref] GC(14) O:                           Encountered       Discovered Cleared/Enqueued 
+[100.868s][info   ][gc,ref] GC(14) O: Soft References:                  238                0                0 
+[100.868s][info   ][gc,ref] GC(14) O: Weak References:                 1000              109                0 
+[100.868s][info   ][gc,ref] GC(14) O: Weak (No Queue):             44471490                0                0 
+[100.868s][info   ][gc,ref] GC(14) O: Final References:                   0                0                0 
+[100.868s][info   ][gc,ref] GC(14) O: Phantom References:                 1                1                0 
+Allocated 146800180 objects in 87.08 seconds
+Phase 2: Sleeping for 3000 ms...
+Phase 3.1: Clearing strong references...
+Cleared 29360037 strong references, 117440143 remaining
+Waiting 3000 ms...
+Phase 3.2: Clearing strong references...
+Cleared 29360037 strong references, 88080106 remaining
+Waiting 3000 ms...
+Phase 3.3: Clearing strong references...
+Cleared 29360037 strong references, 58720069 remaining
+Waiting 3000 ms...
+Phase 3.4: Clearing strong references...
+Cleared 29360037 strong references, 29360032 remaining
+Waiting 3000 ms...
+Phase 3.5: Clearing strong references...
+[158.549s][info   ][gc,ref] GC(15) O:                           Encountered       Discovered Cleared/Enqueued 
+[158.549s][info   ][gc,ref] GC(15) O: Soft References:                  238                0                0 
+[158.549s][info   ][gc,ref] GC(15) O: Weak References:                 1000              514                0 
+[158.549s][info   ][gc,ref] GC(15) O: Weak (No Queue):            101861425         10111620                0 
+[158.549s][info   ][gc,ref] GC(15) O: Final References:                   0                0                0 
+[158.549s][info   ][gc,ref] GC(15) O: Phantom References:                 1                1                0 
+Cleared 29360032 strong references, 0 remaining
+Waiting 3000 ms...
+Waiting 6000 ms...
+Phase 4: Final weak reference checks...
+Final count of alive weak references: 146800180
+[195.261s][info   ][gc,stats] === Garbage Collection Statistics =======================================================================================================================
+[195.261s][info   ][gc,stats]                                                              Last 10s              Last 10m              Last 10h                Total
+[195.261s][info   ][gc,stats]                                                              Avg / Max             Avg / Max             Avg / Max             Avg / Max
+[195.261s][info   ][gc,stats]        Contention: Mark Segment Reset Contention                     0 / 0                 0 / 30                0 / 30                0 / 30          ops/s
+[195.261s][info   ][gc,stats]        Contention: Mark SeqNum Reset Contention                      0 / 0                 0 / 4                 0 / 4                 0 / 4           ops/s
+[195.261s][info   ][gc,stats]          Critical: Allocation Stall                                  0 / 0                 0 / 0                 0 / 0                 0 / 0           ops/s
+[195.261s][info   ][gc,stats]          Critical: Allocation Stall                              0.000 / 0.000         0.000 / 0.000         0.000 / 0.000         0.000 / 0.000       ms
+[195.261s][info   ][gc,stats]          Critical: JNI Critical Stall                                0 / 0                 0 / 0                 0 / 0                 0 / 0           ops/s
+[195.261s][info   ][gc,stats]          Critical: JNI Critical Stall                            0.000 / 0.000         0.000 / 0.000         0.000 / 0.000         0.000 / 0.000       ms
+[195.261s][info   ][gc,stats]          Critical: Relocation Stall                                  0 / 0                 0 / 0                 0 / 0                 0 / 0           ops/s
+[195.261s][info   ][gc,stats]          Critical: Relocation Stall                              0.000 / 0.000         0.000 / 0.000         0.000 / 0.000         0.000 / 0.000       ms
+[195.261s][info   ][gc,stats]  Major Collection: Major Collection                              0.000 / 0.000      7109.828 / 57171.623  7109.828 / 57171.623  7109.828 / 57171.623   ms
+[195.261s][info   ][gc,stats]            Memory: Allocation Rate                                   0 / 0               841 / 1740            841 / 1740            841 / 1740        MB/s
+[195.261s][info   ][gc,stats]            Memory: Defragment                                        0 / 0                 0 / 0                 0 / 0                 0 / 0           ops/s
+[195.261s][info   ][gc,stats]            Memory: Mapped Cache Harvest                              0 / 0                 0 / 0                 0 / 0                 0 / 0           MB/s
+[195.261s][info   ][gc,stats]            Memory: Out Of Memory                                     0 / 0                 0 / 0                 0 / 0                 0 / 0           ops/s
+[195.261s][info   ][gc,stats]            Memory: Uncommit                                          0 / 0                 0 / 0                 0 / 0                 0 / 0           MB/s
+[195.261s][info   ][gc,stats]            Memory: Undo Object Allocation Failed                     0 / 0                 0 / 0                 0 / 0                 0 / 0           ops/s
+[195.261s][info   ][gc,stats]            Memory: Undo Object Allocation Succeeded                  0 / 0                 0 / 1                 0 / 1                 0 / 1           ops/s
+[195.261s][info   ][gc,stats]            Memory: Undo Page Allocation                              0 / 0                 0 / 0                 0 / 0                 0 / 0           ops/s
+[195.261s][info   ][gc,stats]  Minor Collection: Minor Collection                              0.000 / 0.000         0.000 / 0.000         0.000 / 0.000         0.000 / 0.000       ms
+[195.261s][info   ][gc,stats]    Old Generation: Old Generation                                0.000 / 0.000      2534.988 / 13974.413  2534.988 / 13974.413  2534.988 / 13974.413   ms
+[195.261s][info   ][gc,stats]         Old Pause: Pause Mark End                                0.000 / 0.000         0.011 / 0.016         0.011 / 0.016         0.011 / 0.016       ms
+[195.261s][info   ][gc,stats]         Old Pause: Pause Relocate Start                          0.000 / 0.000         0.008 / 0.013         0.008 / 0.013         0.008 / 0.013       ms
+[195.261s][info   ][gc,stats]         Old Phase: Concurrent Mark                               0.000 / 0.000      2322.140 / 12961.665  2322.140 / 12961.665  2322.140 / 12961.665   ms
+[195.261s][info   ][gc,stats]         Old Phase: Concurrent Mark Continue                      0.000 / 0.000         0.000 / 0.000         0.000 / 0.000         0.000 / 0.000       ms
+[195.261s][info   ][gc,stats]         Old Phase: Concurrent Mark Free                          0.000 / 0.000         0.002 / 0.004         0.002 / 0.004         0.002 / 0.004       ms
+[195.261s][info   ][gc,stats]         Old Phase: Concurrent Process Non-Strong                 0.000 / 0.000        29.911 / 460.873      29.911 / 460.873      29.911 / 460.873     ms
+[195.261s][info   ][gc,stats]         Old Phase: Concurrent Relocate                           0.000 / 0.000         1.016 / 2.408         1.016 / 2.408         1.016 / 2.408       ms
+[195.261s][info   ][gc,stats]         Old Phase: Concurrent Remap Roots                        0.000 / 0.000       179.936 / 1007.813    179.936 / 1007.813    179.936 / 1007.813    ms
+[195.261s][info   ][gc,stats]         Old Phase: Concurrent Reset Relocation Set               0.000 / 0.000         0.001 / 0.001         0.001 / 0.001         0.001 / 0.001       ms
+[195.261s][info   ][gc,stats]         Old Phase: Concurrent Select Relocation Set              0.000 / 0.000         1.790 / 2.306         1.790 / 2.306         1.790 / 2.306       ms
+[195.261s][info   ][gc,stats]      Old Subphase: Concurrent Classes Purge                      0.000 / 0.000         0.116 / 1.456         0.116 / 1.456         0.116 / 1.456       ms
+[195.261s][info   ][gc,stats]      Old Subphase: Concurrent Classes Unlink                     0.000 / 0.000         0.941 / 1.271         0.941 / 1.271         0.941 / 1.271       ms
+[195.261s][info   ][gc,stats]      Old Subphase: Concurrent Mark Follow                        0.000 / 0.000      2322.064 / 12961.582  2322.064 / 12961.582  2322.064 / 12961.582   ms
+[195.261s][info   ][gc,stats]      Old Subphase: Concurrent Mark Root Colored                  0.000 / 0.000         0.026 / 0.092         0.026 / 0.092         0.026 / 0.092       ms
+[195.261s][info   ][gc,stats]      Old Subphase: Concurrent Mark Root Uncolored                0.000 / 0.000         0.023 / 0.057         0.023 / 0.057         0.023 / 0.057       ms
+[195.261s][info   ][gc,stats]      Old Subphase: Concurrent Mark Roots                         0.000 / 0.000         0.073 / 0.108         0.073 / 0.108         0.073 / 0.108       ms
+[195.261s][info   ][gc,stats]      Old Subphase: Concurrent References Enqueue                 0.000 / 0.000         0.001 / 0.005         0.001 / 0.005         0.001 / 0.005       ms
+[195.261s][info   ][gc,stats]      Old Subphase: Concurrent References Process                 0.000 / 0.000        28.694 / 458.178      28.694 / 458.178      28.694 / 458.178     ms
+[195.261s][info   ][gc,stats]      Old Subphase: Concurrent Remap Remembered                   0.000 / 0.000       119.337 / 1007.495    119.337 / 1007.495    119.337 / 1007.495    ms
+[195.261s][info   ][gc,stats]      Old Subphase: Concurrent Remap Roots Colored                0.000 / 0.000         0.136 / 0.272         0.136 / 0.272         0.136 / 0.272       ms
+[195.261s][info   ][gc,stats]      Old Subphase: Concurrent Remap Roots Uncolored              0.000 / 0.000         0.127 / 0.236         0.127 / 0.236         0.127 / 0.236       ms
+[195.261s][info   ][gc,stats]      Old Subphase: Concurrent Roots ClassLoaderDataGraph         0.000 / 0.000         0.081 / 0.262         0.081 / 0.262         0.081 / 0.262       ms
+[195.261s][info   ][gc,stats]      Old Subphase: Concurrent Roots CodeCache                    0.000 / 0.000         0.126 / 0.235         0.126 / 0.235         0.126 / 0.235       ms
+[195.261s][info   ][gc,stats]      Old Subphase: Concurrent Roots JavaThreads                  0.000 / 0.000         0.008 / 0.057         0.008 / 0.057         0.008 / 0.057       ms
+[195.261s][info   ][gc,stats]      Old Subphase: Concurrent Roots OopStorageSet                0.000 / 0.000         0.003 / 0.014         0.003 / 0.014         0.003 / 0.014       ms
+[195.261s][info   ][gc,stats]      Old Subphase: Concurrent Weak Roots OopStorageSet           0.000 / 0.000         0.045 / 0.251         0.045 / 0.251         0.045 / 0.251       ms
+[195.261s][info   ][gc,stats]            System: Java Threads                                      0 / 0                11 / 13               11 / 13               11 / 13          threads
+[195.261s][info   ][gc,stats]  Young Generation: Young Generation                              0.000 / 0.000      4574.726 / 43278.231  4574.726 / 43278.231  4574.726 / 43278.231   ms
+[195.261s][info   ][gc,stats]  Young Generation: Young Generation                              0.000 / 0.000         0.000 / 0.000         0.000 / 0.000         0.000 / 0.000       ms
+[195.261s][info   ][gc,stats]  Young Generation: Young Generation (Collect Roots)              0.000 / 0.000         0.000 / 0.000         0.000 / 0.000         0.000 / 0.000       ms
+[195.261s][info   ][gc,stats]  Young Generation: Young Generation (Promote All)                0.000 / 0.000         0.000 / 0.000         0.000 / 0.000         0.000 / 0.000       ms
+[195.261s][info   ][gc,stats]       Young Pause: Pause Mark End                                0.000 / 0.000         0.011 / 0.015         0.011 / 0.015         0.011 / 0.015       ms
+[195.261s][info   ][gc,stats]       Young Pause: Pause Mark Start                              0.000 / 0.000         0.000 / 0.000         0.000 / 0.000         0.000 / 0.000       ms
+[195.261s][info   ][gc,stats]       Young Pause: Pause Mark Start (Major)                      0.000 / 0.000         0.023 / 0.034         0.023 / 0.034         0.023 / 0.034       ms
+[195.261s][info   ][gc,stats]       Young Pause: Pause Relocate Start                          0.000 / 0.000         0.009 / 0.031         0.009 / 0.031         0.009 / 0.031       ms
+[195.261s][info   ][gc,stats]       Young Phase: Concurrent Mark                               0.000 / 0.000      4141.932 / 40357.570  4141.932 / 40357.570  4141.932 / 40357.570   ms
+[195.261s][info   ][gc,stats]       Young Phase: Concurrent Mark Continue                      0.000 / 0.000         0.000 / 0.000         0.000 / 0.000         0.000 / 0.000       ms
+[195.261s][info   ][gc,stats]       Young Phase: Concurrent Mark Free                          0.000 / 0.000         0.003 / 0.009         0.003 / 0.009         0.003 / 0.009       ms
+[195.261s][info   ][gc,stats]       Young Phase: Concurrent Relocate                           0.000 / 0.000       231.954 / 1555.382    231.954 / 1555.382    231.954 / 1555.382    ms
+[195.261s][info   ][gc,stats]       Young Phase: Concurrent Reset Relocation Set               0.000 / 0.000         0.218 / 2.268         0.218 / 2.268         0.218 / 2.268       ms
+[195.261s][info   ][gc,stats]       Young Phase: Concurrent Select Relocation Set              0.000 / 0.000       200.217 / 1362.189    200.217 / 1362.189    200.217 / 1362.189    ms
+[195.262s][info   ][gc,stats]    Young Subphase: Concurrent Mark Follow                        0.000 / 0.000      4141.191 / 40356.800  4141.191 / 40356.800  4141.191 / 40356.800   ms
+[195.262s][info   ][gc,stats]    Young Subphase: Concurrent Mark Root Colored                  0.000 / 0.000         0.417 / 0.753         0.417 / 0.753         0.417 / 0.753       ms
+[195.262s][info   ][gc,stats]    Young Subphase: Concurrent Mark Root Uncolored                0.000 / 0.000         0.259 / 0.514         0.259 / 0.514         0.259 / 0.514       ms
+[195.262s][info   ][gc,stats]    Young Subphase: Concurrent Mark Roots                         0.000 / 0.000         0.725 / 1.282         0.725 / 1.282         0.725 / 1.282       ms
+[195.262s][info   ][gc,stats]    Young Subphase: Concurrent Relocate Remset FP                 0.000 / 0.000       231.372 / 1554.681    231.372 / 1554.681    231.372 / 1554.681    ms
+[195.262s][info   ][gc,stats]    Young Subphase: Concurrent Roots ClassLoaderDataGraph         0.000 / 0.000         0.308 / 0.547         0.308 / 0.547         0.308 / 0.547       ms
+[195.262s][info   ][gc,stats]    Young Subphase: Concurrent Roots CodeCache                    0.000 / 0.000         0.239 / 0.481         0.239 / 0.481         0.239 / 0.481       ms
+[195.262s][info   ][gc,stats]    Young Subphase: Concurrent Roots JavaThreads                  0.000 / 0.000         0.016 / 0.284         0.016 / 0.284         0.016 / 0.284       ms
+[195.262s][info   ][gc,stats]    Young Subphase: Concurrent Roots OopStorageSet                0.000 / 0.000         0.017 / 0.090         0.017 / 0.090         0.017 / 0.090       ms
+[195.262s][info   ][gc,stats]    Young Subphase: Concurrent Weak Roots OopStorageSet           0.000 / 0.000         0.103 / 0.258         0.103 / 0.258         0.103 / 0.258       ms
+[195.262s][info   ][gc,stats] =========================================================================================================================================================
