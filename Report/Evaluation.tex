@@ -73,12 +73,29 @@ The multi-object benchmarks represent a slightly more realistic workload. They a
 
 Unlike the Single-Object benchmark, the strong references are not all released at once. Instead, the benchmark proceeds through five rounds of clearing. In each round, 20\% of the strong references are nulled in a randomised order, making the corresponding objects eligible for garbage collection. Between rounds, the benchmark sleeps to allow GC cycles to discover and process the weak references whose referent now is unreachable. This gradual release pattern means that weak references/fields are discovered and processed across multiple GC cycles rather than in a single burst.
 
-The benchmark runs three iterations with a five-second cooldown between them to allow the JVM to stabilise. Each iteration performs the full allocation, clearing, and GC cycle sequence independently.
-
 \subsection{Execution Environment}
 \label{subsec:execution-environment}
 
-The benchmarks were executed on \texttt{TODO: cluster name}, a supercomputer cluster at \texttt{TODO: institution}. Each benchmark instance was allocated X~CPU cores and Y\,GB of memory. The cluster nodes run \texttt{TODO: OS and kernel version}. Each variant was run using its pre-built JDK binary (see \cref{sec:optimisation-variants}). \Cref{tab:jvm-options} lists the JVM options used for each benchmark family.
+The benchmarks were executed on UPPMAX, a supercomputer cluster at Uppsala University. \Cref{tab:cluster-specs} lists the hardware specification of the cluster nodes. Each variant was run using its pre-built JDK binary (see \cref{sec:optimisation-variants}). \Cref{tab:jvm-options} lists the JVM options used for each benchmark family.
+
+\begin{table}[t]
+\centering
+\caption{Cluster node hardware specification}
+\label{tab:cluster-specs}
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Property} & \textbf{Value} \\
+\midrule
+Total nodes & 80 \\
+CPU & AMD EPYC 9454P (Zen 4), 2.75\,GHz \\
+Physical cores & 48 \\
+Threads & 96 \\
+Memory & 768\,GiB \\
+Scratch & 1.7\,TiB \\
+GPUs & None \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \begin{table}[t]
 \centering
@@ -106,7 +123,7 @@ A 10-second cooldown period was inserted between variant runs to allow the syste
 \subsection{Measurement Methodology}
 \label{subsec:measurement-methodology}
 
-Each benchmark was run for a total of 100 iterations. To parallelise execution across the cluster, the iterations were split across multiple instances, where each instance ran $n$ measurement iterations preceded by 1 warm-up iteration whose results were discarded. Each warm-up iteration executed the full benchmark workload for every variant. Within each measurement iteration, all nine optimisation variants were run in sequence with a cooldown between each. This interleaved ordering mitigates systematic drift in system conditions affecting one configuration more than others.
+Each benchmark was run for a total of 100 iterations. Jobs were submitted via SLURM and allocated two nodes running in exclusive mode. Hyperthreading was disabled at the SLURM level, so only the 48 physical cores per node were available. To parallelise execution across the two nodes, iterations were split across 8 parallel instances (4 per node). Each instance was pinned via \texttt{taskset} to a disjoint set of 10 JVM cores and 2 auxiliary cores (12 cores per instance), preventing interference between concurrently running instances. Each instance ran its share of the 100 iterations preceded by 1 warm-up iteration whose results were discarded. The warm-up executed the full benchmark workload for every variant. Within each measurement iteration, all nine optimisation variants were run in sequence with a 10-second cooldown between each. This interleaved ordering mitigates systematic drift in system conditions affecting one configuration more than others.
 
 During each run, a memory monitoring script samples memory metrics from the process at high frequency. See \cref{tab:memory-monitoring-metrics} for the memory metrics collected.
 
@@ -167,19 +184,19 @@ Memory behaviour is shown as continuous time-series traces (\cref{fig:memory-sin
 \begin{figure}[t]
 	\centering
 	\begin{subfigure}[b]{0.7\textwidth}
-		\includegraphics[width=\textwidth]{boxplot_major_collection_major_collection_single_1.pdf}
+		\includegraphics[width=\textwidth]{boxplot_major_collection_major_collection_single_full-20260409-211258-single.pdf}
 		\caption{Major Collection}
 		\label{fig:bp-single-major}
 	\end{subfigure}
 
 	\begin{subfigure}[b]{0.7\textwidth}
-		\includegraphics[width=\textwidth]{boxplot_old_generation_old_generation_single_1.pdf}
+		\includegraphics[width=\textwidth]{boxplot_old_generation_old_generation_single_full-20260409-211258-single.pdf}
 		\caption{Old Generation}
 		\label{fig:bp-single-old-gen}
 	\end{subfigure}
 
 	\begin{subfigure}[b]{0.7\textwidth}
-		\includegraphics[width=\textwidth]{boxplot_old_phase_concurrent_mark_single_1.pdf}
+		\includegraphics[width=\textwidth]{boxplot_old_phase_concurrent_mark_single_full-20260409-211258-single.pdf}
 		\caption{Old Phase: Concurrent Mark}
 		\label{fig:bp-single-old-mark}
 	\end{subfigure}
@@ -190,19 +207,19 @@ Memory behaviour is shown as continuous time-series traces (\cref{fig:memory-sin
 \begin{figure}[t]
 	\centering
 	\begin{subfigure}[b]{0.7\textwidth}
-		\includegraphics[width=\textwidth]{boxplot_old_phase_concurrent_process_non-strong_single_1.pdf}
+		\includegraphics[width=\textwidth]{boxplot_old_phase_concurrent_process_non-strong_single_full-20260409-211258-single.pdf}
 		\caption{Old Phase: Concurrent Process Non-Strong}
 		\label{fig:bp-single-old-nonstrong}
 	\end{subfigure}
 
 	\begin{subfigure}[b]{0.7\textwidth}
-		\includegraphics[width=\textwidth]{boxplot_old_phase_concurrent_relocate_single_1.pdf}
+		\includegraphics[width=\textwidth]{boxplot_old_phase_concurrent_relocate_single_full-20260409-211258-single.pdf}
 		\caption{Old Phase: Concurrent Relocate}
 		\label{fig:bp-single-old-relocate}
 	\end{subfigure}
 
 	\begin{subfigure}[b]{0.7\textwidth}
-		\includegraphics[width=\textwidth]{boxplot_young_generation_young_generation_promote_all_single_1.pdf}
+		\includegraphics[width=\textwidth]{boxplot_young_generation_young_generation_promote_all_single_full-20260409-211258-single.pdf}
 		\caption{Young Generation (Promote All)}
 		\label{fig:bp-single-young-gen}
 	\end{subfigure}
@@ -213,13 +230,13 @@ Memory behaviour is shown as continuous time-series traces (\cref{fig:memory-sin
 \begin{figure}[t]
 	\centering
 	\begin{subfigure}[b]{0.7\textwidth}
-		\includegraphics[width=\textwidth]{boxplot_young_phase_concurrent_mark_single_1.pdf}
+		\includegraphics[width=\textwidth]{boxplot_young_phase_concurrent_mark_single_full-20260409-211258-single.pdf}
 		\caption{Young Phase: Concurrent Mark}
 		\label{fig:bp-single-young-mark}
 	\end{subfigure}
 
 	\begin{subfigure}[b]{0.7\textwidth}
-		\includegraphics[width=\textwidth]{boxplot_young_phase_concurrent_relocate_single_1.pdf}
+		\includegraphics[width=\textwidth]{boxplot_young_phase_concurrent_relocate_single_full-20260409-211258-single.pdf}
 		\caption{Young Phase: Concurrent Relocate}
 		\label{fig:bp-single-young-relocate}
 	\end{subfigure}
@@ -231,19 +248,19 @@ Memory behaviour is shown as continuous time-series traces (\cref{fig:memory-sin
 \begin{figure}[t]
 	\centering
 	\begin{subfigure}[b]{0.7\textwidth}
-		\includegraphics[width=\textwidth]{boxplot_major_collection_major_collection_multi_2.pdf}
+		\includegraphics[width=\textwidth]{boxplot_major_collection_major_collection_multi_full-20260409-211258-multi.pdf}
 		\caption{Major Collection}
 		\label{fig:bp-multi-major}
 	\end{subfigure}
 
 	\begin{subfigure}[b]{0.7\textwidth}
-		\includegraphics[width=\textwidth]{boxplot_old_generation_old_generation_multi_2.pdf}
+		\includegraphics[width=\textwidth]{boxplot_old_generation_old_generation_multi_full-20260409-211258-multi.pdf}
 		\caption{Old Generation}
 		\label{fig:bp-multi-old-gen}
 	\end{subfigure}
 
 	\begin{subfigure}[b]{0.7\textwidth}
-		\includegraphics[width=\textwidth]{boxplot_old_phase_concurrent_mark_multi_2.pdf}
+		\includegraphics[width=\textwidth]{boxplot_old_phase_concurrent_mark_multi_full-20260409-211258-multi.pdf}
 		\caption{Old Phase: Concurrent Mark}
 		\label{fig:bp-multi-old-mark}
 	\end{subfigure}
@@ -254,19 +271,19 @@ Memory behaviour is shown as continuous time-series traces (\cref{fig:memory-sin
 \begin{figure}[t]
 	\centering
 	\begin{subfigure}[b]{0.7\textwidth}
-		\includegraphics[width=\textwidth]{boxplot_old_phase_concurrent_process_non-strong_multi_2.pdf}
+		\includegraphics[width=\textwidth]{boxplot_old_phase_concurrent_process_non-strong_multi_full-20260409-211258-multi.pdf}
 		\caption{Old Phase: Concurrent Process Non-Strong}
 		\label{fig:bp-multi-old-nonstrong}
 	\end{subfigure}
 
 	\begin{subfigure}[b]{0.7\textwidth}
-		\includegraphics[width=\textwidth]{boxplot_old_phase_concurrent_relocate_multi_2.pdf}
+		\includegraphics[width=\textwidth]{boxplot_old_phase_concurrent_relocate_multi_full-20260409-211258-multi.pdf}
 		\caption{Old Phase: Concurrent Relocate}
 		\label{fig:bp-multi-old-relocate}
 	\end{subfigure}
 
 	\begin{subfigure}[b]{0.7\textwidth}
-		\includegraphics[width=\textwidth]{boxplot_young_generation_young_generation_multi_2.pdf}
+		\includegraphics[width=\textwidth]{boxplot_young_generation_young_generation_multi_full-20260409-211258-multi.pdf}
 		\caption{Young Generation}
 		\label{fig:bp-multi-young-gen}
 	\end{subfigure}
@@ -277,13 +294,13 @@ Memory behaviour is shown as continuous time-series traces (\cref{fig:memory-sin
 \begin{figure}[t]
 	\centering
 	\begin{subfigure}[b]{0.7\textwidth}
-		\includegraphics[width=\textwidth]{boxplot_young_phase_concurrent_mark_multi_2.pdf}
+		\includegraphics[width=\textwidth]{boxplot_young_phase_concurrent_mark_multi_full-20260409-211258-multi.pdf}
 		\caption{Young Phase: Concurrent Mark}
 		\label{fig:bp-multi-young-mark}
 	\end{subfigure}
 
 	\begin{subfigure}[b]{0.7\textwidth}
-		\includegraphics[width=\textwidth]{boxplot_young_phase_concurrent_relocate_multi_2.pdf}
+		\includegraphics[width=\textwidth]{boxplot_young_phase_concurrent_relocate_multi_full-20260409-211258-multi.pdf}
 		\caption{Young Phase: Concurrent Relocate}
 		\label{fig:bp-multi-young-relocate}
 	\end{subfigure}
@@ -295,19 +312,19 @@ Memory behaviour is shown as continuous time-series traces (\cref{fig:memory-sin
 \begin{figure}[t]
 	\centering
 	\begin{subfigure}[b]{0.8\textwidth}
-		\includegraphics[width=\textwidth]{memory_rss_single_1.pdf}
+		\includegraphics[width=\textwidth]{memory_rss_single_full-20260409-211258-single.pdf}
 		\caption{Total Process RSS}
 		\label{fig:mem-single-rss}
 	\end{subfigure}
 
 	\begin{subfigure}[b]{0.8\textwidth}
-		\includegraphics[width=\textwidth]{memory_gc_auxiliary_single_1.pdf}
+		\includegraphics[width=\textwidth]{memory_gc_auxiliary_single_full-20260409-211258-single.pdf}
 		\caption{GC Auxiliary Memory}
 		\label{fig:mem-single-gc}
 	\end{subfigure}
 
 	\begin{subfigure}[b]{0.8\textwidth}
-		\includegraphics[width=\textwidth]{memory_java_heap_single_1.pdf}
+		\includegraphics[width=\textwidth]{memory_java_heap_single_full-20260409-211258-single.pdf}
 		\caption{Java Heap}
 		\label{fig:mem-single-heap}
 	\end{subfigure}
@@ -319,19 +336,19 @@ Memory behaviour is shown as continuous time-series traces (\cref{fig:memory-sin
 \begin{figure}[t]
 	\centering
 	\begin{subfigure}[b]{0.8\textwidth}
-		\includegraphics[width=\textwidth]{memory_rss_multi_2.pdf}
+		\includegraphics[width=\textwidth]{memory_rss_multi_full-20260409-211258-multi.pdf}
 		\caption{Total Process RSS}
 		\label{fig:mem-multi-rss}
 	\end{subfigure}
 
 	\begin{subfigure}[b]{0.8\textwidth}
-		\includegraphics[width=\textwidth]{memory_gc_auxiliary_multi_2.pdf}
+		\includegraphics[width=\textwidth]{memory_gc_auxiliary_multi_full-20260409-211258-multi.pdf}
 		\caption{GC Auxiliary Memory}
 		\label{fig:mem-multi-gc}
 	\end{subfigure}
 
 	\begin{subfigure}[b]{0.8\textwidth}
-		\includegraphics[width=\textwidth]{memory_java_heap_multi_2.pdf}
+		\includegraphics[width=\textwidth]{memory_java_heap_multi_full-20260409-211258-multi.pdf}
 		\caption{Java Heap}
 		\label{fig:mem-multi-heap}
 	\end{subfigure}

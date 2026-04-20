@@ -36,6 +36,20 @@ Garbage collection generally occurs multiple times (cycles) during the lifetime 
 
 The order and concurrency model of these phases varies significantly between collectors. Serial and Parallel GC typically perform all phases in stop-the-world pauses. G1 performs marking and sweeping mostly concurrently with short pauses for synchronisation. ZGC performs marking, reference processing, and relocation concurrently, using barriers to maintain consistency with concurrent application threads.
 
+\subsection{Garbage Collection Barriers}
+\label{subsec:gc-barriers-general}
+
+In JVM garbage collectors, a \emph{barrier} is a small piece of code inserted around memory accesses so that the collector can maintain correctness while the application is running~\cite{oracle-gc-implementation}. The term is slightly misleading: barriers are not global locks and do not stop threads. Instead, they are local checks or bookkeeping actions attached to individual loads and stores of object references~\cite{oracle-gc-implementation,jep333-zgc,openjdk-zbarrier-cpp}.
+
+Barriers are especially important in concurrent collectors because GC and application threads observe and modify heap state at the same time. Rather than pausing the application for long periods, the collector uses barriers to spread consistency work across ordinary execution~\cite{jep333-zgc,oracle-gc-implementation}.
+
+Two broad classes are common:
+
+\begin{itemize}
+    \item \textbf{Load (read) barriers}, executed when a reference is read. These can validate or transform the loaded pointer before it is used by the application~\cite{jep333-zgc,openjdk-zbarrier-cpp}.
+    \item \textbf{Store (write) barriers}, executed when a reference field is overwritten. These record metadata needed by the collector, for example to preserve marking invariants or to track inter-generational pointers~\cite{oracle-gc-implementation,jep439-genzgc}.
+\end{itemize}
+
 \subsection{Generational Collection}
 \label{subsec:generational}
 
@@ -136,26 +150,65 @@ The \texttt{ReferenceQueue} is implemented as a synchronized singly-linked list 
 A key insight for this thesis is that Java explicitly supports queue-less weak references through the one-argument \texttt{WeakReference} constructor~\cite{openjdk-weakreference-java}. For workloads that only need liveness probing via \texttt{get()}, queue registration is unnecessary. In such cases, the VM still performs enqueue-path preparation work in the default pipeline, which motivated JDK-8029205 and the optimisation work in this thesis~\cite{JDK-8029205,openjdk-reference-java,openjdk-zreferenceprocessor-cpp}.
 
 
+\section{The JVM Execution Model}
+\label{sec:jvm-execution}
+
+To understand how garbage-collector barriers are injected and why ZGC requires different components for each execution tier, we must examine HotSpot's tiered execution model, which balances startup latency against sustained throughput. Three tiers are relevant to this thesis:
+
+\begin{enumerate}
+    \item \textbf{Interpreter.} At JVM startup, an \emph{interpreter} is generated in which each bytecode is mapped to a hand-crafted assembly stub~TODO. Methods not yet compiled are executed in this tier. Interpretation is the slowest tier in terms of throughput but has no compilation overhead, and it also gathers profiling data for JIT compilation.
+
+    \item \textbf{C1 Compiler.} C1 is a fast JIT compiler that performs lightweight optimisations, such as method inlining, constant folding, and null-check elimination~TODO. C1 compiles quickly, making it suitable for methods that are called moderately often.
+
+    \item \textbf{C2 Compiler.} C2 is an aggressive optimising JIT compiler. It consumes profiling data collected by the interpreter and C1 to emit highly optimised native code, applying techniques such as aggressive inlining, loop transformations, and escape analysis~TODO. Hot methods are ultimately compiled by C2.
+\end{enumerate}
+
+\emph{Tiered compilation}, the default since TODO, automatically promotes methods through these tiers as their execution frequency increases. A method starts in the interpreter, is promoted to C1-compiled code once it becomes warm, and may eventually be recompiled by C2 once sufficient profiling data has accumulated.
+
+\paragraph{Relevance to GC barriers.} Because a read barrier must intercept every load from the heap, and such loads occur in all three tiers, each tier requires its own barrier implementation. ZGC therefore ships three separate barrier components: \texttt{ZBarrierSetAssembler} generates barrier stubs embedded in the interpreter's dispatch table, \texttt{ZBarrierSetC1} inserts barrier nodes during C1 intermediate representation construction, and \texttt{ZBarrierSetC2} integrates barriers into the C2 sea-of-nodes graph~\cite{openjdk-zbarrier-cpp}. All three components obey the same decorator-driven barrier selection logic described in \cref{subsec:access-decorators}.
+
+
 \section{The Z Garbage Collector}
 \label{sec:zgc}
 
-ZGC is a concurrent, region-based, compacting garbage collector included in the JDK since JDK~11 (experimental)~\cite{jep333-zgc} and production-ready since JDK~15~\cite{jep377-zgc-prod}. Starting with JDK~21, ZGC supports generational collection, which is now the default mode~\cite{jep439-genzgc}. ZGC's primary design goals are~\cite{jep333-zgc}:
+ZGC is a concurrent, region-based, compacting garbage collector included in the JDK since JDK~11 (experimental)~\cite{jep333-zgc} and production-ready since JDK~15~\cite{jep377-zgc-prod}. Starting with JDK~21, ZGC supports generational collection, which is now the default mode~\cite{jep439-genzgc}. The collector targets millisecond-scale pause times that remain bounded regardless of heap size, and supports heaps ranging from a few hundred megabytes to several terabytes~\cite{jep333-zgc}. Achieving these goals while performing the bulk of GC work concurrently is partly realised by two closely related design decisions: encoding GC state directly in heap pointers, and using barriers to act on that state at every pointer access.
+
+\subsection{Coloured Pointers and Barriers}
+\label{subsec:coloured-pointers-and-barriers}
+
+ZGC embeds metadata directly in the unused high bits of 64-bit heap pointers. These \emph{colour bits} encode the state of a pointer relative to the current GC phase -- for example, whether the pointed-to object has been remapped after relocation, or which generation it belongs to~\cite{jep333-zgc,openjdk-zaddress-hpp}. Because the state is carried in the pointer itself, the GC can determine the status of a reference without loading the object's header or consulting external tables.
+
+To act on this encoded state, ZGC inserts barriers at every oop load and store. On a load, the barrier reads the colour bits of the retrieved pointer and checks whether they encode a \emph{good} state for the current GC phase. If the pointer is stale -- for example because the object has been relocated since the pointer was written -- the barrier's slow path applies the necessary fixup (remapping the pointer to the new address) before returning the address to the caller~\cite{jep333-zgc,openjdk-zbarrier-cpp}. Because these fixups happen lazily on access rather than eagerly during relocation, the collector can relocate objects concurrently without stalling the application.
+
+Store barriers serve a complementary role: before overwriting a heap field, the barrier records the field's previous value in a per-thread store-barrier buffer. This record is consumed by the marking phase to satisfy ZGC's snapshot-at-the-beginning (SATB) invariant -- ensuring that objects that were reachable at the start of a marking cycle are not missed -- and by the remembered-set mechanism that tracks cross-generational pointers in the generational case~\cite{openjdk-zbarrier-cpp}.
+
+\subsection{Concurrent Phases and Parallel Workers}
+\label{subsec:concurrent-phases-and-workers}
+
+A ZGC collection cycle interleaves short stop-the-world pauses, used for root scanning and phase synchronisation, with longer concurrent phases in which marking, reference processing, and relocation proceed alongside running application threads~\cite{jep333-zgc,openjdk-zreferenceprocessor-cpp}. The load and store barriers described above are the mechanism that keeps the heap consistent during these concurrent phases: application threads that load a stale pointer automatically fix it up, and stores that would break the marking invariant are recorded for GC consumption.
+
+Within each phase, ZGC distributes its work across multiple GC worker threads. To minimise contention, workers maintain their own thread-local data structures -- such as per-worker discovered lists during reference discovery -- and merge results into shared state only at well-defined synchronisation points~\cite{openjdk-zworkers-cpp,openjdk-zreferenceprocessor-cpp}. This design avoids the compare-and-swap contention that would arise from multiple threads updating a single shared resource.
+
+\subsection{Access Decorators}
+\label{subsec:access-decorators}
+
+Throughout the HotSpot codebase, every load or store is annotated with a \emph{decorator set}: a compile-time or runtime bitmask of type \texttt{DecoratorSet} (a 64-bit integer) whose set bits describe the semantics of the access~\cite{openjdk-accessdecorators-hpp}. The active \texttt{BarrierSet} implementation (e.g.\ \texttt{ZBarrierSet}) inspects this bitmask to decide which barrier variant to invoke, allowing a single generic \texttt{HeapAccess<decorators>::load()} call site to resolve to the correct low-level operation at both compile time (for template-specialised paths) and runtime (for dynamically dispatched paths).
+
+The decorator flags are grouped by concern:
 
 \begin{itemize}
-    \item Sub-millisecond pause times that do not increase with heap size.
-    \item Support for heap sizes from 8\,MB to 16\,TB.
-    \item Concurrent marking, relocation, and reference processing.
+    \item \textbf{Reference strength} bits control how the barrier treats reachability. An access with \texttt{ON\_WEAK\_OOP\_REF} tells ZGC that the field being read is the \texttt{referent} of a \texttt{WeakReference}: the barrier must return \texttt{null} if the referent has been collected, rather than reviving it. The default, when no strength decorator is specified, is \texttt{ON\_STRONG\_OOP\_REF}.
+
+    \item \textbf{Access location} bits indicates whether the access targets a heap object field or an off-heap native data structure. Some barrier actions are conditioned on \texttt{IN\_HEAP}.
+
+    \item \textbf{Barrier strength} bits control how strong barriers should be applied. \texttt{AS\_RAW} bypasses GC barriers entirely and reads the raw memory value, which is necessary in certain internal GC paths. \texttt{AS\_NO\_KEEPALIVE} performs a correctly remapped access without keeping any objects alive, used in GC-internal scanning paths. \texttt{AS\_NORMAL} (the default) invokes the full barrier.
+
+    \item \textbf{Memory ordering} bits map to C++ memory-order semantics for the underlying atomic or plain load or store.
 \end{itemize}
 
-ZGC achieves these goals through several key techniques:
+For ZGC, when \texttt{WeakReference.get()} is executed the \texttt{referent} field load carries \texttt{ON\_WEAK\_OOP\_REF}. ZGC's barrier for this decorator checks the colour bits of the loaded pointer and if the pointer is already good (the referent is live and remapped or null), the address is returned directly. If not, the barrier's slow path is invoked. In the slow path, the liveness of the referent is checked and the barrier either returns a coloured null if the referent is no longer live, or a correctly coloured pointer if the referent is live~\cite{openjdk-zbarrier-cpp,openjdk-accessdecorators-hpp}.
 
-\paragraph{Coloured Pointers.} ZGC embeds metadata in the unused bits of 64-bit object pointers. These \emph{colour bits} encode information about the pointer's current state relative to the GC's phase, for example, whether the pointer has been remapped after relocation, or whether it points to a young or old generation object~\cite{jep333-zgc,openjdk-zaddress-hpp}. This allows the GC to reason about pointer states without loading the object header.
-
-\paragraph{Barriers.} ZGC uses barriers at every reference load or write. The barrier checks the colour bits of the loaded pointer and, if necessary, applies a fixup (e.g., remapping after relocation)~\cite{jep333-zgc,openjdk-zbarrier-cpp}. This is the mechanism that allows ZGC to perform most of its work concurrently with the application. Barriers are also used when modifying any coloured pointer to ensure that the GC can maintain consistency and correctness.
-
-\paragraph{Concurrent Phases.} A ZGC collection cycle interleaves short stop-the-world pauses (for root scanning and synchronisation) with concurrent phases (for marking, reference processing, and relocation)~\cite{jep333-zgc,openjdk-zreferenceprocessor-cpp}. The concurrent phases run alongside application threads, using barriers to maintain consistency.
-
-\paragraph{Multiple GC Worker Threads.} ZGC uses multiple GC worker threads to parallelize GC work. Each worker thread maintains its own data structures in many cases to avoid contention~\cite{openjdk-zworkers-cpp,openjdk-zreferenceprocessor-cpp}.
+Store barriers are similarly decorator-driven. A normal store carries the decorator \texttt{ ON\_STRONG\_OOP\_REF} which triggers ZGC's store barrier, which records the old value in the store-barrier buffer (needed for the snapshot-at-the-beginning marking semantics and for maintaining remembered sets in the generational case).
 
 
 \section{Reference Processing Pipeline in ZGC}

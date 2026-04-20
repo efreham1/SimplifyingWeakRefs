@@ -73,7 +73,7 @@ public abstract class WeakValueHashMapBenchmarkSupport {
 
     @State(Scope.Thread)
     public abstract static class BaseState {
-        @Param({"4096"})
+        @Param({"67108864"})
         public int liveSet;
 
         @Param({"64"})

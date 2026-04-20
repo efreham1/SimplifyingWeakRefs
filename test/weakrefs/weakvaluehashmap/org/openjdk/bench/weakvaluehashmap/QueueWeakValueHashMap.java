@@ -12,7 +12,6 @@ public final class QueueWeakValueHashMap<K, V> implements ManagedWeakValueMap<K,
 
     @Override
     public V get(K key) {
-        expungeQueuedEntries();
         Entry<K, V> entry = entries.get(key);
         if (entry == null) {
             return null;
@@ -27,7 +26,6 @@ public final class QueueWeakValueHashMap<K, V> implements ManagedWeakValueMap<K,
 
     @Override
     public V put(K key, V value) {
-        expungeQueuedEntries();
         if (value == null) {
             return remove(key);
         }
@@ -45,7 +43,6 @@ public final class QueueWeakValueHashMap<K, V> implements ManagedWeakValueMap<K,
 
     @Override
     public V remove(K key) {
-        expungeQueuedEntries();
         Entry<K, V> entry = entries.remove(key);
         if (entry == null) {
             return null;
@@ -84,20 +81,6 @@ public final class QueueWeakValueHashMap<K, V> implements ManagedWeakValueMap<K,
 
     @Override
     public int cleanupStaleEntries() {
-        int removed = expungeQueuedEntries();
-        Iterator<Map.Entry<K, Entry<K, V>>> iterator = entries.entrySet().iterator();
-        while (iterator.hasNext()) {
-            Entry<K, V> entry = iterator.next().getValue();
-            if (entry.isStale()) {
-                iterator.remove();
-                entry.clear();
-                removed++;
-            }
-        }
-        return removed;
-    }
-
-    private int expungeQueuedEntries() {
         int removed = 0;
         while (true) {
             @SuppressWarnings("unchecked")

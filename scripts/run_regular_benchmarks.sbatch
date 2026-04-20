@@ -36,7 +36,6 @@ export PARALLEL_INSTANCES="${PARALLEL_INSTANCES:-8}"
 export RUN_ID_PREFIX="${RUN_ID_PREFIX:-slurm-${SLURM_JOB_ID}}"
 export STAGE_ROOT="${STAGE_ROOT:-/dev/shm}"
 export FINAL_OUTPUT_ROOT="${FINAL_OUTPUT_ROOT:-${REPO_ROOT}/output}"
-export ENABLE_WEAKVALUEHASHMAP_JMH="${ENABLE_WEAKVALUEHASHMAP_JMH:-1}"
 export REPO_ROOT
 
 copy_slurm_logs() {
@@ -129,7 +128,6 @@ instance_end=$((instance_start + local_instance_count - 1))
 printf '[benchmark] node %s/%s running global instances %s-%s\n' \
     "$((node_rank + 1))" "$node_count" "$instance_start" "$instance_end"
 
-ENABLE_WEAKVALUEHASHMAP_JMH=0 \
 /usr/bin/bash "${REPO_ROOT}/scripts/run_all_benchmarks.sh" \
     --outer "$OUTER_ITERATIONS" \
     --warmup "$WARMUP_ITERATIONS" \
@@ -143,26 +141,3 @@ ENABLE_WEAKVALUEHASHMAP_JMH=0 \
     --jvm-core-count "$BENCHMARK_JVM_CORE_COUNT" \
     --aux-core-count "$BENCHMARK_AUX_CORE_COUNT"
 EOF
-
-if [ "$ENABLE_WEAKVALUEHASHMAP_JMH" = "1" ]; then
-    WEAKVALUEHASHMAP_JMH_RESULT_ROOT="${FINAL_OUTPUT_ROOT}/id_${RUN_ID_PREFIX}-weakvaluehashmap-jmh"
-    WEAKVALUEHASHMAP_JMH_ARGS="${WEAKVALUEHASHMAP_JMH_ARGS:-}"
-    weakvaluehashmap_jmh_extra_args=()
-
-    if [ -n "$WEAKVALUEHASHMAP_JMH_ARGS" ]; then
-        read -r -a weakvaluehashmap_jmh_extra_args <<< "$WEAKVALUEHASHMAP_JMH_ARGS"
-    fi
-
-    printf '[benchmark] running weakvaluehashmap JMH sequentially into %s\n' "$WEAKVALUEHASHMAP_JMH_RESULT_ROOT"
-    /usr/bin/bash "${REPO_ROOT}/scripts/run_weakvaluehashmap_jmh.sh" \
-        --no-build \
-        --result-root "$WEAKVALUEHASHMAP_JMH_RESULT_ROOT" \
-        "${weakvaluehashmap_jmh_extra_args[@]}"
-
-    if [ -f "${FINAL_OUTPUT_ROOT}/run-metadata.txt" ]; then
-        {
-            printf 'weakvaluehashmap_jmh_result_root=%s\n' "$WEAKVALUEHASHMAP_JMH_RESULT_ROOT"
-            printf 'weakvaluehashmap_jmh_mode=sequential_once\n'
-        } >> "${FINAL_OUTPUT_ROOT}/run-metadata.txt"
-    fi
-fi
