@@ -3,11 +3,11 @@
 #SBATCH --account=uppmax2026-1-109
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=8
-#SBATCH --mem=64G
+#SBATCH --cpus-per-task=48
+#SBATCH --exclusive
+#SBATCH --mem=0
 #SBATCH --hint=nomultithread
-#SBATCH --time=4:00:00
+#SBATCH --time=10:00:00
 #SBATCH --output=/dev/shm/weakref-jmh-%j.out
 #SBATCH --error=/dev/shm/weakref-jmh-%j.err
 
@@ -16,55 +16,64 @@ set -euo pipefail
 export PATH="/usr/bin:/bin:/usr/sbin:/sbin${PATH:+:${PATH}}"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPO_ROOT="${REPO_ROOT:-}"
 
-if [ -z "${REPO_ROOT}" ]; then
-    if [ -n "${SLURM_SUBMIT_DIR:-}" ] && [ -f "${SLURM_SUBMIT_DIR}/scripts/run_weakvaluehashmap_jmh.sh" ]; then
-        REPO_ROOT="${SLURM_SUBMIT_DIR}"
-    else
-        REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-    fi
+if [ -n "${SLURM_SUBMIT_DIR:-}" ] && [ -f "${SLURM_SUBMIT_DIR}/scripts/run_weakvaluehashmap_jmh.sh" ]; then
+    REPO_ROOT="${SLURM_SUBMIT_DIR}"
+else
+    REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 fi
-
-export RUN_ID_PREFIX="${RUN_ID_PREFIX:-slurm-${SLURM_JOB_ID}}"
-export FINAL_OUTPUT_ROOT="${FINAL_OUTPUT_ROOT:-${REPO_ROOT}/output}"
-export WEAKVALUEHASHMAP_JMH_ARGS="${WEAKVALUEHASHMAP_JMH_ARGS:---live-set 67108864 --time 60 --fork-heap 48g}"
 export REPO_ROOT
 
+FINAL_OUTPUT_ROOT="${FINAL_OUTPUT_ROOT:-${REPO_ROOT}/output}"
+RUN_ID="${RUN_ID:-jmh-${SLURM_JOB_ID}}"
+
 copy_slurm_logs() {
-    local exit_code=$1
     local slurm_output="/dev/shm/weakref-jmh-${SLURM_JOB_ID}.out"
     local slurm_error="/dev/shm/weakref-jmh-${SLURM_JOB_ID}.err"
     local slurm_dest="${FINAL_OUTPUT_ROOT}/slurm"
 
     mkdir -p "$slurm_dest"
-
     [ ! -f "$slurm_output" ] || cp -a "$slurm_output" "$slurm_dest/"
-    [ ! -f "$slurm_error" ] || cp -a "$slurm_error" "$slurm_dest/"
-
-    return "$exit_code"
+    [ ! -f "$slurm_error"  ] || cp -a "$slurm_error"  "$slurm_dest/"
 }
 
-trap 'exit_code=$?; copy_slurm_logs "$exit_code"; exit "$exit_code"' EXIT
+trap 'exit_code=$?; copy_slurm_logs; exit "$exit_code"' EXIT
 
 cd "$REPO_ROOT"
 
-WEAKVALUEHASHMAP_JMH_RESULT_ROOT="${FINAL_OUTPUT_ROOT}/id_${RUN_ID_PREFIX}-weakvaluehashmap-jmh"
-weakvaluehashmap_jmh_extra_args=()
+# Copy the JMH variant images (none, all, weak_fields) to this node's /dev/shm
+VARIANT_RAM_DIR="/dev/shm/variant-images-${SLURM_JOB_ID}"
+mkdir -p "$VARIANT_RAM_DIR"
 
-if [ -n "$WEAKVALUEHASHMAP_JMH_ARGS" ]; then
-    read -r -a weakvaluehashmap_jmh_extra_args <<< "$WEAKVALUEHASHMAP_JMH_ARGS"
-fi
+for variant in none all weak_fields; do
+    src_dir="${REPO_ROOT}/build/variant-images/${variant}-linux-x86_64-server-release"
+    if [ -d "$src_dir" ]; then
+        printf '[jmh] Copying %s to RAM...\n' "$variant"
+        cp -a "$src_dir" "${VARIANT_RAM_DIR}/"
+    else
+        printf '[jmh] Warning: variant image not found: %s\n' "$src_dir" >&2
+    fi
+done
+printf '[jmh] Variant images ready at %s\n' "$VARIANT_RAM_DIR"
 
-printf '[benchmark] running weakvaluehashmap JMH into %s\n' "$WEAKVALUEHASHMAP_JMH_RESULT_ROOT"
+# Create a stage directory in /dev/shm for benchmark output
+STAGE_DIR=""
+VARIANT_RAM_DIR_CREATED="$VARIANT_RAM_DIR"
+
+cleanup() {
+    if [ -n "${STAGE_DIR:-}" ] && [ -d "$STAGE_DIR" ]; then
+        printf '[jmh] Copying output from %s to %s\n' "$STAGE_DIR" "$FINAL_OUTPUT_ROOT"
+        mkdir -p "$FINAL_OUTPUT_ROOT"
+        cp -a "$STAGE_DIR/." "$FINAL_OUTPUT_ROOT/" 2>/dev/null || true
+        rm -rf "$STAGE_DIR"
+    fi
+    rm -rf "${VARIANT_RAM_DIR_CREATED:-}"
+}
+trap cleanup EXIT
+
+STAGE_DIR="$(mktemp -d "/dev/shm/weakref-jmh-${SLURM_JOB_ID}-XXXXXX")"
+
 /usr/bin/bash "${REPO_ROOT}/scripts/run_weakvaluehashmap_jmh.sh" \
     --no-build \
-    --result-root "$WEAKVALUEHASHMAP_JMH_RESULT_ROOT" \
-    "${weakvaluehashmap_jmh_extra_args[@]}"
-
-if [ -f "${FINAL_OUTPUT_ROOT}/run-metadata.txt" ]; then
-    {
-        printf 'weakvaluehashmap_jmh_result_root=%s\n' "$WEAKVALUEHASHMAP_JMH_RESULT_ROOT"
-        printf 'weakvaluehashmap_jmh_mode=sequential_once\n'
-    } >> "${FINAL_OUTPUT_ROOT}/run-metadata.txt"
-fi
+    --variant-image-root "$VARIANT_RAM_DIR" \
+    --result-root "${STAGE_DIR}/id_${RUN_ID}"

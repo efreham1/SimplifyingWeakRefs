@@ -25,6 +25,9 @@
 #include "gc/shared/referencePolicy.hpp"
 #include "gc/shared/referenceProcessorStats.hpp"
 #include "gc/shared/suspendibleThreadSet.hpp"
+#include "gc/z/zAddress.hpp"
+#include "gc/z/zAddress.inline.hpp"
+#include "gc/z/zBarrier.hpp"
 #include "gc/z/zCollectedHeap.hpp"
 #include "gc/z/zDriver.hpp"
 #include "gc/z/zHeap.inline.hpp"
@@ -209,13 +212,15 @@ bool ZReferenceProcessor::should_discover(zaddress reference, ReferenceType type
   return true;
 }
 
-bool ZReferenceProcessor::should_discover_weak_field(zpointer field_value) const {
-  if (is_null_any(field_value) && ZPointer::is_mark_good(field_value)) {
+bool ZReferenceProcessor::should_discover_weak_field(zpointer referent_ptr) const {
+  if (is_null_any(referent_ptr) && ZPointer::is_mark_good(referent_ptr)) {
     // Field is already null, no need to discover
     return false;
   }
 
-  if (is_strongly_live(field_value)) {
+  const zaddress referent_addr = ZBarrier::make_load_good(referent_ptr);
+
+  if (ZHeap::heap()->is_young(referent_addr) || ZHeap::heap()->is_object_strongly_live(referent_addr)) {
     // Field points to a strongly live object, no need to discover
     return false;
   }
@@ -260,30 +265,30 @@ bool ZReferenceProcessor::try_make_inactive(zaddress reference, ReferenceType ty
 }
 
 bool ZReferenceProcessor::try_make_inactive_fast(const ZWeakFieldData& data) {
-  const zaddress field_addr = data.field_addr;
+  volatile zpointer* field_addr = data.field_addr;
   const zpointer referent_ptr = data.field_value;
 
   if (ZPointer::is_mark_good(referent_ptr)) {
     return false;
   }
 
-  const zaddress referent_addr = make_load_good(referent_ptr);
+  const zaddress referent_addr = ZBarrier::make_load_good(referent_ptr);
 
   ZPage* const page = ZHeap::heap()->page(referent_addr);
   
   if (!page->is_object_strongly_live(referent_addr) && page->is_old()) {
-    const zpointer prev_ptr = AtomicAccess::cmpxchg(field_addr, referent_ptr, zpointer::null, memory_order_relaxed);
+    const zpointer prev_ptr = AtomicAccess::cmpxchg(field_addr, referent_ptr, color_null(), memory_order_relaxed);
     if (prev_ptr == referent_ptr) {
       // Successfully cleared weak field, we can consider it inactive
       return true;
     } else {
       // Weak field concurrently updated
-      assert(is_mark_good(prev_ptr), "Field value should be good since it was concurrently updated, but was " PTR_FORMAT, p2i(prev_ptr));
+      assert(ZPointer::is_mark_good(prev_ptr), "Field value should be good since it was concurrently updated");
       return false;
     }
   } else {
     zpointer colored_referent = ZAddress::color(referent_addr, ZPointerLoadGoodMask | ZPointerMarkedYoung | ZPointerMarkedOld | ZPointerRememberedMask);
-    AtomicAccess::cmpxchg(data.referent_field_addr, referent_ptr, colored_referent, memory_order_relaxed);
+    AtomicAccess::cmpxchg(field_addr, referent_ptr, colored_referent, memory_order_relaxed);
     if (page->is_young() && ZGeneration::young()->is_phase_mark()) {
       ZBarrier::mark_young<ZMark::Resurrect, ZMark::AnyThread, ZMark::Follow>(referent_addr);
     }

@@ -83,7 +83,6 @@ private:
   template <typename ZBarrierSlowPath>
   static zaddress barrier(ZBarrierFastPath fast_path, ZBarrierSlowPath slow_path, ZBarrierColor color, volatile zpointer* p, zpointer o, bool allow_null = false);
 
-  static zaddress make_load_good(zpointer ptr);
   static zaddress make_load_good_no_relocate(zpointer ptr);
   static zaddress relocate_or_remap(zaddress_unsafe addr, ZGeneration* generation);
   static zaddress remap(zaddress_unsafe addr, ZGeneration* generation);
@@ -131,6 +130,8 @@ private:
 
 public:
 
+  static zaddress make_load_good(zpointer ptr);
+
   static zpointer load_atomic(volatile zpointer* p);
 
   // Helpers for relocation
@@ -162,7 +163,6 @@ public:
 
   // Reference processor / weak cleaning barriers
   static bool clean_barrier_on_weak_oop_field(volatile zpointer* p);
-  static bool clean_barrier_on_weak_oop_field_preloaded(volatile zpointer* p, zpointer o);
   static bool clean_barrier_on_phantom_oop_field(volatile zpointer* p);
   static bool clean_barrier_on_final_oop_field(volatile zpointer* p);
 

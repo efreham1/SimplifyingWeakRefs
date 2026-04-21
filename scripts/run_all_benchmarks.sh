@@ -1,6 +1,11 @@
+
 #!/usr/bin/env bash
 
 set -euo pipefail
+
+# Usage:
+#   ./scripts/run_all_benchmarks.sh [--variant-image-root DIR] ...
+#   --variant-image-root DIR   Use DIR for variant images (RAM or disk, default: build/variant-images)
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"

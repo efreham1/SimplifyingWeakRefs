@@ -17,15 +17,13 @@ set -euo pipefail
 export PATH="/usr/bin:/bin:/usr/sbin:/sbin${PATH:+:${PATH}}"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPO_ROOT="${REPO_ROOT:-}"
 
-if [ -z "${REPO_ROOT}" ]; then
-    if [ -n "${SLURM_SUBMIT_DIR:-}" ] && [ -f "${SLURM_SUBMIT_DIR}/scripts/run_all_benchmarks.sh" ]; then
-        REPO_ROOT="${SLURM_SUBMIT_DIR}"
-    else
-        REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-    fi
+if [ -n "${SLURM_SUBMIT_DIR:-}" ] && [ -f "${SLURM_SUBMIT_DIR}/scripts/run_benchmark_iterations.sh" ]; then
+    REPO_ROOT="${SLURM_SUBMIT_DIR}"
+else
+    REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 fi
+export REPO_ROOT
 
 export BENCHMARK_JVM_CORE_COUNT="${BENCHMARK_JVM_CORE_COUNT:-10}"
 export BENCHMARK_AUX_CORE_COUNT="${BENCHMARK_AUX_CORE_COUNT:-2}"
@@ -34,32 +32,25 @@ export WARMUP_ITERATIONS="${WARMUP_ITERATIONS:-1}"
 export COOLDOWN_SECONDS="${COOLDOWN_SECONDS:-10}"
 export PARALLEL_INSTANCES="${PARALLEL_INSTANCES:-8}"
 export RUN_ID_PREFIX="${RUN_ID_PREFIX:-slurm-${SLURM_JOB_ID}}"
-export STAGE_ROOT="${STAGE_ROOT:-/dev/shm}"
 export FINAL_OUTPUT_ROOT="${FINAL_OUTPUT_ROOT:-${REPO_ROOT}/output}"
-export REPO_ROOT
 
 copy_slurm_logs() {
-    local exit_code=$1
     local slurm_output="/dev/shm/weakref-bench-${SLURM_JOB_ID}.out"
     local slurm_error="/dev/shm/weakref-bench-${SLURM_JOB_ID}.err"
     local slurm_dest="${FINAL_OUTPUT_ROOT}/slurm"
 
     mkdir -p "$slurm_dest"
-
     [ ! -f "$slurm_output" ] || cp -a "$slurm_output" "$slurm_dest/"
-    [ ! -f "$slurm_error" ] || cp -a "$slurm_error" "$slurm_dest/"
-
-    return "$exit_code"
+    [ ! -f "$slurm_error"  ] || cp -a "$slurm_error"  "$slurm_dest/"
 }
 
-trap 'exit_code=$?; copy_slurm_logs "$exit_code"; exit "$exit_code"' EXIT
+trap 'exit_code=$?; copy_slurm_logs; exit "$exit_code"' EXIT
 
 cd "$REPO_ROOT"
 
+# --- Validate configuration ---
 validate_positive_integer() {
-    local value=$1
-    local label=$2
-
+    local value=$1 label=$2
     if ! [[ "$value" =~ ^[0-9]+$ ]] || [ "$value" -lt 1 ]; then
         printf '[benchmark] error: %s must be a positive integer\n' "$label" >&2
         exit 1
@@ -72,28 +63,31 @@ validate_positive_integer "$OUTER_ITERATIONS" OUTER_ITERATIONS
 validate_positive_integer "$PARALLEL_INSTANCES" PARALLEL_INSTANCES
 
 TOTAL_BENCHMARK_INSTANCES="$PARALLEL_INSTANCES"
-if [ "$TOTAL_BENCHMARK_INSTANCES" -gt "$OUTER_ITERATIONS" ]; then
-    TOTAL_BENCHMARK_INSTANCES="$OUTER_ITERATIONS"
-fi
+[ "$TOTAL_BENCHMARK_INSTANCES" -le "$OUTER_ITERATIONS" ] || TOTAL_BENCHMARK_INSTANCES="$OUTER_ITERATIONS"
+export TOTAL_BENCHMARK_INSTANCES
 
 PER_INSTANCE_CORE_COUNT=$((BENCHMARK_JVM_CORE_COUNT + BENCHMARK_AUX_CORE_COUNT))
 MAX_INSTANCES_PER_NODE=$((SLURM_CPUS_PER_TASK / PER_INSTANCE_CORE_COUNT))
 MAX_TOTAL_INSTANCES=$((MAX_INSTANCES_PER_NODE * SLURM_JOB_NUM_NODES))
 
 if [ "$MAX_INSTANCES_PER_NODE" -lt 1 ]; then
-    printf '[benchmark] error: each node only has %s CPUs per task, which is insufficient for one benchmark instance requiring %s CPUs\n' \
+    printf '[benchmark] error: node has %s CPUs per task, insufficient for one instance requiring %s CPUs\n' \
         "$SLURM_CPUS_PER_TASK" "$PER_INSTANCE_CORE_COUNT" >&2
     exit 1
 fi
 
 if [ "$TOTAL_BENCHMARK_INSTANCES" -gt "$MAX_TOTAL_INSTANCES" ]; then
-    printf '[benchmark] error: requested %s effective instances but two nodes with %s CPUs per task only support %s instances at %s CPUs each\n' \
-        "$TOTAL_BENCHMARK_INSTANCES" "$SLURM_CPUS_PER_TASK" "$MAX_TOTAL_INSTANCES" "$PER_INSTANCE_CORE_COUNT" >&2
+    printf '[benchmark] error: requested %s instances but %s nodes with %s CPUs support only %s instances at %s CPUs each\n' \
+        "$TOTAL_BENCHMARK_INSTANCES" "$SLURM_JOB_NUM_NODES" "$SLURM_CPUS_PER_TASK" \
+        "$MAX_TOTAL_INSTANCES" "$PER_INSTANCE_CORE_COUNT" >&2
     exit 1
 fi
 
-export TOTAL_BENCHMARK_INSTANCES
+printf '[benchmark] Running %s instance(s) across %s node(s), %s CPUs per instance\n' \
+    "$TOTAL_BENCHMARK_INSTANCES" "$SLURM_JOB_NUM_NODES" "$PER_INSTANCE_CORE_COUNT"
 
+# Each node runs this script: copies variant images to its own /dev/shm, creates a
+# stage dir, runs the benchmark, and copies results to the shared output root.
 srun \
     --nodes "$SLURM_JOB_NUM_NODES" \
     --ntasks "$SLURM_JOB_NUM_NODES" \
@@ -115,7 +109,7 @@ if [ "$node_rank" -lt "$extra_instances" ]; then
     instance_start=$(((node_rank * (base_instances + 1)) + 1))
 else
     local_instance_count=$base_instances
-    instance_start=$((((extra_instances * (base_instances + 1)) + ((node_rank - extra_instances) * base_instances)) + 1))
+    instance_start=$((extra_instances * (base_instances + 1) + (node_rank - extra_instances) * base_instances + 1))
 fi
 
 if [ "$local_instance_count" -lt 1 ]; then
@@ -124,20 +118,50 @@ if [ "$local_instance_count" -lt 1 ]; then
 fi
 
 instance_end=$((instance_start + local_instance_count - 1))
-
-printf '[benchmark] node %s/%s running global instances %s-%s\n' \
+printf '[benchmark] node %s/%s: instances %s-%s\n' \
     "$((node_rank + 1))" "$node_count" "$instance_start" "$instance_end"
 
-/usr/bin/bash "${REPO_ROOT}/scripts/run_all_benchmarks.sh" \
+# Copy all release variant images to this node's /dev/shm
+VARIANT_RAM_DIR="/dev/shm/variant-images-${SLURM_JOB_ID}"
+mkdir -p "$VARIANT_RAM_DIR"
+for src_dir in "${REPO_ROOT}/build/variant-images/"*-linux-x86_64-server-release; do
+    [ -d "$src_dir" ] || continue
+    variant_name="$(basename "$src_dir")"
+    if [ ! -d "${VARIANT_RAM_DIR}/${variant_name}" ]; then
+        printf '[benchmark] Copying %s to RAM...\n' "$variant_name"
+        cp -a "$src_dir" "${VARIANT_RAM_DIR}/"
+    fi
+done
+printf '[benchmark] All variant images in RAM at %s\n' "$VARIANT_RAM_DIR"
+
+# Create a stage directory in /dev/shm for benchmark output
+STAGE_DIR=""
+VARIANT_RAM_DIR_CREATED="$VARIANT_RAM_DIR"
+
+cleanup_node() {
+    if [ -n "${STAGE_DIR:-}" ] && [ -d "$STAGE_DIR" ]; then
+        printf '[benchmark] Copying output from %s to %s\n' "$STAGE_DIR" "$FINAL_OUTPUT_ROOT"
+        mkdir -p "$FINAL_OUTPUT_ROOT"
+        cp -a "$STAGE_DIR/." "$FINAL_OUTPUT_ROOT/" 2>/dev/null || true
+        rm -rf "$STAGE_DIR"
+    fi
+    rm -rf "${VARIANT_RAM_DIR_CREATED:-}"
+}
+trap cleanup_node EXIT
+
+STAGE_DIR="$(mktemp -d "/dev/shm/weakref-bench-${SLURM_JOB_ID}-XXXXXX")"
+
+/usr/bin/bash "${REPO_ROOT}/scripts/run_benchmark_iterations.sh" \
+    --benchmark both \
+    --run-id-prefix "$RUN_ID_PREFIX" \
+    --output-root "$STAGE_DIR" \
+    --variant-image-root "$VARIANT_RAM_DIR" \
     --outer "$OUTER_ITERATIONS" \
     --warmup "$WARMUP_ITERATIONS" \
     --cooldown "$COOLDOWN_SECONDS" \
     --parallel-instances "$total_instances" \
     --instance-start "$instance_start" \
     --instance-end "$instance_end" \
-    --run-id-prefix "$RUN_ID_PREFIX" \
-    --stage-root "$STAGE_ROOT" \
-    --final-output-root "$FINAL_OUTPUT_ROOT" \
     --jvm-core-count "$BENCHMARK_JVM_CORE_COUNT" \
     --aux-core-count "$BENCHMARK_AUX_CORE_COUNT"
 EOF

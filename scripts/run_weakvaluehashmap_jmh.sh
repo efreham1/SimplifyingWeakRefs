@@ -6,6 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 DEBUG_LEVEL="release"
+VARIANT_IMAGE_ROOT="${REPO_ROOT}/build/variant-images"
 RESULT_ROOT="${REPO_ROOT}/output/weakvaluehashmap_jmh"
 JMH_JAR_DIR="${JMH_JAR_DIR:-${REPO_ROOT}/build/jmh/jars}"
 LIVE_SET="4096"
@@ -26,6 +27,10 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --debug-level)
       DEBUG_LEVEL="$2"
+      shift 2
+      ;;
+    --variant-image-root)
+      VARIANT_IMAGE_ROOT="$2"
       shift 2
       ;;
     --result-root)
@@ -131,7 +136,7 @@ JMH_SOURCE_ROOT="${REPO_ROOT}/test/weakrefs/jmh/org/openjdk/bench/weakvaluehashm
 
 variant_image_dir() {
   local variant="$1"
-  printf '%s/build/variant-images/%s-linux-x86_64-server-%s/jdk/bin\n' "${REPO_ROOT}" "$variant" "$DEBUG_LEVEL"
+  printf '%s/%s-linux-x86_64-server-%s/jdk/bin\n' "$VARIANT_IMAGE_ROOT" "$variant" "$DEBUG_LEVEL"
 }
 
 ensure_variant() {
@@ -161,7 +166,7 @@ compile_benchmark() {
   local variant="$1"
   local benchmark_source="$2"
   shift 2
-  local out_dir="${RESULT_ROOT}/classes/${variant}"
+  local out_dir="${CLASSES_DIR}/${variant}"
   local bin_dir
 
   bin_dir="$(variant_image_dir "$variant")"
@@ -180,7 +185,7 @@ compile_benchmark() {
 run_benchmark() {
   local variant="$1"
   local benchmark_class="$2"
-  local out_dir="${RESULT_ROOT}/classes/${variant}"
+  local out_dir="${CLASSES_DIR}/${variant}"
   local result_dir="${RESULT_ROOT}/results"
   local log_file="${result_dir}/${variant}.log"
   local csv_file="${result_dir}/${variant}.csv"
@@ -243,6 +248,9 @@ print_summary() {
 }
 
 mkdir -p "$RESULT_ROOT"
+
+CLASSES_DIR="$(mktemp -d)"
+trap 'rm -rf "$CLASSES_DIR"' EXIT
 
 ensure_variant none
 ensure_variant all
