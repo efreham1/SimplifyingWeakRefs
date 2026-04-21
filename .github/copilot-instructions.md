@@ -34,29 +34,8 @@ Development is currently focused on zgc.
 ## Build & Test Workflow
 
 ### Building
-```bash
-bash configure  # First time only; auto-detects dependencies
-make images     # Builds full JDK to build/linux-x86_64-server-release/
-make exploded-image # Faster build for iterative development; no compression or stripping
-```
+Use the scripts available in the directory /scripts for building and testing.
 
-Built JDK binary: `./build/linux-x86_64-server-release/jdk/bin/java` This gets made from both images and exploded-image so use exploded-image for faster turnaround during development.
-
-### Running Custom WeakRef Benchmark
-```bash
-# Single run
-./build/linux-x86_64-server-release/jdk/bin/java \
-  -Xms1g -Xmx8g -XX:+UseZGC test/weakrefs/WeakRefGcBenchmark.java
-
-# Performance testing with CPU pinning and statistics
-./run_benchmark_iterations.sh [outer_iterations] [inner_iterations]
-```
-
-The benchmark script:
-- Sets CPU governor to performance mode
-- Drops filesystem caches between runs
-- Pins execution to specific cores (configurable via `CPU_CORES`)
-- Aggregates timing results
 
 ### Standard JDK Tests
 ```bash
@@ -98,8 +77,6 @@ When modifying reference processing:
 See `I_do_this.txt` for current task list and `considerations.txt` for critical constraints (e.g., young referents with old References must stay reachable).
 
 **Thesis**: Located in `Report/Thesis.tex`. Compile with `xelatex` or `pdflatex`.
-
-**Caffeine Benchmarks**: Branch `caffeine-benchmark` contains integration with real-world cache library for performance validation.
 
 ## Common Pitfalls
 

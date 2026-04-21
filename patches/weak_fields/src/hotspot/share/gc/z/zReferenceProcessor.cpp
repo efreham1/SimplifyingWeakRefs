@@ -210,12 +210,12 @@ bool ZReferenceProcessor::should_discover(zaddress reference, ReferenceType type
 }
 
 bool ZReferenceProcessor::should_discover_weak_field(zpointer field_value) const {
-  if (is_null_any(field_value)) {
+  if (is_null_any(field_value) && ZPointer::is_mark_good(field_value)) {
     // Field is already null, no need to discover
     return false;
   }
 
-  if (ZPointer::is_mark_good(field_value)) {
+  if (is_strongly_live(field_value)) {
     // Field points to a strongly live object, no need to discover
     return false;
   }
@@ -257,6 +257,38 @@ bool ZReferenceProcessor::try_make_inactive(zaddress reference, ReferenceType ty
   }
 
   return false;
+}
+
+bool ZReferenceProcessor::try_make_inactive_fast(const ZWeakFieldData& data) {
+  const zaddress field_addr = data.field_addr;
+  const zpointer referent_ptr = data.field_value;
+
+  if (ZPointer::is_mark_good(referent_ptr)) {
+    return false;
+  }
+
+  const zaddress referent_addr = make_load_good(referent_ptr);
+
+  ZPage* const page = ZHeap::heap()->page(referent_addr);
+  
+  if (!page->is_object_strongly_live(referent_addr) && page->is_old()) {
+    const zpointer prev_ptr = AtomicAccess::cmpxchg(field_addr, referent_ptr, zpointer::null, memory_order_relaxed);
+    if (prev_ptr == referent_ptr) {
+      // Successfully cleared weak field, we can consider it inactive
+      return true;
+    } else {
+      // Weak field concurrently updated
+      assert(is_mark_good(prev_ptr), "Field value should be good since it was concurrently updated, but was " PTR_FORMAT, p2i(prev_ptr));
+      return false;
+    }
+  } else {
+    zpointer colored_referent = ZAddress::color(referent_addr, ZPointerLoadGoodMask | ZPointerMarkedYoung | ZPointerMarkedOld | ZPointerRememberedMask);
+    AtomicAccess::cmpxchg(data.referent_field_addr, referent_ptr, colored_referent, memory_order_relaxed);
+    if (page->is_young() && ZGeneration::young()->is_phase_mark()) {
+      ZBarrier::mark_young<ZMark::Resurrect, ZMark::AnyThread, ZMark::Follow>(referent_addr);
+    }
+    return false;
+  }
 }
 
 void ZReferenceProcessor::discover(zaddress reference, ReferenceType type) {
@@ -394,7 +426,7 @@ void ZReferenceProcessor::process_worker_discovered_weak_fields(ZWeakFieldArray&
   size_t dropped = 0;
   for (size_t i = 0; i < weak_fields.length(); i++) {
     const ZWeakFieldData& data = weak_fields.at(i);
-    if (ZBarrier::clean_barrier_on_weak_oop_field_preloaded(data.field_addr, data.field_value)) {
+    if (try_make_inactive_fast(data)) {
       log_trace(gc, ref)("\"Cleared\" Weak Reference Field: " PTR_FORMAT, p2i(data.field_addr));
       // Update statistics
       _cleared_weak_fields_count.get()++;

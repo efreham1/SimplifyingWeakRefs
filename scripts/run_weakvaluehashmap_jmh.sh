@@ -19,6 +19,7 @@ MEASUREMENT_ITERATIONS="5"
 TIME_SECONDS="1"
 FORKS="1"
 THREADS="1"
+FORK_HEAP="48g"
 BUILD_MISSING=true
 
 while [ $# -gt 0 ]; do
@@ -73,6 +74,10 @@ while [ $# -gt 0 ]; do
       ;;
     --threads)
       THREADS="$2"
+      shift 2
+      ;;
+    --fork-heap)
+      FORK_HEAP="$2"
       shift 2
       ;;
     --no-build)
@@ -185,7 +190,6 @@ run_benchmark() {
   mkdir -p "$result_dir"
 
   "${bin_dir}/java" \
-    -XX:+UseZGC \
     -cp "${out_dir}:${JMH_RUNTIME_CP}" \
     org.openjdk.jmh.Main "$benchmark_class" \
     -bm thrpt \
@@ -199,6 +203,9 @@ run_benchmark() {
     -foe true \
     -rf csv \
     -rff "$csv_file" \
+    -jvmArgsAppend -XX:+UseZGC \
+    -jvmArgsAppend "-Xms${FORK_HEAP}" \
+    -jvmArgsAppend "-Xmx${FORK_HEAP}" \
     -p liveSet="$LIVE_SET" \
     -p keyPayloadSize="$KEY_PAYLOAD_SIZE" \
     -p valuePayloadSize="$VALUE_PAYLOAD_SIZE" \

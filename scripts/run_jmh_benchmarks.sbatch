@@ -5,9 +5,9 @@
 #SBATCH --ntasks=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=8
-#SBATCH --mem=32G
+#SBATCH --mem=64G
 #SBATCH --hint=nomultithread
-#SBATCH --time=3:00:00
+#SBATCH --time=4:00:00
 #SBATCH --output=/dev/shm/weakref-jmh-%j.out
 #SBATCH --error=/dev/shm/weakref-jmh-%j.err
 
@@ -28,7 +28,7 @@ fi
 
 export RUN_ID_PREFIX="${RUN_ID_PREFIX:-slurm-${SLURM_JOB_ID}}"
 export FINAL_OUTPUT_ROOT="${FINAL_OUTPUT_ROOT:-${REPO_ROOT}/output}"
-export WEAKVALUEHASHMAP_JMH_ARGS="${WEAKVALUEHASHMAP_JMH_ARGS:-}"
+export WEAKVALUEHASHMAP_JMH_ARGS="${WEAKVALUEHASHMAP_JMH_ARGS:---live-set 67108864 --time 60 --fork-heap 48g}"
 export REPO_ROOT
 
 copy_slurm_logs() {

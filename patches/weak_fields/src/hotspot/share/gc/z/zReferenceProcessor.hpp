@@ -62,6 +62,7 @@ private:
   bool should_discover(zaddress reference, ReferenceType type) const;
   bool should_discover_weak_field(zpointer field_value) const;
   bool try_make_inactive(zaddress reference, ReferenceType type) const;
+  bool try_make_inactive_fast(const ZWeakFieldData& data);
 
   void discover(zaddress reference, ReferenceType type);
 
