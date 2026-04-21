@@ -54,7 +54,7 @@ public class NoQueueWeakValueHashMapBenchmark extends WeakValueHashMapBenchmarkS
 
     @Benchmark
     public int cleanup(CleanupBenchmarkState state) {
-        return state.cleanupRetiredValues();
+        return state.cleanupStaleEntriesOnly();
     }
 
     @Benchmark

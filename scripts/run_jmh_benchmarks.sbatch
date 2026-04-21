@@ -3,11 +3,10 @@
 #SBATCH --account=uppmax2026-1-109
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=48
-#SBATCH --exclusive
-#SBATCH --mem=0
+#SBATCH --cpus-per-task=10
+#SBATCH --mem=32G
 #SBATCH --hint=nomultithread
-#SBATCH --time=10:00:00
+#SBATCH --time=1:00:00
 #SBATCH --output=/dev/shm/weakref-jmh-%j.out
 #SBATCH --error=/dev/shm/weakref-jmh-%j.err
 

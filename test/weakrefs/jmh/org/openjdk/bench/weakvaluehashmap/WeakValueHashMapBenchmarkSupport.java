@@ -166,8 +166,12 @@ public abstract class WeakValueHashMapBenchmarkSupport {
             awaitStaleValues(retiredSlots.size());
         }
 
-        public int cleanupRetiredValues() {
-            int checksum = map.cleanupStaleEntries();
+        public int cleanupStaleEntriesOnly() {
+            return map.cleanupStaleEntries();
+        }
+
+        protected int repopulateRetiredValues() {
+            int checksum = 0;
             for (Slot slot : retiredSlots) {
                 Value value = slot.replaceValue(valuePayloadSize);
                 map.put(slot.key, value);
@@ -175,6 +179,21 @@ public abstract class WeakValueHashMapBenchmarkSupport {
             }
             retiredSlots.clear();
             return checksum;
+        }
+
+        public int cleanupRetiredValues() {
+            int checksum = cleanupStaleEntriesOnly();
+            checksum ^= repopulateRetiredValues();
+            return checksum;
+        }
+
+        protected void prepareMixedRound(boolean forceGc) {
+            retiredSlots.clear();
+            retireValues(retirementsPerInvocation);
+            createAllocationPressure();
+            if (forceGc) {
+                System.gc();
+            }
         }
 
         private void retireValues(int count) {
@@ -232,18 +251,30 @@ public abstract class WeakValueHashMapBenchmarkSupport {
         public void setupInvocation() throws Exception {
             prepareCleanupBatch();
         }
+
+        @TearDown(Level.Invocation)
+        public void tearDownInvocation() {
+            repopulateRetiredValues();
+        }
     }
 
     @State(Scope.Thread)
     public abstract static class MixedState extends BaseState {
-        @Setup(Level.Invocation)
-        public void setupInvocation() throws Exception {
-            prepareCleanupBatch();
+        @Param({"8"})
+        public int gcEveryMixedRounds;
+
+        private int mixedRounds;
+
+        @Setup(Level.Iteration)
+        public void setupIteration() {
+            mixedRounds = 0;
         }
 
         public int mixedRound(Blackhole blackhole) {
             int checksum = lookupMany(blackhole);
             checksum ^= replaceMany();
+            boolean forceGc = gcEveryMixedRounds > 0 && (++mixedRounds % gcEveryMixedRounds) == 0;
+            prepareMixedRound(forceGc);
             checksum ^= cleanupRetiredValues();
             checksum ^= lookupMany(blackhole);
             return checksum;
