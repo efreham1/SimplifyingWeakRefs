@@ -53,7 +53,7 @@ Two broad classes are common:
 \subsection{Generational Collection}
 \label{subsec:generational}
 
-All JVM garbage collectors (Serial, Parallel, G1, and Z) employ \emph{generational collection}, based on the \emph{weak generational hypothesis}: most objects die young and the ones that don't tend to live for a long time~\cite{lieberman81-realtime-gc}. To employ this, the heap is divided into at least two generations:
+In current ORacle JDK releases, all four supported JVM garbage collectors (Serial, Parallel, G1, and Z) use \emph{generational collection}, based on the \emph{weak generational hypothesis}: most objects die young, and those that survive tend to remain live for a long time~\cite{lieberman81-realtime-gc}. To exploit this hypothesis, the heap is divided into at least two generations:
 
 \begin{itemize}
     \item The \textbf{young generation}, where newly allocated objects reside. Young generation collections are frequent but fast, since most young objects are short-lived.
@@ -153,17 +153,17 @@ A key insight for this thesis is that Java explicitly supports queue-less weak r
 \section{The JVM Execution Model}
 \label{sec:jvm-execution}
 
-To understand how garbage-collector barriers are injected and why ZGC requires different components for each execution tier, we must examine HotSpot's tiered execution model, which balances startup latency against sustained throughput. Three tiers are relevant to this thesis:
+To understand how garbage-collector barriers are injected and why ZGC requires different components for each execution tier, it is helpful to examine HotSpot's tiered execution model, which balances start-up latency against sustained throughput. Three execution tiers are relevant to this thesis:
 
 \begin{enumerate}
-    \item \textbf{Interpreter.} At JVM startup, an \emph{interpreter} is generated in which each bytecode is mapped to a hand-crafted assembly stub~TODO. Methods not yet compiled are executed in this tier. Interpretation is the slowest tier in terms of throughput but has no compilation overhead, and it also gathers profiling data for JIT compilation.
+    \item \textbf{Interpreter.} At start-up, methods are first executed by the template interpreter, in which each bytecode is handled by generated assembly stubs. Interpretation provides the lowest throughput of the three tiers, but it has no Just In Time (JIT) compilation overhead and it gathers profiling data for later optimisation.
 
-    \item \textbf{C1 Compiler.} C1 is a fast JIT compiler that performs lightweight optimisations, such as method inlining, constant folding, and null-check elimination~TODO. C1 compiles quickly, making it suitable for methods that are called moderately often.
+    \item \textbf{C1 Compiler.} C1 is a fast JIT compiler that applies lightweight optimisations such as inlining, constant folding, and local simplifications. It compiles quickly, which makes it suitable for methods that are executed often enough to justify compilation but are not yet the hottest parts of the program.
 
-    \item \textbf{C2 Compiler.} C2 is an aggressive optimising JIT compiler. It consumes profiling data collected by the interpreter and C1 to emit highly optimised native code, applying techniques such as aggressive inlining, loop transformations, and escape analysis~TODO. Hot methods are ultimately compiled by C2.
+    \item \textbf{C2 Compiler.} C2 is the JVM's aggressively optimising JIT compiler. It uses profiling data collected in earlier tiers to emit highly optimised native code for hot methods, applying transformations such as aggressive inlining, loop optimisations, and escape analysis.
 \end{enumerate}
 
-\emph{Tiered compilation}, the default since TODO, automatically promotes methods through these tiers as their execution frequency increases. A method starts in the interpreter, is promoted to C1-compiled code once it becomes warm, and may eventually be recompiled by C2 once sufficient profiling data has accumulated.
+In tiered compilation, methods move through these tiers as their execution frequency increases. A method typically starts in the interpreter, may then be compiled by C1, and can eventually be recompiled by C2 once sufficient profiling data has been collected.
 
 \paragraph{Relevance to GC barriers.} Because a read barrier must intercept every load from the heap, and such loads occur in all three tiers, each tier requires its own barrier implementation. ZGC therefore ships three separate barrier components: \texttt{ZBarrierSetAssembler} generates barrier stubs embedded in the interpreter's dispatch table, \texttt{ZBarrierSetC1} inserts barrier nodes during C1 intermediate representation construction, and \texttt{ZBarrierSetC2} integrates barriers into the C2 sea-of-nodes graph~\cite{openjdk-zbarrier-cpp}. All three components obey the same decorator-driven barrier selection logic described in \cref{subsec:access-decorators}.
 
