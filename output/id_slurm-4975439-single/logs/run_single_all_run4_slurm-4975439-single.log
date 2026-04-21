@@ -1,0 +1,109 @@
+
+=== Instance 1/8, outer iteration 4/300 (Variant all) ===
+
+Affinity: allowed=0,1,2,3,4,5,6,7,8,9,10,11 jvm=0,1,2,3,4,5,6,7,8,9 aux=10,11
+Benchmark args: 150000000
+Command: /gorilla/home/fredrha/SimplifyingWeakRefs/build/variant-images/all-linux-x86_64-server-release/jdk/bin/java -Xms32g -Xmx32g -XX:+UseZGC -Xlog:gc+stats,gc+ref -XX:InitialTenuringThreshold=1 -XX:MaxTenuringThreshold=1 -XX:NativeMemoryTracking=summary /gorilla/home/fredrha/SimplifyingWeakRefs/test/weakrefs/WeakRefSingleObjectBenchmark.java 150000000
+
+[0.004s][info][gc,ref] Reference Processor created, Config: All optimisations
+WeakRefSingleObjectBenchmark: weakRefCount=150000000 sleepMillis=500
+Phase 1: Allocating the single target object...
+Phase 2: Allocating 150000000 WeakReferences in random order...
+[23.269s][info][gc,ref] GC(0) O:                           Encountered       Discovered Cleared/Enqueued 
+[23.269s][info][gc,ref] GC(0) O: Soft References:                  238                0                0 
+[23.269s][info][gc,ref] GC(0) O: Weak References:                 1330                0                0 
+[23.269s][info][gc,ref] GC(0) O: Weak (No Queue):             21059102                0                0 
+[23.269s][info][gc,ref] GC(0) O: Final References:                   0                0                0 
+[23.269s][info][gc,ref] GC(0) O: Phantom References:                 1                0                0 
+Allocated 150000000 weak ref holders in 15.40 seconds
+Phase 3: Sleeping for 500 ms (strong ref still held)...
+Phase 4: Releasing the strong reference to the target object...
+Phase 5: Triggering GC...
+[71.641s][info][gc,ref] GC(1) O:                           Encountered       Discovered Cleared/Enqueued 
+[71.641s][info][gc,ref] GC(1) O: Soft References:                  238                0                0 
+[71.641s][info][gc,ref] GC(1) O: Weak References:                 1330                0                0 
+[71.641s][info][gc,ref] GC(1) O: Weak (No Queue):            128122176                0                0 
+[71.641s][info][gc,ref] GC(1) O: Final References:                   0                0                0 
+[71.641s][info][gc,ref] GC(1) O: Phantom References:                 1                0                0 
+[104.704s][info][gc,ref] GC(3) O:                           Encountered       Discovered Cleared/Enqueued 
+[104.704s][info][gc,ref] GC(3) O: Soft References:                  238                0                0 
+[104.704s][info][gc,ref] GC(3) O: Weak References:                 1330              688              330 
+[104.704s][info][gc,ref] GC(3) O: Weak (No Queue):            150000003        150000000        150000000 
+[104.704s][info][gc,ref] GC(3) O: Final References:                   0                0                0 
+[104.704s][info][gc,ref] GC(3) O: Phantom References:                 1                0                0 
+Phase 6: Checking results...
+Alive weak references after GC: 0 / 150000000
+[121.153s][info][gc,stats] === Garbage Collection Statistics =======================================================================================================================
+[121.153s][info][gc,stats]                                                              Last 10s              Last 10m              Last 10h                Total
+[121.153s][info][gc,stats]                                                              Avg / Max             Avg / Max             Avg / Max             Avg / Max
+[121.154s][info][gc,stats]        Contention: Mark Segment Reset Contention                     0 / 0                 0 / 34                0 / 34                0 / 34          ops/s
+[121.154s][info][gc,stats]        Contention: Mark SeqNum Reset Contention                      0 / 0                 0 / 6                 0 / 6                 0 / 6           ops/s
+[121.154s][info][gc,stats]          Critical: Allocation Stall                                  0 / 0                 0 / 0                 0 / 0                 0 / 0           ops/s
+[121.154s][info][gc,stats]          Critical: Allocation Stall                              0.000 / 0.000         0.000 / 0.000         0.000 / 0.000         0.000 / 0.000       ms
+[121.154s][info][gc,stats]          Critical: JNI Critical Stall                                0 / 0                 0 / 0                 0 / 0                 0 / 0           ops/s
+[121.154s][info][gc,stats]          Critical: JNI Critical Stall                            0.000 / 0.000         0.000 / 0.000         0.000 / 0.000         0.000 / 0.000       ms
+[121.154s][info][gc,stats]          Critical: Relocation Stall                                  0 / 0                 0 / 0                 0 / 0                 0 / 0           ops/s
+[121.154s][info][gc,stats]          Critical: Relocation Stall                              0.000 / 0.000         0.000 / 0.000         0.000 / 0.000         0.000 / 0.000       ms
+[121.154s][info][gc,stats]  Major Collection: Major Collection                              0.000 / 0.000     29953.873 / 48364.328 29953.873 / 48364.328 29953.873 / 48364.328   ms
+[121.154s][info][gc,stats]            Memory: Allocation Rate                                   0 / 0               107 / 1188            107 / 1188            107 / 1188        MB/s
+[121.154s][info][gc,stats]            Memory: Defragment                                        0 / 0                 0 / 0                 0 / 0                 0 / 0           ops/s
+[121.154s][info][gc,stats]            Memory: Mapped Cache Harvest                              0 / 0                 0 / 0                 0 / 0                 0 / 0           MB/s
+[121.154s][info][gc,stats]            Memory: Out Of Memory                                     0 / 0                 0 / 0                 0 / 0                 0 / 0           ops/s
+[121.154s][info][gc,stats]            Memory: Uncommit                                          0 / 0                 0 / 0                 0 / 0                 0 / 0           MB/s
+[121.154s][info][gc,stats]            Memory: Undo Object Allocation Failed                     0 / 0                 0 / 0                 0 / 0                 0 / 0           ops/s
+[121.154s][info][gc,stats]            Memory: Undo Object Allocation Succeeded                  0 / 0                 0 / 0                 0 / 0                 0 / 0           ops/s
+[121.154s][info][gc,stats]            Memory: Undo Page Allocation                              0 / 0                 0 / 0                 0 / 0                 0 / 0           ops/s
+[121.154s][info][gc,stats]  Minor Collection: Minor Collection                              0.000 / 0.000     28234.745 / 28234.745 28234.745 / 28234.745 28234.745 / 28234.745   ms
+[121.154s][info][gc,stats]    Old Generation: Old Generation                                0.000 / 0.000     18586.044 / 28656.801 18586.044 / 28656.801 18586.044 / 28656.801   ms
+[121.154s][info][gc,stats]         Old Pause: Pause Mark End                                0.000 / 0.000         0.009 / 0.013         0.009 / 0.013         0.009 / 0.013       ms
+[121.154s][info][gc,stats]         Old Pause: Pause Relocate Start                          0.000 / 0.000         0.011 / 0.012         0.011 / 0.012         0.011 / 0.012       ms
+[121.154s][info][gc,stats]         Old Phase: Concurrent Mark                               0.000 / 0.000      8177.726 / 24532.632  8177.726 / 24532.632  8177.726 / 24532.632   ms
+[121.154s][info][gc,stats]         Old Phase: Concurrent Mark Continue                      0.000 / 0.000         0.000 / 0.000         0.000 / 0.000         0.000 / 0.000       ms
+[121.154s][info][gc,stats]         Old Phase: Concurrent Mark Free                          0.000 / 0.000         0.002 / 0.005         0.002 / 0.005         0.002 / 0.005       ms
+[121.154s][info][gc,stats]         Old Phase: Concurrent Process Non-Strong                 0.000 / 0.000       781.295 / 2339.578    781.295 / 2339.578    781.295 / 2339.578    ms
+[121.154s][info][gc,stats]         Old Phase: Concurrent Relocate                           0.000 / 0.000         0.234 / 0.622         0.234 / 0.622         0.234 / 0.622       ms
+[121.154s][info][gc,stats]         Old Phase: Concurrent Remap Roots                        0.000 / 0.000       214.744 / 418.904     214.744 / 418.904     214.744 / 418.904     ms
+[121.154s][info][gc,stats]         Old Phase: Concurrent Reset Relocation Set               0.000 / 0.000         0.000 / 0.001         0.000 / 0.001         0.000 / 0.001       ms
+[121.154s][info][gc,stats]         Old Phase: Concurrent Select Relocation Set              0.000 / 0.000         0.319 / 0.423         0.319 / 0.423         0.319 / 0.423       ms
+[121.154s][info][gc,stats]      Old Subphase: Concurrent Classes Purge                      0.000 / 0.000         0.163 / 0.471         0.163 / 0.471         0.163 / 0.471       ms
+[121.154s][info][gc,stats]      Old Subphase: Concurrent Classes Unlink                     0.000 / 0.000         1.361 / 2.010         1.361 / 2.010         1.361 / 2.010       ms
+[121.154s][info][gc,stats]      Old Subphase: Concurrent Mark Follow                        0.000 / 0.000      8177.604 / 24532.504  8177.604 / 24532.504  8177.604 / 24532.504   ms
+[121.154s][info][gc,stats]      Old Subphase: Concurrent Mark Root Colored                  0.000 / 0.000         0.046 / 0.104         0.046 / 0.104         0.046 / 0.104       ms
+[121.154s][info][gc,stats]      Old Subphase: Concurrent Mark Root Uncolored                0.000 / 0.000         0.033 / 0.101         0.033 / 0.101         0.033 / 0.101       ms
+[121.154s][info][gc,stats]      Old Subphase: Concurrent Mark Roots                         0.000 / 0.000         0.118 / 0.162         0.118 / 0.162         0.118 / 0.162       ms
+[121.154s][info][gc,stats]      Old Subphase: Concurrent References Enqueue                 0.000 / 0.000         0.002 / 0.005         0.002 / 0.005         0.002 / 0.005       ms
+[121.154s][info][gc,stats]      Old Subphase: Concurrent References Process                 0.000 / 0.000       779.521 / 2338.521    779.521 / 2338.521    779.521 / 2338.521    ms
+[121.154s][info][gc,stats]      Old Subphase: Concurrent Remap Remembered                   0.000 / 0.000       121.600 / 418.468     121.600 / 418.468     121.600 / 418.468     ms
+[121.154s][info][gc,stats]      Old Subphase: Concurrent Remap Roots Colored                0.000 / 0.000         0.237 / 0.432         0.237 / 0.432         0.237 / 0.432       ms
+[121.154s][info][gc,stats]      Old Subphase: Concurrent Remap Roots Uncolored              0.000 / 0.000         0.167 / 0.184         0.167 / 0.184         0.167 / 0.184       ms
+[121.154s][info][gc,stats]      Old Subphase: Concurrent Roots ClassLoaderDataGraph         0.000 / 0.000         0.133 / 0.410         0.133 / 0.410         0.133 / 0.410       ms
+[121.154s][info][gc,stats]      Old Subphase: Concurrent Roots CodeCache                    0.000 / 0.000         0.164 / 0.182         0.164 / 0.182         0.164 / 0.182       ms
+[121.154s][info][gc,stats]      Old Subphase: Concurrent Roots JavaThreads                  0.000 / 0.000         0.013 / 0.101         0.013 / 0.101         0.013 / 0.101       ms
+[121.154s][info][gc,stats]      Old Subphase: Concurrent Roots OopStorageSet                0.000 / 0.000         0.005 / 0.019         0.005 / 0.019         0.005 / 0.019       ms
+[121.154s][info][gc,stats]      Old Subphase: Concurrent Weak Roots OopStorageSet           0.000 / 0.000         0.055 / 0.226         0.055 / 0.226         0.055 / 0.226       ms
+[121.154s][info][gc,stats]            System: Java Threads                                      0 / 0                11 / 11               11 / 11               11 / 11          threads
+[121.154s][info][gc,stats]  Young Generation: Young Generation                              0.000 / 0.000      9475.017 / 19707.437  9475.017 / 19707.437  9475.017 / 19707.437   ms
+[121.154s][info][gc,stats]  Young Generation: Young Generation                              0.000 / 0.000     28234.700 / 28234.700 28234.700 / 28234.700 28234.700 / 28234.700   ms
+[121.154s][info][gc,stats]  Young Generation: Young Generation (Collect Roots)              0.000 / 0.000       285.056 / 285.056     285.056 / 285.056     285.056 / 285.056     ms
+[121.154s][info][gc,stats]  Young Generation: Young Generation (Promote All)                0.000 / 0.000      5679.239 / 5679.239   5679.239 / 5679.239   5679.239 / 5679.239    ms
+[121.154s][info][gc,stats]       Young Pause: Pause Mark End                                0.000 / 0.000         0.011 / 0.012         0.011 / 0.012         0.011 / 0.012       ms
+[121.154s][info][gc,stats]       Young Pause: Pause Mark Start                              0.000 / 0.000         0.015 / 0.017         0.015 / 0.017         0.015 / 0.017       ms
+[121.154s][info][gc,stats]       Young Pause: Pause Mark Start (Major)                      0.000 / 0.000         0.019 / 0.025         0.019 / 0.025         0.019 / 0.025       ms
+[121.154s][info][gc,stats]       Young Pause: Pause Relocate Start                          0.000 / 0.000         0.007 / 0.012         0.007 / 0.012         0.007 / 0.012       ms
+[121.154s][info][gc,stats]       Young Phase: Concurrent Mark                               0.000 / 0.000      9605.235 / 26052.986  9605.235 / 26052.986  9605.235 / 26052.986   ms
+[121.154s][info][gc,stats]       Young Phase: Concurrent Mark Continue                      0.000 / 0.000         0.000 / 0.000         0.000 / 0.000         0.000 / 0.000       ms
+[121.154s][info][gc,stats]       Young Phase: Concurrent Mark Free                          0.000 / 0.000         0.004 / 0.007         0.004 / 0.007         0.004 / 0.007       ms
+[121.154s][info][gc,stats]       Young Phase: Concurrent Relocate                           0.000 / 0.000       593.830 / 1937.100    593.830 / 1937.100    593.830 / 1937.100    ms
+[121.154s][info][gc,stats]       Young Phase: Concurrent Reset Relocation Set               0.000 / 0.000         0.277 / 1.119         0.277 / 1.119         0.277 / 1.119       ms
+[121.154s][info][gc,stats]       Young Phase: Concurrent Select Relocation Set              0.000 / 0.000       237.785 / 833.240     237.785 / 833.240     237.785 / 833.240     ms
+[121.154s][info][gc,stats]    Young Subphase: Concurrent Mark Follow                        0.000 / 0.000      9604.510 / 26052.384  9604.510 / 26052.384  9604.510 / 26052.384   ms
+[121.154s][info][gc,stats]    Young Subphase: Concurrent Mark Root Colored                  0.000 / 0.000         0.398 / 0.865         0.398 / 0.865         0.398 / 0.865       ms
+[121.154s][info][gc,stats]    Young Subphase: Concurrent Mark Root Uncolored                0.000 / 0.000         0.287 / 0.368         0.287 / 0.368         0.287 / 0.368       ms
+[121.154s][info][gc,stats]    Young Subphase: Concurrent Mark Roots                         0.000 / 0.000         0.722 / 1.290         0.722 / 1.290         0.722 / 1.290       ms
+[121.154s][info][gc,stats]    Young Subphase: Concurrent Relocate Remset FP                 0.000 / 0.000       592.894 / 1934.634    592.894 / 1934.634    592.894 / 1934.634    ms
+[121.154s][info][gc,stats]    Young Subphase: Concurrent Roots ClassLoaderDataGraph         0.000 / 0.000         0.258 / 0.451         0.258 / 0.451         0.258 / 0.451       ms
+[121.154s][info][gc,stats]    Young Subphase: Concurrent Roots CodeCache                    0.000 / 0.000         0.251 / 0.324         0.251 / 0.324         0.251 / 0.324       ms
+[121.154s][info][gc,stats]    Young Subphase: Concurrent Roots JavaThreads                  0.000 / 0.000         0.019 / 0.122         0.019 / 0.122         0.019 / 0.122       ms
+[121.154s][info][gc,stats]    Young Subphase: Concurrent Roots OopStorageSet                0.000 / 0.000         0.035 / 0.194         0.035 / 0.194         0.035 / 0.194       ms
+[121.154s][info][gc,stats]    Young Subphase: Concurrent Weak Roots OopStorageSet           0.000 / 0.000         0.111 / 0.488         0.111 / 0.488         0.111 / 0.488       ms
+[121.154s][info][gc,stats] =========================================================================================================================================================
