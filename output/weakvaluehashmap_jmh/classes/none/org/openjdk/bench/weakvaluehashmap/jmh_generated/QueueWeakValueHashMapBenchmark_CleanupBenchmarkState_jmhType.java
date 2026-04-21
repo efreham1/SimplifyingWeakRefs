@@ -1,0 +1,4 @@
+package org.openjdk.bench.weakvaluehashmap.jmh_generated;
+public class QueueWeakValueHashMapBenchmark_CleanupBenchmarkState_jmhType extends QueueWeakValueHashMapBenchmark_CleanupBenchmarkState_jmhType_B3 {
+}
+

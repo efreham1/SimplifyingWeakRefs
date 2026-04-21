@@ -1,0 +1,4 @@
+package org.openjdk.bench.weakvaluehashmap.jmh_generated;
+public class WeakFieldValueHashMapBenchmark_MixedBenchmarkState_jmhType extends WeakFieldValueHashMapBenchmark_MixedBenchmarkState_jmhType_B3 {
+}
+
