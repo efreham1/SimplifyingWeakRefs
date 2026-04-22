@@ -4,7 +4,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=10
-#SBATCH --mem=64G
+#SBATCH --mem=96G
 #SBATCH --hint=nomultithread
 #SBATCH --time=1:00:00
 #SBATCH --output=/dev/shm/weakvaluehashmap-jmh-%j.out
@@ -25,6 +25,8 @@ export REPO_ROOT
 
 FINAL_OUTPUT_ROOT="${FINAL_OUTPUT_ROOT:-${REPO_ROOT}/output}"
 RUN_ID="${RUN_ID:-jmh-${SLURM_JOB_ID}}"
+JMH_FORK_HEAP="${JMH_FORK_HEAP:-48g}"
+JMH_LIVE_SET="${JMH_LIVE_SET:-25000000}"
 
 copy_slurm_logs() {
     local slurm_output="/dev/shm/weakvaluehashmap-jmh-${SLURM_JOB_ID}.out"
@@ -75,4 +77,6 @@ STAGE_DIR="$(mktemp -d "/dev/shm/weakvaluehashmap-jmh-${SLURM_JOB_ID}-XXXXXX")"
 /usr/bin/bash "${REPO_ROOT}/scripts/run_weakvaluehashmap_jmh.sh" \
     --no-build \
     --variant-image-root "$VARIANT_RAM_DIR" \
-    --result-root "${STAGE_DIR}/id_${RUN_ID}"
+    --result-root "${STAGE_DIR}/id_${RUN_ID}" \
+    --fork-heap "$JMH_FORK_HEAP" \
+    --live-set "$JMH_LIVE_SET"
