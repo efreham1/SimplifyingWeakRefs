@@ -120,17 +120,11 @@ public final class WeakFieldMultiObjectBenchmark {
             remainingRefs -= clearedThisRound;
             System.out.printf("Cleared %d strong references, %d remaining%n", clearedThisRound, remainingRefs);
 
-            System.out.printf("Waiting %d ms...%n", sleepMillis);
-            if (sleepMillis > 0) {
-                Thread.sleep(sleepMillis);
-            }
+            System.out.println("Triggering GC manually...");
+            System.gc();
         }
 
         Reference.reachabilityFence(strongRefs);
-        System.out.printf("Waiting %d ms...%n", sleepMillis * 2);
-        if (sleepMillis * 2 > 0) {
-            Thread.sleep(sleepMillis * 2);
-        }
 
         System.out.printf("Phase 4: Final annotated field checks...%n");
 
@@ -142,6 +136,8 @@ public final class WeakFieldMultiObjectBenchmark {
                 System.out.printf("Error: strongRefs[%d] is not cleared!%n", i);
             }
         }
+        
+        
     }
 
     private static int randomSize(Random random, int minSize, int maxSize) {

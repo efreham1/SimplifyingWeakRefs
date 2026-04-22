@@ -35,7 +35,7 @@ public class QueueWeakValueHashMapBenchmark extends WeakValueHashMapBenchmarkSup
     }
 
     @State(Scope.Thread)
-    public static class MixedBenchmarkState extends MixedState {
+    public static class InsertBenchmarkState extends InsertState {
         @Override
         protected ManagedWeakValueMap<Key, Value> createMap() {
             return new QueueWeakValueHashMap<>();
@@ -58,7 +58,7 @@ public class QueueWeakValueHashMapBenchmark extends WeakValueHashMapBenchmarkSup
     }
 
     @Benchmark
-    public int mixed(MixedBenchmarkState state, Blackhole blackhole) {
-        return state.mixedRound(blackhole);
+    public int insert(InsertBenchmarkState state) {
+        return state.insertBatch();
     }
 }

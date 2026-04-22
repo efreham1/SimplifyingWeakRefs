@@ -1,14 +1,14 @@
 #!/usr/bin/bash
-#SBATCH --job-name=weakref-jmh
+#SBATCH --job-name=weakvaluehashmap-jmh
 #SBATCH --account=uppmax2026-1-109
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=10
-#SBATCH --mem=32G
+#SBATCH --mem=64G
 #SBATCH --hint=nomultithread
 #SBATCH --time=1:00:00
-#SBATCH --output=/dev/shm/weakref-jmh-%j.out
-#SBATCH --error=/dev/shm/weakref-jmh-%j.err
+#SBATCH --output=/dev/shm/weakvaluehashmap-jmh-%j.out
+#SBATCH --error=/dev/shm/weakvaluehashmap-jmh-%j.err
 
 set -euo pipefail
 
@@ -27,8 +27,8 @@ FINAL_OUTPUT_ROOT="${FINAL_OUTPUT_ROOT:-${REPO_ROOT}/output}"
 RUN_ID="${RUN_ID:-jmh-${SLURM_JOB_ID}}"
 
 copy_slurm_logs() {
-    local slurm_output="/dev/shm/weakref-jmh-${SLURM_JOB_ID}.out"
-    local slurm_error="/dev/shm/weakref-jmh-${SLURM_JOB_ID}.err"
+    local slurm_output="/dev/shm/weakvaluehashmap-jmh-${SLURM_JOB_ID}.out"
+    local slurm_error="/dev/shm/weakvaluehashmap-jmh-${SLURM_JOB_ID}.err"
     local slurm_dest="${FINAL_OUTPUT_ROOT}/slurm"
 
     mkdir -p "$slurm_dest"
@@ -36,15 +36,15 @@ copy_slurm_logs() {
     [ ! -f "$slurm_error"  ] || cp -a "$slurm_error"  "$slurm_dest/"
 }
 
-trap 'exit_code=$?; copy_slurm_logs; exit "$exit_code"' EXIT
-
 cd "$REPO_ROOT"
 
-# Copy the JMH variant images (none, all, weak_fields) to this node's /dev/shm
+# Copy the JMH variant images used by weakvaluehashmap benchmarks.
 VARIANT_RAM_DIR="/dev/shm/variant-images-${SLURM_JOB_ID}"
 mkdir -p "$VARIANT_RAM_DIR"
 
-for variant in none all weak_fields; do
+VARIANTS=(none all weak_fields)
+
+for variant in "${VARIANTS[@]}"; do
     src_dir="${REPO_ROOT}/build/variant-images/${variant}-linux-x86_64-server-release"
     if [ -d "$src_dir" ]; then
         printf '[jmh] Copying %s to RAM...\n' "$variant"
@@ -68,9 +68,9 @@ cleanup() {
     fi
     rm -rf "${VARIANT_RAM_DIR_CREATED:-}"
 }
-trap cleanup EXIT
+trap 'exit_code=$?; cleanup; copy_slurm_logs; exit "$exit_code"' EXIT
 
-STAGE_DIR="$(mktemp -d "/dev/shm/weakref-jmh-${SLURM_JOB_ID}-XXXXXX")"
+STAGE_DIR="$(mktemp -d "/dev/shm/weakvaluehashmap-jmh-${SLURM_JOB_ID}-XXXXXX")"
 
 /usr/bin/bash "${REPO_ROOT}/scripts/run_weakvaluehashmap_jmh.sh" \
     --no-build \

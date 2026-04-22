@@ -4,10 +4,10 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=48
-#SBATCH --exclusive
-#SBATCH --mem=0
-#SBATCH --time=8:00:00
+#SBATCH --cpus-per-task=16
+#SBATCH --mem=128G
+#SBATCH --time=30:00
+#SBATCH --hint=nomultithread
 #SBATCH --output=/dev/shm/build-all-configs-%j.out
 #SBATCH --error=/dev/shm/build-all-configs-%j.err
 
