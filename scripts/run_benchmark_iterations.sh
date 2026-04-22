@@ -9,10 +9,10 @@
 #   --run-id-prefix PREFIX           Prefix for output ID directories (default: timestamp)
 #   --output-root DIR                Where to write results (default: <repo>/output)
 #   --variant-image-root DIR         Root of variant JDK images (default: build/variant-images)
-#   --outer N                        Number of measured iterations (default: 100)
-#   --warmup N                       Warmup passes per instance (default: 1)
-#   --cooldown N                     Cooldown seconds between variant runs (default: 10)
-#   --parallel-instances N           Total parallel instances across all nodes (default: 8)
+#   --outer N                        Number of measured iterations (default: 10)
+#   --warmup N                       Warmup passes per instance (default: 0)
+#   --cooldown N                     Cooldown seconds between variant runs (default: 1)
+#   --parallel-instances N           Total parallel instances across all nodes (default: 1)
 #   --instance-start N               First instance index for this node (default: 1)
 #   --instance-end N                 Last instance index for this node (default: --parallel-instances)
 #   --jvm-core-count N               JVM CPU cores per instance
@@ -32,21 +32,21 @@ BENCHMARK_NAME="${BENCHMARK_NAME:-both}"
 RUN_ID_PREFIX="${RUN_ID_PREFIX:-$(date +%Y%m%d-%H%M%S)}"
 OUTPUT_ROOT="${OUTPUT_ROOT:-${REPO_ROOT}/output}"
 VARIANT_IMAGE_ROOT="${VARIANT_IMAGE_ROOT:-${REPO_ROOT}/build/variant-images}"
-OUTER_ITERATIONS=100
-WARMUP_ITERATIONS="${WARMUP_ITERATIONS:-1}"
-COOLDOWN_SECONDS="${COOLDOWN_SECONDS:-10}"
-PARALLEL_INSTANCES="${PARALLEL_INSTANCES:-8}"
+OUTER_ITERATIONS="${OUTER_ITERATIONS:-10}"
+WARMUP_ITERATIONS="${WARMUP_ITERATIONS:-0}"
+COOLDOWN_SECONDS="${COOLDOWN_SECONDS:-1}"
+PARALLEL_INSTANCES="${PARALLEL_INSTANCES:-1}"
 INSTANCE_START_ID="${INSTANCE_START_ID:-1}"
 INSTANCE_END_ID="${INSTANCE_END_ID:-}"
-export BENCHMARK_JVM_CORE_COUNT="${BENCHMARK_JVM_CORE_COUNT:-10}"
-export BENCHMARK_AUX_CORE_COUNT="${BENCHMARK_AUX_CORE_COUNT:-2}"
+export BENCHMARK_JVM_CORE_COUNT="${BENCHMARK_JVM_CORE_COUNT:-4}"
+export BENCHMARK_AUX_CORE_COUNT="${BENCHMARK_AUX_CORE_COUNT:-1}"
 
-MULTI_JVM_OPTS="${MULTI_JVM_OPTS:--Xms26g -Xmx26g -XX:+UseZGC -Xlog:gc+stats,gc+ref -XX:InitialTenuringThreshold=1 -XX:MaxTenuringThreshold=1 -XX:-ZProactive -XX:ZCollectionIntervalMajor=315360000 -XX:+ZCollectionIntervalOnly -XX:NativeMemoryTracking=summary}"
-SINGLE_JVM_OPTS="${SINGLE_JVM_OPTS:--Xms26g -Xmx26g -XX:+UseZGC -Xlog:gc+stats,gc+ref -XX:InitialTenuringThreshold=1 -XX:MaxTenuringThreshold=1 -XX:-ZProactive -XX:ZCollectionIntervalMajor=315360000 -XX:+ZCollectionIntervalOnly -XX:NativeMemoryTracking=summary}"
-MULTI_BENCHMARK_ARGS="${MULTI_BENCHMARK_ARGS:-21000000}"
-SINGLE_BENCHMARK_ARGS="${SINGLE_BENCHMARK_ARGS:-150000000}"
+MULTI_JVM_OPTS="${MULTI_JVM_OPTS:--Xms4g -Xmx4g -XX:+UseZGC -Xlog:gc+stats,gc+ref -XX:InitialTenuringThreshold=1 -XX:MaxTenuringThreshold=1 -XX:-ZProactive -XX:ZCollectionIntervalMajor=315360000 -XX:+ZCollectionIntervalOnly -XX:NativeMemoryTracking=summary}"
+SINGLE_JVM_OPTS="${SINGLE_JVM_OPTS:--Xms4g -Xmx4g -XX:+UseZGC -Xlog:gc+stats,gc+ref -XX:InitialTenuringThreshold=1 -XX:MaxTenuringThreshold=1 -XX:-ZProactive -XX:ZCollectionIntervalMajor=315360000 -XX:+ZCollectionIntervalOnly -XX:NativeMemoryTracking=summary}"
+MULTI_BENCHMARK_ARGS="${MULTI_BENCHMARK_ARGS:-4000000}"
+SINGLE_BENCHMARK_ARGS="${SINGLE_BENCHMARK_ARGS:-30000000}"
 ENABLE_WEAK_FIELDS_BENCHMARK="${ENABLE_WEAK_FIELDS_BENCHMARK:-1}"
-BENCHMARK_VARIANTS_CSV="${BENCHMARK_VARIANTS:-none,clear_path_only,sep_only,dyn_only,clear_path_sep,clear_path_dyn,sep_dyn,all}"
+BENCHMARK_VARIANTS_CSV="${BENCHMARK_VARIANTS:-none,all}"
 MONITOR_INTERVAL="${MONITOR_INTERVAL:-0.0001}"
 MONITOR_SCRIPT="${MONITOR_SCRIPT:-${SCRIPT_DIR}/monitor_memory.sh}"
 

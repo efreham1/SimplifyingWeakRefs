@@ -137,7 +137,7 @@ public final class WeakFieldMultiObjectBenchmark {
             }
         }
         
-        
+        Thread.sleep(2000);
     }
 
     private static int randomSize(Random random, int minSize, int maxSize) {

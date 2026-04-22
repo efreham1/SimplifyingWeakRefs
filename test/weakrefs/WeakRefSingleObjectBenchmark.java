@@ -93,7 +93,7 @@ public final class WeakRefSingleObjectBenchmark {
         int aliveCount = countAlive(weakRefs);
         System.out.printf("Alive weak references after GC: %d / %d%n", aliveCount, weakRefCount);
         
-        Thread.sleep(2000); // Give GC some time to collect stats
+        Thread.sleep(2000);
     }
     private static int[] shuffledIndices(int count, Random random) {
         int[] indices = new int[count];

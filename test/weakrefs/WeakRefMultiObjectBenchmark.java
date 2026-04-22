@@ -136,7 +136,8 @@ public final class WeakRefMultiObjectBenchmark {
                 System.out.printf("Error: strongRefs[%d] is not cleared!%n", i);
             }
         }
-        Thread.sleep(2000); // Give GC some time to collect stats
+
+        Thread.sleep(2000);
     }
 
     private static int randomSize(Random random, int minSize, int maxSize) {

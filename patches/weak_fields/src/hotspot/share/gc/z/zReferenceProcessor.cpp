@@ -213,9 +213,14 @@ bool ZReferenceProcessor::should_discover(zaddress reference, ReferenceType type
 }
 
 bool ZReferenceProcessor::should_discover_weak_field(zpointer referent_ptr) const {
-  if (is_null_any(referent_ptr) && ZPointer::is_mark_good(referent_ptr)) {
-    // Field is already null, no need to discover
+  if (ZPointer::is_mark_good(referent_ptr)) {
+    // Field points to a strongly live object, no need to discover
     return false;
+  }
+
+  if (is_null_any(referent_ptr)) {
+    // Field is null but not yet cleaned, we should discover to attempt to clean it and make it inactive
+    return true;
   }
 
   const zaddress referent_addr = ZBarrier::make_load_good(referent_ptr);
@@ -267,10 +272,6 @@ bool ZReferenceProcessor::try_make_inactive(zaddress reference, ReferenceType ty
 bool ZReferenceProcessor::try_make_inactive_fast(const ZWeakFieldData& data) {
   volatile zpointer* field_addr = data.field_addr;
   const zpointer referent_ptr = data.field_value;
-
-  if (ZPointer::is_mark_good(referent_ptr)) {
-    return false;
-  }
 
   const zaddress referent_addr = ZBarrier::make_load_good(referent_ptr);
 
