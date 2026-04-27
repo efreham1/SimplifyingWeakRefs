@@ -1,15 +1,15 @@
 #!/usr/bin/bash
-#SBATCH --job-name=weakref-jmh
+#SBATCH --job-name=weakvaluehashmap-jmh
 #SBATCH --account=uppmax2026-1-109
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=48
-#SBATCH --exclusive
 #SBATCH --mem=0
+#SBATCH --exclusive
 #SBATCH --hint=nomultithread
-#SBATCH --time=10:00:00
-#SBATCH --output=/dev/shm/weakref-jmh-%j.out
-#SBATCH --error=/dev/shm/weakref-jmh-%j.err
+#SBATCH --time=30:00:00
+#SBATCH --output=/dev/shm/weakvaluehashmap-jmh-%j.out
+#SBATCH --error=/dev/shm/weakvaluehashmap-jmh-%j.err
 
 set -euo pipefail
 
@@ -26,10 +26,20 @@ export REPO_ROOT
 
 FINAL_OUTPUT_ROOT="${FINAL_OUTPUT_ROOT:-${REPO_ROOT}/output}"
 RUN_ID="${RUN_ID:-jmh-${SLURM_JOB_ID}}"
+JMH_FORK_HEAP="${JMH_FORK_HEAP:-100g}"
+JMH_LIVE_SET="${JMH_LIVE_SET:-1000000}"
+JMH_KEY_PAYLOAD_SIZE="${JMH_KEY_PAYLOAD_SIZE:-64}"
+JMH_VALUE_PAYLOAD_SIZE="${JMH_VALUE_PAYLOAD_SIZE:-256}"
+JMH_LOOKUPS="${JMH_LOOKUPS:-64}"
+JMH_REPLACEMENTS="${JMH_REPLACEMENTS:-32}"
+JMH_RETIREMENTS="${JMH_RETIREMENTS:-32}"
+JMH_WARMUP_ITERATIONS="${JMH_WARMUP_ITERATIONS:-3}"
+JMH_MEASUREMENT_ITERATIONS="${JMH_MEASUREMENT_ITERATIONS:-10}"
+JMH_TIME_SECONDS="${JMH_TIME_SECONDS:-60}"
 
 copy_slurm_logs() {
-    local slurm_output="/dev/shm/weakref-jmh-${SLURM_JOB_ID}.out"
-    local slurm_error="/dev/shm/weakref-jmh-${SLURM_JOB_ID}.err"
+    local slurm_output="/dev/shm/weakvaluehashmap-jmh-${SLURM_JOB_ID}.out"
+    local slurm_error="/dev/shm/weakvaluehashmap-jmh-${SLURM_JOB_ID}.err"
     local slurm_dest="${FINAL_OUTPUT_ROOT}/slurm"
 
     mkdir -p "$slurm_dest"
@@ -37,15 +47,15 @@ copy_slurm_logs() {
     [ ! -f "$slurm_error"  ] || cp -a "$slurm_error"  "$slurm_dest/"
 }
 
-trap 'exit_code=$?; copy_slurm_logs; exit "$exit_code"' EXIT
-
 cd "$REPO_ROOT"
 
-# Copy the JMH variant images (none, all, weak_fields) to this node's /dev/shm
+# Copy the JMH variant images used by weakvaluehashmap benchmarks.
 VARIANT_RAM_DIR="/dev/shm/variant-images-${SLURM_JOB_ID}"
 mkdir -p "$VARIANT_RAM_DIR"
 
-for variant in none all weak_fields; do
+VARIANTS=(none all weak_fields)
+
+for variant in "${VARIANTS[@]}"; do
     src_dir="${REPO_ROOT}/build/variant-images/${variant}-linux-x86_64-server-release"
     if [ -d "$src_dir" ]; then
         printf '[jmh] Copying %s to RAM...\n' "$variant"
@@ -69,11 +79,21 @@ cleanup() {
     fi
     rm -rf "${VARIANT_RAM_DIR_CREATED:-}"
 }
-trap cleanup EXIT
+trap 'exit_code=$?; cleanup; copy_slurm_logs; exit "$exit_code"' EXIT
 
-STAGE_DIR="$(mktemp -d "/dev/shm/weakref-jmh-${SLURM_JOB_ID}-XXXXXX")"
+STAGE_DIR="$(mktemp -d "/dev/shm/weakvaluehashmap-jmh-${SLURM_JOB_ID}-XXXXXX")"
 
 /usr/bin/bash "${REPO_ROOT}/scripts/run_weakvaluehashmap_jmh.sh" \
     --no-build \
     --variant-image-root "$VARIANT_RAM_DIR" \
-    --result-root "${STAGE_DIR}/id_${RUN_ID}"
+    --result-root "${STAGE_DIR}/id_${RUN_ID}" \
+    --fork-heap "$JMH_FORK_HEAP" \
+    --live-set "$JMH_LIVE_SET" \
+    --key-payload-size "$JMH_KEY_PAYLOAD_SIZE" \
+    --value-payload-size "$JMH_VALUE_PAYLOAD_SIZE" \
+    --lookups "$JMH_LOOKUPS" \
+    --replacements "$JMH_REPLACEMENTS" \
+    --retirements "$JMH_RETIREMENTS" \
+    --warmup "$JMH_WARMUP_ITERATIONS" \
+    --measurement "$JMH_MEASUREMENT_ITERATIONS" \
+    --time "$JMH_TIME_SECONDS"

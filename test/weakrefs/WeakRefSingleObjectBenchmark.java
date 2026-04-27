@@ -84,16 +84,16 @@ public final class WeakRefSingleObjectBenchmark {
         Reference.reachabilityFence(target);
         target = null;
 
-
         // Phase 5: Trigger GC
         System.out.println("Phase 5: Triggering GC...");
         System.gc();
-        Thread.sleep(2000); // Give GC some time to collect stats
 
         // Phase 6: Check results
         System.out.println("Phase 6: Checking results...");
         int aliveCount = countAlive(weakRefs);
         System.out.printf("Alive weak references after GC: %d / %d%n", aliveCount, weakRefCount);
+        
+        Thread.sleep(2000);
     }
     private static int[] shuffledIndices(int count, Random random) {
         int[] indices = new int[count];
