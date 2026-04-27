@@ -1,2 +1,28 @@
 \chapter{Related Work}
 \label{chap:related-work}
+
+This chapter situates the thesis in prior work on weak semantics in managed runtimes by focusing on Go and Python. The purpose is to establish how these two language ecosystems expose weak references, how they combine weak semantics with lifecycle callbacks, and which trade-offs they document for runtime behaviour.
+
+\section{Go}
+\label{sec:related-go}
+
+Go exposes weak semantics through the standard-library package \texttt{weak}, which provides weak pointers that do not by themselves keep referents alive~\cite{go-weak-pkg}. This design enables non-owning associations in cache-like or metadata-oriented structures without introducing strong retention edges.
+
+For lifecycle callbacks, Go documents finalisation support through runtime facilities such as \texttt{SetFinalizer}~\cite{go-runtime-setfinalizer}. Importantly, Go's documentation emphasises that finalisers are not prompt resource-management mechanisms and should not be used as the primary correctness path for releasing resources. This guidance is relevant to weak semantics because weak references and finalisation are often combined in long-lived systems where cleanup latency and execution ordering can affect observable behaviour.
+
+In summary, Go presents weak semantics as an explicit non-owning reference mechanism and presents finalisation as an auxiliary facility with carefully constrained expectations. Together, these choices prioritise clear ownership boundaries and conservative assumptions about callback timing.
+
+\section{Python}
+\label{sec:related-python}
+
+Python's weak-semantics design, standardised in PEP~205, emphasises two use cases: cache construction and reduction of lifecycle coupling in graph-like object structures~\cite{python-pep205}. The language provides explicit weak-reference objects, weak mappings, and callback hooks on invalidation. A key contribution of the PEP is its explicit treatment of invalidation strategy and the cost implications of global weak-reference management.
+
+At the API level, Python exposes weak references through the \texttt{weakref} module and supports optional callbacks when referents become unreachable~\cite{python-weakref-docs}. This model is widely used for cache-like structures and registry patterns where identity tracking is needed without extending object lifetime.
+
+Python's documentation similarly cautions that finalisation-style mechanisms should not be treated as deterministic cleanup points~\cite{python-weakref-docs}. This caution aligns with the broader runtime principle that weak semantics can express ownership intent, but cleanup timing remains GC-dependent.
+
+\section{Synthesis}
+\label{sec:related-synthesis}
+
+Taken together, Go and Python frame weak semantics as an explicit programming abstraction rather than an implicit optimisation. Both ecosystems separate non-owning reachability from deterministic resource cleanup, and both make callback timing explicitly non-deterministic. For this thesis, these patterns are relevant because they underscore a central engineering constraint: weak-reference mechanisms should preserve clear semantic contracts while minimising avoidable runtime overhead in the common case.
+
