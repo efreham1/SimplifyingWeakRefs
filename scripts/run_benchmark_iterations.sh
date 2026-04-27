@@ -112,7 +112,7 @@ benchmark_normalise_cpu_list() {
     local cpu_list=$1
     local -a cpus=()
 
-    mapfile -t cpus < <(benchmark_expand_cpu_list "$cpu_list") || return 1
+    mapfile -t cpus < <(benchmark_expand_cpu_list "$cpu_list" | sort -n) || return 1
     if [ "${#cpus[@]}" -eq 0 ]; then
         benchmark_fail "CPU list resolves to zero CPUs"
         return 1
@@ -255,8 +255,7 @@ benchmark_resolve_core_sets() {
 
         mapfile -t allowed_cpus < <(benchmark_expand_cpu_list "$allowed_list")
         jvm_cpus=("${allowed_cpus[@]:0:jvm_core_count}")
-        aux_start=$((allowed_count - aux_core_count))
-        aux_cpus=("${allowed_cpus[@]:aux_start:aux_core_count}")
+        aux_cpus=("${allowed_cpus[@]:jvm_core_count:aux_core_count}")
 
         BENCHMARK_JVM_CORE_SET="$(IFS=,; printf '%s' "${jvm_cpus[*]}")"
         BENCHMARK_AUX_CORE_SET="$(IFS=,; printf '%s' "${aux_cpus[*]}")"
