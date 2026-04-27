@@ -1,2 +1,78 @@
 \chapter{Analysis of Results}
 \label{chap:analysis}
+
+The measurements presented in \cref{sec:results-presentation} show clear differences between configurations on some metrics and largely overlapping distributions on others.
+
+\section{Non-Strong Reference Processing}
+\label{sec:analysis-non-strong}
+
+The metric most directly targeted by the implemented optimisations is \texttt{Concurrent Process Non-Strong}, which captures the total wall-clock time spent in ZGC's concurrent reference-processing phase per GC cycle. Because this phase is the intended site of all three optimisations, the clearest differences between variants are observed here, making it the natural starting point for the analysis.
+
+\Cref{fig:gc-single-nonstrong,fig:gc-multi-nonstrong} show the distributions of this metric for the single-object and multi-object benchmarks respectively. Full numerical summaries are given in \cref{tab:stats-nonstrong}.
+
+\subsection{Effect of the Clear Path and Dynamic Array}
+\label{subsec:analysis-clear-path-dyn}
+
+The most striking reduction is achieved by the \texttt{clear\_path\_dyn} variant. In the single-object benchmark its median non-strong processing time is 93\,ms, compared to 483\,ms for the unmodified \texttt{none} baseline, a reduction of approximately 81\%. The \texttt{all} variant, which adds the skip-enqueue separation on top of \texttt{clear\_path\_dyn}, reaches a nearly identical median of 91\,ms (a reduction of 81\%). In the multi-object benchmark the pattern is consistent: \texttt{clear\_path\_dyn} achieves a median of 9.3\,ms versus 21.7\,ms for \texttt{none} (57\% reduction), and \texttt{all} reaches 9.0\,ms (58\% reduction).
+
+The near-equivalence of \texttt{clear\_path\_dyn} and \texttt{all} is a notable finding. Adding the skip-enqueue separation to an already active clear-path configuration (\texttt{sep} alone reduces time by only 3\% in the single-object benchmark) adds negligible further benefit when the dynamic array and optimised clear path are both present.
+
+The two individual components tell a different story. The \texttt{clear\_path\_only} variant, which enables only the optimised clear path, reduces the single-object median by a modest 7\% (to 449\,ms), while \texttt{dyn\_only}, which enables only the dynamic array, achieves a 34\% reduction (to 320\,ms). When combined in \texttt{clear\_path\_dyn}, the effect far exceeds the sum of the individual contributions.
+
+\subsection{Effect of the Skip-Enqueue Separation Alone}
+\label{subsec:analysis-sep-only}
+
+The \texttt{sep\_only} variant, which introduces the separate discovered list for queue-less weak references but does not include the dynamic array or the optimised clear path, produces negligible improvement on non-strong processing time. In the single-object benchmark its median is 467\,ms, only 3\% below the \texttt{none} baseline. In the multi-object benchmark the median is 22.2\,ms, marginally higher than \texttt{none}'s 21.7\,ms, which lies within measurement variability.
+
+\subsection{Comparison with Weak Fields}
+\label{subsec:analysis-non-strong-weak-fields}
+
+The \texttt{weak\_fields} variant achieves a median non-strong processing time of 233\,ms in the single-object benchmark and 16.9\,ms in the multi-object benchmark. These figures correspond to reductions of 52\% and 22\% respectively relative to \texttt{none}, positioning \texttt{weak\_fields} between the poorly performing \texttt{sep\_only} and the leading \texttt{clear\_path\_dyn} configurations. Notably, \texttt{weak\_fields} performs distinctly worse than \texttt{clear\_path\_dyn} and \texttt{all} on this metric despite showing large gains elsewhere (see \cref{sec:analysis-inter-model}).
+
+\section{Overall GC Collection Times}
+\label{sec:analysis-overall-gc}
+
+In contrast to the non-strong processing metric, the overall collection time metrics --- major collection time and old-generation collection time --- show broad, heavily overlapping distributions across all \texttt{WeakReference} variants, making it difficult to draw firm conclusions from pairwise comparisons within this group. \Cref{fig:gc-single-major,fig:gc-multi-major} illustrate this for the major collection metric. Numerical summaries for all variants are given in \cref{tab:stats-major,tab:stats-oldgen,tab:stats-markfollow}.
+
+\subsection{WeakReference Variants}
+\label{subsec:analysis-weakref-overall}
+
+For the single-object benchmark, the median major collection time of \texttt{none} is approximately 3\,849\,ms with an interquartile range (IQR) of about 1\,309\,ms. The \texttt{all} variant has a median of 3\,608\,ms (6\% below \texttt{none}) and the \texttt{clear\_path\_dyn} variant 3\,666\,ms (5\% below \texttt{none}), but their IQRs of approximately 1\,700\,ms and 1\,612\,ms respectively overlap substantially with every other variant. Several variants with no reference-processing optimisations (\texttt{clear\_path\_sep}, \texttt{sep\_only}, \texttt{clear\_path\_only}) actually show higher medians than \texttt{none}. In the multi-object benchmark the effect is even smaller in absolute terms, with medians ranging from 462\,ms (\texttt{sep\_only}) to 490\,ms (\texttt{sep\_dyn}) against a baseline of 483\,ms; all distributions share essentially the same IQR of approximately 70--90\,ms, making any ranking unreliable.
+
+Among the \texttt{WeakReference} variants, \texttt{all} and \texttt{clear\_path\_dyn} tend to occupy the lower part of the collection-time distribution in both benchmarks, which is directionally consistent with their superior non-strong processing times. However, given the distribution overlap, this observation should be treated as indicative rather than conclusive.
+
+\subsection{Violin Plot Shape and the Bimodal Pattern}
+\label{subsec:analysis-bimodal}
+
+Many violin plots for the overall collection metrics exhibit a distinctly bimodal shape, with two separated density peaks rather than a single bell-shaped distribution. This pattern is visible in both benchmarks but is more pronounced for the single-object case, where per-run maxima are used. The distribution separation is not caused by any particular variant: all nine configurations exhibit it.
+
+\subsection{Single versus Multi-Object Benchmark}
+\label{subsec:analysis-single-vs-multi}
+
+The single-object and multi-object benchmarks yield broadly consistent rankings across all metrics, giving confidence that the observed trends are not artefacts of one particular workload. The principal difference is in variability: the single-object benchmark produces substantially taller violin plots and a higher incidence of outliers. The relative ordering of variant medians is nonetheless consistent between the two benchmarks for all key metrics.
+
+\section{Inter-Model Comparison: Weak Fields versus WeakReference}
+\label{sec:analysis-inter-model}
+
+The \texttt{weak\_fields} variant stands apart from all \texttt{WeakReference} variants on the overall GC collection metrics (see \cref{tab:stats-major,tab:stats-oldgen,tab:stats-markfollow}). In the single-object benchmark, its median major collection time is 1\,868\,ms, compared to 3\,608--4\,204\,ms for all \texttt{WeakReference} variants, a reduction of approximately 49--54\% relative to the weakest and strongest \texttt{WeakReference} performers respectively. For old-generation collection time the pattern is similar: 982\,ms versus 1\,536--1\,923\,ms (a reduction of 36--49\%). In the multi-object benchmark the gap is smaller but still clear: 342\,ms versus 358--490\,ms for major collection (a reduction of 30--43\%), and 248\,ms versus 348--384\,ms for old generation (a reduction of 35--55\%). The \texttt{weak\_fields} distributions are also notably tighter, with IQRs of approximately 195\,ms (single, major) and 56\,ms (multi, major) compared to 1\,300--1\,800\,ms and 70--90\,ms respectively for the \texttt{WeakReference} variants. The concurrent mark-follow phase shows a similar pattern: a median of 747\,ms for \texttt{weak\_fields} versus 1\,328\,ms for \texttt{none} in the single-object benchmark, a reduction of 44\%.
+
+\section{Memory Behaviour}
+\label{sec:analysis-memory}
+
+\subsection{Auxiliary Memory Usage and the Dynamic Array}
+\label{subsec:analysis-aux-memory}
+
+\Cref{fig:mem-single-hist,fig:mem-multi-hist} show the median percentage difference in per-run maximum GC-committed (auxiliary) memory relative to the \texttt{none} baseline across all configurations. Absolute values are listed in \cref{tab:stats-memory-aux}.
+
+All configurations that include the dynamic array (\texttt{dyn\_only}, \texttt{sep\_dyn}, \texttt{clear\_path\_dyn}, and \texttt{all}) incur substantially higher auxiliary memory than variants that retain the intrusive linked list. In the single-object benchmark, the median per-run maximum for \texttt{dyn\_only} and \texttt{sep\_dyn} is approximately 167\,MB of GC-committed memory, compared to 73\,MB for the linked-list variants. The \texttt{clear\_path\_dyn} variant is the highest of all at 647\,MB, and \texttt{all} reaches 455\,MB. In the multi-object benchmark the absolute differences are smaller, with medians of 131--192\,MB across all variants.
+
+The \texttt{weak\_fields} variant occupies an intermediate position. Its median auxiliary memory in the single-object benchmark is 235\,MB, higher than the non-array \texttt{WeakReference} variants (73\,MB) but lower than \texttt{clear\_path\_dyn}. In the multi-object benchmark it is the lowest of all configurations at 131\,MB.
+
+\subsection{Java Heap Usage}
+\label{subsec:analysis-heap}
+
+The Java heap usage panel in \cref{fig:mem-single-hist,fig:mem-multi-hist} shows the median percentage difference in per-run maximum heap usage relative to the \texttt{none} baseline. Absolute values are listed in \cref{tab:stats-memory-java-heap}.
+
+The heap usage figures are essentially identical across all \texttt{WeakReference} variants (approximately 918--920\,MB per-run median in the single-object benchmark and 1\,010--1\,014\,MB in the multi-object benchmark).
+
+The \texttt{weak\_fields} variant, however, shows markedly lower heap usage: a median of approximately 460\,MB in the single-object benchmark (about half of the \texttt{WeakReference} variants) and 962\,MB in the multi-object benchmark.
