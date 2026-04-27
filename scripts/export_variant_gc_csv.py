@@ -170,6 +170,11 @@ def parse_gc_stats_file(filename: Path) -> dict[str, dict[str, list[float] | str
 def parse_log_config(filename: Path) -> dict[str, str]:
     args_value = ""
     command_value = ""
+    jvm_core_count = ""
+    aux_core_count = ""
+    outer_iterations = ""
+    warmup_iterations = ""
+    cooldown_seconds = ""
 
     with filename.open(encoding="utf-8") as handle:
         for line in handle:
@@ -178,9 +183,29 @@ def parse_log_config(filename: Path) -> dict[str, str]:
                 args_value = stripped.partition(":")[2].strip()
             elif stripped.startswith("Command:"):
                 command_value = stripped.partition(":")[2].strip()
+            elif stripped.startswith("JVM_CORE_COUNT:"):
+                jvm_core_count = stripped.partition(":")[2].strip()
+            elif stripped.startswith("AUX_CORE_COUNT:"):
+                aux_core_count = stripped.partition(":")[2].strip()
+            elif stripped.startswith("OUTER_ITERATIONS:"):
+                outer_iterations = stripped.partition(":")[2].strip()
+            elif stripped.startswith("WARMUP_ITERATIONS:"):
+                warmup_iterations = stripped.partition(":")[2].strip()
+            elif stripped.startswith("COOLDOWN_SECONDS:"):
+                cooldown_seconds = stripped.partition(":")[2].strip()
 
-            if args_value and command_value:
+            if all([args_value, command_value, jvm_core_count, aux_core_count,
+                    outer_iterations, warmup_iterations, cooldown_seconds]):
                 break
+
+    # Fallback: parse iteration count from the run header line for older logs
+    if not outer_iterations:
+        with filename.open(encoding="utf-8") as handle:
+            for line in handle:
+                m = re.search(r"outer iteration \d+/(\d+)", line)
+                if m:
+                    outer_iterations = m.group(1)
+                    break
 
     xms_match = re.search(r"(?:^|\s)-Xms(\S+)", command_value)
     xmx_match = re.search(r"(?:^|\s)-Xmx(\S+)", command_value)
@@ -196,6 +221,11 @@ def parse_log_config(filename: Path) -> dict[str, str]:
         "heap_xmx": xmx_match.group(1) if xmx_match else "",
         "benchmark_class": benchmark_class,
         "java_command": command_value,
+        "jvm_core_count": jvm_core_count,
+        "aux_core_count": aux_core_count,
+        "outer_iterations": outer_iterations,
+        "warmup_iterations": warmup_iterations,
+        "cooldown_seconds": cooldown_seconds,
     }
 
 

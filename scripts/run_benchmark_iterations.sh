@@ -567,6 +567,11 @@ run_single() {
         echo "Affinity: $(benchmark_affinity_summary)"
         echo "Args: ${CURRENT_BENCHMARK_ARGS:-<none>}"
         echo "Command: ${cmd[*]}"
+        echo "JVM_CORE_COUNT: ${BENCHMARK_JVM_CORE_COUNT:-}"
+        echo "AUX_CORE_COUNT: ${BENCHMARK_AUX_CORE_COUNT:-}"
+        echo "OUTER_ITERATIONS: ${OUTER_ITERATIONS:-}"
+        echo "WARMUP_ITERATIONS: ${WARMUP_ITERATIONS:-}"
+        echo "COOLDOWN_SECONDS: ${COOLDOWN_SECONDS:-}"
         echo ""
     } >> "$log_file"
 
