@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Parse GC benchmark logs and generate metric comparison artefacts.
+"""Parse GC benchmark CSV data and generate metric comparison artefacts.
 
 Outputs for the interesting GC metrics:
 1. Violin plots of per-run values for all variants.
@@ -10,7 +10,7 @@ Outputs for the interesting GC metrics:
 from __future__ import annotations
 
 import argparse
-import re
+import csv
 import sys
 from pathlib import Path
 
@@ -18,21 +18,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-OUTPUT_ROOT = Path("output")
 IMAGES_DIR = Path("images")
 TABLES_DIR = Path("tables")
-
-DISPLAY_NAMES = {
-    "none": "None",
-    "all": "All",
-    "clear_path_only": "Clear Path",
-    "sep_only": "Sep",
-    "dyn_only": "Dyn",
-    "clear_path_sep": "Clear Path + Sep",
-    "clear_path_dyn": "Clear Path + Dyn",
-    "sep_dyn": "Sep + Dyn",
-    "weak_fields": "Weak Fields",
-}
+RESULTS_DIR = Path("results")
 
 VARIANTS_ORDERED = [
     "none",
@@ -46,151 +34,85 @@ VARIANTS_ORDERED = [
     "weak_fields",
 ]
 
+DISPLAY_NAMES = {
+    "none": "None",
+    "all": "All",
+    "clear_path_only": "Clear Path",
+    "sep_only": "Sep",
+    "dyn_only": "Dyn",
+    "clear_path_sep": "Clear Path + Sep",
+    "clear_path_dyn": "Clear Path + Dyn",
+    "sep_dyn": "Sep + Dyn",
+    "weak_fields": "Weak Fields",
+}
+
 FILTER_ZERO_METRICS = {
     "Young Generation: Young Generation",
 }
 
 
+def find_newest_csv(results_dir: Path) -> Path | None:
+    candidates = sorted(results_dir.glob("*_combined_variants.csv"), key=lambda p: p.stat().st_mtime, reverse=True)
+    return candidates[0] if candidates else None
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--csv", default=None, help="Path to combined variants CSV (default: newest in results/)")
     parser.add_argument(
-        "--id",
-        default="1",
-        help=(
-            "Run id in output/id_<id>. If unsuffixed, the script automatically "
-            "processes both <id>-single and <id>-multi when present."
-        ),
+        "--benchmark",
+        choices=["single", "multi"],
+        default=None,
+        help="Benchmark mode (default: both)",
     )
     parser.add_argument(
         "--baseline",
         default="none",
         help="Baseline variant name for percentage differences (default: none)",
     )
+    parser.add_argument(
+        "--output-dir",
+        default="images",
+        help="Output directory for PDFs (default: images)",
+    )
     return parser.parse_args()
 
 
-def get_run_output_dir(run_id: str) -> Path:
-    return OUTPUT_ROOT / f"id_{run_id}"
+def load_csv(csv_path: Path, benchmark_name: str, use_max: bool) -> dict[str, dict[str, dict[str, list[float] | str]]]:
+    """Load combined CSV and return variants_metrics with a 'values' key per metric.
 
+    For single benchmarks, 'values' is drawn from total_max; for multi, from total_avg.
+    """
+    raw: dict[str, dict[str, dict[str, list]]] = {}
 
-def normalise_run_id(run_id: str) -> str:
-    """Accept both '<id>' and 'id_<id>' user input formats."""
-    return run_id[3:] if run_id.startswith("id_") else run_id
-
-
-def collect_run_files(run_id: str, subdir: str, pattern: str) -> list[str]:
-    result_dir = get_run_output_dir(run_id) / subdir
-    return [str(path) for path in sorted(result_dir.glob(pattern), key=lambda path: path.name)]
-
-
-def detect_benchmark_mode(run_id: str) -> str:
-    candidate_files = collect_run_files(run_id, "logs", f"run_*_*_run*_{run_id}.log")
-    benchmark_name = "multi"
-    if not candidate_files:
-        return benchmark_name
-
-    multi_count = 0
-    single_count = 0
-    for filename in candidate_files:
-        base = Path(filename).name
-        if base.startswith("run_single_") or base.startswith("run_field-single_"):
-            single_count += 1
-        elif base.startswith("run_multi_") or base.startswith("run_field_"):
-            multi_count += 1
-
-    if single_count > multi_count:
-        benchmark_name = "single"
-    return benchmark_name
-
-
-def resolve_run_ids(requested_id: str) -> list[str]:
-    """Resolve requested run id to one or more concrete run ids to process."""
-    requested_id = normalise_run_id(requested_id)
-
-    if requested_id.endswith("-single") or requested_id.endswith("-multi"):
-        return [requested_id]
-
-    resolved: list[str] = []
-    for suffix in ["single", "multi"]:
-        candidate = f"{requested_id}-{suffix}"
-        if get_run_output_dir(candidate).exists():
-            resolved.append(candidate)
-
-    if resolved:
-        return resolved
-
-    # Fallback for legacy/non-suffixed layouts.
-    return [requested_id]
-
-
-def parse_gc_stats_file(filename: str) -> dict[str, dict[str, list[float] | str]]:
-    """Parse a run log and extract GC metrics with Total Avg/Max values and units."""
-    metrics: dict[str, dict[str, list[float] | str]] = {}
-
-    if not Path(filename).exists():
-        return metrics
-
-    with open(filename, encoding="utf-8") as handle:
-        for line in handle:
-            if "[gc,stats]" not in line:
+    with open(csv_path, newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        for row in reader:
+            if row.get("benchmark") != benchmark_name:
+                continue
+            variant = row.get("variant", "").strip()
+            metric_name = row.get("metric", "").strip()
+            if not variant or not metric_name:
+                continue
+            raw.setdefault(variant, {})
+            if metric_name not in raw[variant]:
+                raw[variant][metric_name] = {"avg": [], "max": [], "units": row.get("units", "")}
+            try:
+                raw[variant][metric_name]["avg"].append(float(row["total_avg"]))
+                raw[variant][metric_name]["max"].append(float(row["total_max"]))
+            except (ValueError, KeyError):
                 continue
 
-            line = line.strip()
-            if any(token in line for token in ["Last 10s", "Avg / Max", "==="]):
-                continue
-
-            match = re.search(r"\[gc,stats\](.*)", line)
-            if not match:
-                continue
-
-            data = match.group(1).strip()
-            pairs = list(re.finditer(r"(\d+\.?\d*)\s*/\s*(\d+\.?\d*)", data))
-            if len(pairs) < 4:
-                continue
-
-            total_avg = float(pairs[3].group(1))
-            total_max = float(pairs[3].group(2))
-
-            metric_start = re.search(r"\d", data)
-            if not metric_start:
-                continue
-            metric_name = data[: metric_start.start()].strip()
-            if not metric_name:
-                continue
-
-            units_match = re.search(r"(\d+\.?\d*)\s*/\s*(\d+\.?\d*)\s+(\S+)\s*$", data)
-            units = units_match.group(3) if units_match else ""
-
-            if metric_name not in metrics:
-                metrics[metric_name] = {"avg": [], "max": [], "units": units}
-            metrics[metric_name]["avg"].append(total_avg)  # type: ignore[index]
-            metrics[metric_name]["max"].append(total_max)  # type: ignore[index]
-
-    return metrics
-
-
-def aggregate_gc_metrics(log_files: list[str], use_max: bool) -> dict[str, dict[str, list[float] | str]]:
-    """Aggregate GC metric samples across all run log files for one variant."""
-    all_metrics: dict[str, dict[str, list[float] | str]] = {}
-
-    for filename in log_files:
-        parsed = parse_gc_stats_file(filename)
-        for metric_name, metric_data in parsed.items():
-            if metric_name not in all_metrics:
-                all_metrics[metric_name] = {
-                    "avg": [],
-                    "max": [],
-                    "units": metric_data["units"],
-                }
-            all_metrics[metric_name]["avg"].extend(metric_data["avg"])  # type: ignore[index]
-            all_metrics[metric_name]["max"].extend(metric_data["max"])  # type: ignore[index]
-
-    # Re-map into one canonical sample list key "values" to simplify downstream code.
-    canonical: dict[str, dict[str, list[float] | str]] = {}
-    for metric_name, metric_data in all_metrics.items():
-        values = metric_data["max"] if use_max else metric_data["avg"]
-        canonical[metric_name] = {"values": values, "units": metric_data["units"]}
-    return canonical
+    variants_metrics: dict[str, dict[str, dict[str, list[float] | str]]] = {}
+    for variant, metrics in raw.items():
+        variants_metrics[variant] = {}
+        for metric_name, data in metrics.items():
+            values = data["max"] if use_max else data["avg"]
+            variants_metrics[variant][metric_name] = {
+                "values": values,
+                "units": data["units"],
+            }
+    return variants_metrics
 
 
 def interesting_metrics(benchmark_mode: str) -> list[str]:
@@ -248,10 +170,10 @@ def plot_violin_plots(
     variants_metrics: dict[str, dict[str, dict[str, list[float] | str]]],
     variants: list[str],
     metrics_to_plot: list[str],
-    run_id: str,
-    benchmark_mode: str,
+    run_label: str,
+    output_dir: Path,
 ) -> None:
-    IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     for metric_name in metrics_to_plot:
         labels, data, units = metric_samples(variants_metrics, variants, metric_name)
@@ -281,7 +203,7 @@ def plot_violin_plots(
 
         plt.tight_layout()
         safe_name = sanitize_metric_name(metric_name)
-        output_file = IMAGES_DIR / f"violin_{safe_name}_{benchmark_mode}_{run_id}.pdf"
+        output_file = output_dir / f"violin_{safe_name}_{run_label}.pdf"
         plt.savefig(output_file, bbox_inches="tight")
         plt.close(fig)
         print(f"Wrote {output_file}")
@@ -297,11 +219,11 @@ def plot_median_diff_histograms(
     variants_metrics: dict[str, dict[str, dict[str, list[float] | str]]],
     variants: list[str],
     metrics_to_plot: list[str],
-    run_id: str,
-    benchmark_mode: str,
+    run_label: str,
+    output_dir: Path,
     baseline_variant: str,
 ) -> None:
-    IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     for metric_name in metrics_to_plot:
         baseline_values = list(
@@ -348,14 +270,14 @@ def plot_median_diff_histograms(
         axis.grid(True, axis="y", alpha=0.3)
 
         for bar, diff in zip(bars, diffs):
-            label = f"{diff:+.1f}%"
+            label_text = f"{diff:+.1f}%"
             y_pos = bar.get_height() + (0.6 if diff >= 0 else -0.6)
             va = "bottom" if diff >= 0 else "top"
-            axis.text(bar.get_x() + bar.get_width() / 2.0, y_pos, label, ha="center", va=va, fontsize=8)
+            axis.text(bar.get_x() + bar.get_width() / 2.0, y_pos, label_text, ha="center", va=va, fontsize=8)
 
         plt.tight_layout()
         safe_name = sanitize_metric_name(metric_name)
-        output_file = IMAGES_DIR / f"median_diff_hist_{safe_name}_{benchmark_mode}_{run_id}.pdf"
+        output_file = output_dir / f"median_diff_hist_{safe_name}_{run_label}.pdf"
         plt.savefig(output_file, bbox_inches="tight")
         plt.close(fig)
         print(f"Wrote {output_file}")
@@ -381,23 +303,22 @@ def write_latex_percentage_table(
     variants_metrics: dict[str, dict[str, dict[str, list[float] | str]]],
     variants: list[str],
     metrics_to_plot: list[str],
-    run_id: str,
-    benchmark_mode: str,
+    run_label: str,
     baseline_variant: str,
 ) -> None:
     TABLES_DIR.mkdir(parents=True, exist_ok=True)
 
     lines: list[str] = []
-    lines.append(r"\\begin{table}[t]")
-    lines.append(r"\\centering")
+    lines.append(r"\begin{table}[t]")
+    lines.append(r"\centering")
     lines.append(
-        rf"\\caption{{Percentage differences vs {escape_latex(DISPLAY_NAMES.get(baseline_variant, baseline_variant))} for median and mean values ({escape_latex(benchmark_mode)} mode, run id {escape_latex(str(run_id))}).}}"
+        rf"\caption{{Percentage differences vs {escape_latex(DISPLAY_NAMES.get(baseline_variant, baseline_variant))} for median and mean values ({escape_latex(run_label)}).}}"
     )
-    lines.append(rf"\\label{{tab:gc_metric_pct_diff_{escape_latex(benchmark_mode)}_{escape_latex(str(run_id))}}}")
-    lines.append(r"\\begin{tabular}{llrr}")
-    lines.append(r"\\toprule")
-    lines.append(r"Metric & Variant & Median diff (\\%) & Mean diff (\\%) \\")
-    lines.append(r"\\midrule")
+    lines.append(rf"\label{{tab:gc_metric_pct_diff_{escape_latex(run_label)}}}")
+    lines.append(r"\begin{tabular}{llrr}")
+    lines.append(r"\toprule")
+    lines.append(r"Metric & Variant & Median diff (\%) & Mean diff (\%) \\")
+    lines.append(r"\midrule")
 
     for metric_name in metrics_to_plot:
         baseline_values = list(
@@ -429,94 +350,71 @@ def write_latex_percentage_table(
                 f"{median_diff:+.2f} & {mean_diff:+.2f} \\\\"
             )
 
-    lines.append(r"\\bottomrule")
-    lines.append(r"\\end{tabular}")
-    lines.append(r"\\end{table}")
+    lines.append(r"\bottomrule")
+    lines.append(r"\end{tabular}")
+    lines.append(r"\end{table}")
 
-    output_file = TABLES_DIR / f"gc_metric_pct_diff_{benchmark_mode}_{run_id}.tex"
+    output_file = TABLES_DIR / f"gc_metric_pct_diff_{run_label}.tex"
     output_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(f"Wrote {output_file}")
 
 
-def process_run_id(run_id: str, baseline_variant: str) -> int:
-    benchmark_mode = detect_benchmark_mode(run_id)
-    use_max = benchmark_mode == "single"
-    weak_fields_source = "field-single" if benchmark_mode == "single" else "field"
+def generate_for_benchmark(
+    csv_path: Path,
+    benchmark_name: str,
+    output_dir: Path,
+    baseline_variant: str,
+) -> int:
+    use_max = benchmark_name == "single"
+    variants_metrics = load_csv(csv_path, benchmark_name, use_max)
 
-    variants_log_files: dict[str, list[str]] = {}
-    for variant in VARIANTS_ORDERED:
-        source_benchmarks = [weak_fields_source] if variant == "weak_fields" else [benchmark_mode]
-        log_files: list[str] = []
-        for source_benchmark in source_benchmarks:
-            pattern = f"run_{source_benchmark}_{variant}_*_{run_id}.log"
-            log_files.extend(collect_run_files(run_id, "logs", pattern))
-        log_files = sorted(set(log_files))
-        if log_files:
-            variants_log_files[variant] = log_files
+    if not variants_metrics:
+        print(f"Warning: no '{benchmark_name}' benchmark rows found in {csv_path}")
+        return 0
 
-    if not variants_log_files:
-        print(f"Error: no log files found for run id '{run_id}' in {get_run_output_dir(run_id)}")
-        print("Run benchmark collection first with scripts/run_benchmark_iterations.sh")
-        return 1
-
-    present_variants = [variant for variant in VARIANTS_ORDERED if variant in variants_log_files]
-    if baseline_variant not in present_variants:
+    present = [v for v in VARIANTS_ORDERED if v in variants_metrics]
+    if baseline_variant not in present:
         print(
-            f"Error: baseline variant '{baseline_variant}' not found in run id '{run_id}'. "
-            f"Present variants: {', '.join(present_variants)}"
+            f"Error: baseline variant '{baseline_variant}' not found for benchmark '{benchmark_name}'. "
+            f"Present variants: {', '.join(present)}"
         )
         return 1
 
-    print(f"Run ID: {run_id}")
-    print(f"Benchmark mode: {benchmark_mode} ({'max' if use_max else 'avg'} per-run values)")
-    print(f"Baseline variant: {baseline_variant}")
+    metrics_to_plot = interesting_metrics(benchmark_name)
+    run_label = f"{csv_path.stem}_{benchmark_name}"
 
-    variants_metrics: dict[str, dict[str, dict[str, list[float] | str]]] = {}
-    for variant in present_variants:
-        variants_metrics[variant] = aggregate_gc_metrics(variants_log_files[variant], use_max=use_max)
+    print(f"Generating violin plots for '{benchmark_name}'...")
+    plot_violin_plots(variants_metrics, present, metrics_to_plot, run_label, output_dir)
 
-    metrics_to_plot = interesting_metrics(benchmark_mode)
+    print(f"Generating median percentage-difference histograms for '{benchmark_name}'...")
+    plot_median_diff_histograms(variants_metrics, present, metrics_to_plot, run_label, output_dir, baseline_variant)
 
-    print("Generating violin plots...")
-    plot_violin_plots(variants_metrics, present_variants, metrics_to_plot, run_id, benchmark_mode)
-
-    print("Generating median percentage-difference histograms...")
-    plot_median_diff_histograms(
-        variants_metrics,
-        present_variants,
-        metrics_to_plot,
-        run_id,
-        benchmark_mode,
-        baseline_variant,
-    )
-
-    print("Generating LaTeX percentage-difference table...")
-    write_latex_percentage_table(
-        variants_metrics,
-        present_variants,
-        metrics_to_plot,
-        run_id,
-        benchmark_mode,
-        baseline_variant,
-    )
+    print(f"Generating LaTeX percentage-difference table for '{benchmark_name}'...")
+    write_latex_percentage_table(variants_metrics, present, metrics_to_plot, run_label, baseline_variant)
 
     return 0
 
 
 def main() -> int:
     args = parse_args()
-    requested_id = normalise_run_id(str(args.id))
-    baseline_variant = args.baseline
-    run_ids = resolve_run_ids(requested_id)
 
-    if len(run_ids) > 1:
-        print(f"Resolved base run id '{requested_id}' to: {', '.join(run_ids)}")
+    if args.csv:
+        csv_path = Path(args.csv)
+    else:
+        csv_path = find_newest_csv(RESULTS_DIR)
+        if csv_path is None:
+            print(f"Error: no *_combined_variants.csv found in {RESULTS_DIR}")
+            return 1
+        print(f"Using {csv_path}")
+
+    output_dir = Path(args.output_dir)
+    benchmarks = [args.benchmark] if args.benchmark else ["multi", "single"]
 
     exit_code = 0
-    for run_id in run_ids:
+    for benchmark_name in benchmarks:
         print("=" * 72)
-        print(f"Processing run id: {run_id}")
-        code = process_run_id(run_id, baseline_variant)
+        print(f"Processing benchmark mode: {benchmark_name}")
+        code = generate_for_benchmark(csv_path, benchmark_name, output_dir, args.baseline)
         if code != 0:
             exit_code = code
 
@@ -524,4 +422,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())

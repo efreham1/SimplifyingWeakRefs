@@ -1,12 +1,12 @@
 #!/usr/bin/bash
 #SBATCH --job-name=weakref-bench
 #SBATCH --account=uppmax2026-1-109
-#SBATCH --nodes=2
-#SBATCH --ntasks=2
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=48
-#SBATCH --exclusive
 #SBATCH --mem=0
+#SBATCH --exclusive
 #SBATCH --hint=nomultithread
 #SBATCH --time=30:00:00
 #SBATCH --output=/dev/shm/weakref-bench-%j.out
@@ -27,10 +27,15 @@ export REPO_ROOT
 
 export BENCHMARK_JVM_CORE_COUNT="${BENCHMARK_JVM_CORE_COUNT:-10}"
 export BENCHMARK_AUX_CORE_COUNT="${BENCHMARK_AUX_CORE_COUNT:-2}"
+export BENCHMARK_SELECTION="${BENCHMARK_SELECTION:-both}"
 export OUTER_ITERATIONS="${OUTER_ITERATIONS:-100}"
 export WARMUP_ITERATIONS="${WARMUP_ITERATIONS:-1}"
 export COOLDOWN_SECONDS="${COOLDOWN_SECONDS:-10}"
-export PARALLEL_INSTANCES="${PARALLEL_INSTANCES:-8}"
+export PARALLEL_INSTANCES="${PARALLEL_INSTANCES:-4}"
+export BENCHMARK_HEAP_SIZE="${BENCHMARK_HEAP_SIZE:-100g}"
+export BENCHMARK_MULTI_REFERENCE_COUNT="${BENCHMARK_MULTI_REFERENCE_COUNT:-1000000}"
+export BENCHMARK_SINGLE_REFERENCE_COUNT="${BENCHMARK_SINGLE_REFERENCE_COUNT:-10000000}"
+export BENCHMARK_VARIANTS="${BENCHMARK_VARIANTS:-none,clear_path_only,sep_only,dyn_only,clear_path_sep,clear_path_dyn,sep_dyn,all}"
 export RUN_ID_PREFIX="${RUN_ID_PREFIX:-slurm-${SLURM_JOB_ID}}"
 export FINAL_OUTPUT_ROOT="${FINAL_OUTPUT_ROOT:-${REPO_ROOT}/output}"
 
@@ -61,6 +66,14 @@ validate_positive_integer "$BENCHMARK_JVM_CORE_COUNT" BENCHMARK_JVM_CORE_COUNT
 validate_positive_integer "$BENCHMARK_AUX_CORE_COUNT" BENCHMARK_AUX_CORE_COUNT
 validate_positive_integer "$OUTER_ITERATIONS" OUTER_ITERATIONS
 validate_positive_integer "$PARALLEL_INSTANCES" PARALLEL_INSTANCES
+
+case "$BENCHMARK_SELECTION" in
+    multi|single|both) ;;
+    *)
+        printf '[benchmark] error: BENCHMARK_SELECTION must be multi, single, or both\n' >&2
+        exit 1
+        ;;
+esac
 
 TOTAL_BENCHMARK_INSTANCES="$PARALLEL_INSTANCES"
 [ "$TOTAL_BENCHMARK_INSTANCES" -le "$OUTER_ITERATIONS" ] || TOTAL_BENCHMARK_INSTANCES="$OUTER_ITERATIONS"
@@ -152,10 +165,13 @@ trap cleanup_node EXIT
 STAGE_DIR="$(mktemp -d "/dev/shm/weakref-bench-${SLURM_JOB_ID}-XXXXXX")"
 
 /usr/bin/bash "${REPO_ROOT}/scripts/run_benchmark_iterations.sh" \
-    --benchmark both \
+    --benchmark "$BENCHMARK_SELECTION" \
     --run-id-prefix "$RUN_ID_PREFIX" \
     --output-root "$STAGE_DIR" \
     --variant-image-root "$VARIANT_RAM_DIR" \
+    --heap-size "$BENCHMARK_HEAP_SIZE" \
+    --multi-reference-count "$BENCHMARK_MULTI_REFERENCE_COUNT" \
+    --single-reference-count "$BENCHMARK_SINGLE_REFERENCE_COUNT" \
     --outer "$OUTER_ITERATIONS" \
     --warmup "$WARMUP_ITERATIONS" \
     --cooldown "$COOLDOWN_SECONDS" \

@@ -86,11 +86,12 @@ public final class WeakFieldSingleObjectBenchmark {
 
         System.out.println("Phase 5: Triggering GC...");
         System.gc();
-        Thread.sleep(2000);
 
         System.out.println("Phase 6: Checking results...");
         int aliveCount = countAlive(weakRefHolders);
         System.out.printf("Alive weak holders after GC: %d / %d%n", aliveCount, weakRefCount);
+
+        Thread.sleep(2000);
     }
 
     private static int[] shuffledIndices(int count, Random random) {

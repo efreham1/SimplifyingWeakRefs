@@ -60,7 +60,7 @@ private:
   bool is_softly_live(zaddress reference, ReferenceType type) const;
 
   bool should_discover(zaddress reference, ReferenceType type) const;
-  bool should_discover_weak_field(zpointer field_value) const;
+  bool should_discover_weak_field(zpointer field_value, volatile zpointer* field_addr) const;
   bool try_make_inactive(zaddress reference, ReferenceType type) const;
   bool try_make_inactive_fast(const ZWeakFieldData& data);
 

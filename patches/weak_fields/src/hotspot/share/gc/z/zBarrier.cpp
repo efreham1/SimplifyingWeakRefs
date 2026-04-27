@@ -318,6 +318,14 @@ void ZBarrier::verify_on_weak(volatile zpointer* referent_addr) {
 
   const int offset = (int)((uintptr_t)referent_addr - cast_from_oop<uintptr_t>(obj));
 
+  // Sanity check: if the offset falls outside the object's bounds, find_base_unsafe
+  // has returned a false base because the actual containing object is not yet tracked
+  // in the livemap (e.g., a recently allocated object whose livemap bit has not yet
+  // been set). Skip verification in this case, consistent with the null-base check above.
+  if (offset < 0 || (size_t)offset >= obj->size() * HeapWordSize) {
+    return;
+  }
+
   // Check if it's a Reference.referent field
   if (java_lang_ref_Reference::is_referent_field(obj, offset)) {
     return;

@@ -95,7 +95,7 @@ public abstract class WeakValueHashMapBenchmarkSupport {
         private final ArrayList<Slot> retiredSlots = new ArrayList<>();
         private final Random random = new Random(0x5eedc0deL);
         private ManagedWeakValueMap<Key, Value> map;
-        private int nextId;
+        protected int nextId;
 
         protected abstract ManagedWeakValueMap<Key, Value> createMap();
 
@@ -160,14 +160,39 @@ public abstract class WeakValueHashMapBenchmarkSupport {
             return checksum;
         }
 
+        protected int insertSlots(ArrayList<Slot> insertedSlots) {
+            int checksum = 0;
+            for (Slot slot : insertedSlots) {
+                Value previous = map.put(slot.key, slot.currentValue());
+                if (previous != null) {
+                    throw new AssertionError("Inserted key already existed for id " + slot.id);
+                }
+                checksum += slot.id;
+            }
+            return checksum;
+        }
+
+        protected void removeSlots(ArrayList<Slot> insertedSlots) {
+            for (Slot slot : insertedSlots) {
+                Value removed = map.remove(slot.key);
+                if (removed != slot.currentValue()) {
+                    throw new AssertionError("Removed value mismatch for inserted key id " + slot.id);
+                }
+            }
+        }
+
         protected void prepareCleanupBatch() throws Exception {
             retiredSlots.clear();
             retireValues(retirementsPerInvocation);
             awaitStaleValues(retiredSlots.size());
         }
 
-        public int cleanupRetiredValues() {
-            int checksum = map.cleanupStaleEntries();
+        public int cleanupStaleEntriesOnly() {
+            return map.cleanupStaleEntries();
+        }
+
+        protected int repopulateRetiredValues() {
+            int checksum = 0;
             for (Slot slot : retiredSlots) {
                 Value value = slot.replaceValue(valuePayloadSize);
                 map.put(slot.key, value);
@@ -175,6 +200,18 @@ public abstract class WeakValueHashMapBenchmarkSupport {
             }
             retiredSlots.clear();
             return checksum;
+        }
+
+        public int cleanupRetiredValues() {
+            int checksum = cleanupStaleEntriesOnly();
+            checksum ^= repopulateRetiredValues();
+            return checksum;
+        }
+
+        protected void prepareMixedRound(int retirements) {
+            retiredSlots.clear();
+            retireValues(retirements);
+            createAllocationPressure();
         }
 
         private void retireValues(int count) {
@@ -195,15 +232,14 @@ public abstract class WeakValueHashMapBenchmarkSupport {
         }
 
         private void awaitStaleValues(int expected) throws Exception {
-            for (int attempt = 0; attempt < 64; attempt++) {
-                if (map.staleEntries() >= expected) {
+            int target = Math.max(1, expected / 2);
+            for (int attempt = 0; attempt < 256; attempt++) {
+                if (map.staleEntries() >= target) {
                     return;
                 }
-                createAllocationPressure();
-                System.gc();
+                createCleanupAllocationPressure(attempt);
                 Thread.sleep(10L);
             }
-            throw new AssertionError("Timed out waiting for stale values");
         }
 
         private Slot randomLiveSlot() {
@@ -224,6 +260,16 @@ public abstract class WeakValueHashMapBenchmarkSupport {
                 pressure[index][0] = (byte) index;
             }
         }
+
+        private void createCleanupAllocationPressure(int attempt) {
+            int blockSize = Math.max(valuePayloadSize, 1024) * 1024;
+            int blocks = 8 + (attempt & 0x7);
+            byte[][] pressure = new byte[blocks][];
+            for (int index = 0; index < pressure.length; index++) {
+                pressure[index] = new byte[blockSize];
+                pressure[index][0] = (byte) index;
+            }
+        }
     }
 
     @State(Scope.Thread)
@@ -232,21 +278,36 @@ public abstract class WeakValueHashMapBenchmarkSupport {
         public void setupInvocation() throws Exception {
             prepareCleanupBatch();
         }
+
+        @TearDown(Level.Invocation)
+        public void tearDownInvocation() {
+            repopulateRetiredValues();
+        }
     }
 
     @State(Scope.Thread)
-    public abstract static class MixedState extends BaseState {
+    public abstract static class InsertState extends BaseState {
+        @Param({"8"})
+        public int insertsPerInvocation;
+
+        private final ArrayList<Slot> insertedSlots = new ArrayList<>();
+
         @Setup(Level.Invocation)
-        public void setupInvocation() throws Exception {
-            prepareCleanupBatch();
+        public void setupInvocation() {
+            insertedSlots.clear();
+            for (int index = 0; index < insertsPerInvocation; index++) {
+                insertedSlots.add(new Slot(nextId++, keyPayloadSize, valuePayloadSize));
+            }
         }
 
-        public int mixedRound(Blackhole blackhole) {
-            int checksum = lookupMany(blackhole);
-            checksum ^= replaceMany();
-            checksum ^= cleanupRetiredValues();
-            checksum ^= lookupMany(blackhole);
-            return checksum;
+        @TearDown(Level.Invocation)
+        public void tearDownInvocation() {
+            removeSlots(insertedSlots);
+            insertedSlots.clear();
+        }
+
+        public int insertBatch() {
+            return insertSlots(insertedSlots);
         }
     }
 }

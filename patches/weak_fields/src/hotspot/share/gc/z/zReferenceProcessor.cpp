@@ -212,9 +212,15 @@ bool ZReferenceProcessor::should_discover(zaddress reference, ReferenceType type
   return true;
 }
 
-bool ZReferenceProcessor::should_discover_weak_field(zpointer referent_ptr) const {
-  if (is_null_any(referent_ptr) && ZPointer::is_mark_good(referent_ptr)) {
-    // Field is already null, no need to discover
+bool ZReferenceProcessor::should_discover_weak_field(zpointer referent_ptr, volatile zpointer* field_addr) const {
+  if (ZPointer::is_mark_good(referent_ptr)) {
+    // Field points to a strongly live object, no need to discover
+    return false;
+  }
+
+  if (is_null_any(referent_ptr)) {
+    // Field is null but not yet marked
+    AtomicAccess::cmpxchg(field_addr, referent_ptr, color_null(), memory_order_relaxed);
     return false;
   }
 
@@ -267,10 +273,6 @@ bool ZReferenceProcessor::try_make_inactive(zaddress reference, ReferenceType ty
 bool ZReferenceProcessor::try_make_inactive_fast(const ZWeakFieldData& data) {
   volatile zpointer* field_addr = data.field_addr;
   const zpointer referent_ptr = data.field_value;
-
-  if (ZPointer::is_mark_good(referent_ptr)) {
-    return false;
-  }
 
   const zaddress referent_addr = ZBarrier::make_load_good(referent_ptr);
 
@@ -360,7 +362,7 @@ bool ZReferenceProcessor::discover_weak_field(volatile zpointer* field_addr) {
 
   const zpointer field_value = ZBarrier::load_atomic(field_addr);
 
-  if (!should_discover_weak_field(field_value)) {
+  if (!should_discover_weak_field(field_value, field_addr)) {
     // Not discovered
     return false;
   }
