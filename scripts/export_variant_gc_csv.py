@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Export a single combined GC metric CSV from single and multi benchmark logs."""
+"""Export combined GC metric and memory CSVs from benchmark logs."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ VARIANTS_ORDERED = [
     "all",
     "weak_fields",
 ]
-FIELDNAMES = [
+GC_FIELDNAMES = [
     "run_prefix",
     "run_id",
     "benchmark",
@@ -32,6 +32,20 @@ FIELDNAMES = [
     "sample_index",
     "total_avg",
     "total_max",
+    "source_log",
+]
+
+MEMORY_FIELDNAMES = [
+    "run_prefix",
+    "run_id",
+    "benchmark",
+    "variant",
+    "timestamp_ms",
+    "rss_kb",
+    "gc_reserved_kb",
+    "gc_committed_kb",
+    "heap_kb",
+    "phase",
     "source_log",
 ]
 
@@ -49,11 +63,6 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Output directory for combined CSV (default: results/variant_csv/<run-prefix>)",
     )
-    parser.add_argument(
-        "--csv-name",
-        default=None,
-        help="Combined CSV file name (default: combined_variants.csv)",
-    )
     return parser.parse_args()
 
 
@@ -69,11 +78,52 @@ def get_run_output_dir(output_root: Path, run_id: str) -> Path:
     return output_root / f"id_{run_id}"
 
 
+def _benchmark_name(variant: str, mode: str) -> str:
+    if variant == "weak_fields" and mode == "single":
+        return "field-single"
+    if variant == "weak_fields":
+        return "field"
+    return mode
+
+
 def collect_log_files(output_root: Path, run_id: str, variant: str, mode: str) -> list[Path]:
-    benchmark_name = "field-single" if (variant == "weak_fields" and mode == "single") else "field" if variant == "weak_fields" else mode
+    bname = _benchmark_name(variant, mode)
     logs_dir = get_run_output_dir(output_root, run_id) / "logs"
-    pattern = f"run_{benchmark_name}_{variant}_*_{run_id}.log"
+    pattern = f"run_{bname}_{variant}_*_{run_id}.log"
     return sorted(logs_dir.glob(pattern), key=lambda p: p.name)
+
+
+def collect_memory_files(output_root: Path, run_id: str, variant: str, mode: str) -> list[Path]:
+    bname = _benchmark_name(variant, mode)
+    memory_dir = get_run_output_dir(output_root, run_id) / "memory"
+    pattern = f"monitor_{bname}_{variant}_*_{run_id}.csv"
+    return sorted(memory_dir.glob(pattern), key=lambda p: p.name)
+
+
+MEMORY_COLUMNS = ("rss_kb", "gc_reserved_kb", "gc_committed_kb", "heap_kb")
+
+
+def parse_memory_file(filename: Path) -> list[dict[str, str]]:
+    """Return one row per timestamp (wide format) from a memory monitor CSV."""
+    rows: list[dict[str, str]] = []
+    with filename.open(encoding="utf-8") as handle:
+        for line in handle:
+            if not line.startswith("[monitor_data]"):
+                continue
+            data = line[len("[monitor_data]"):].strip()
+            parts = data.split(",")
+            # fields: timestamp_ms, rss_kb, gc_reserved_kb, gc_committed_kb, heap_kb, phase
+            if len(parts) < 5:
+                continue
+            rows.append({
+                "timestamp_ms": parts[0].strip(),
+                "rss_kb": parts[1].strip(),
+                "gc_reserved_kb": parts[2].strip(),
+                "gc_committed_kb": parts[3].strip(),
+                "heap_kb": parts[4].strip(),
+                "phase": parts[5].strip() if len(parts) > 5 else "",
+            })
+    return rows
 
 
 def parse_gc_stats_file(filename: Path) -> dict[str, dict[str, list[float] | str]]:
@@ -149,42 +199,56 @@ def parse_log_config(filename: Path) -> dict[str, str]:
     }
 
 
-def collect_combined_rows(
+def collect_gc_rows(
     output_root: Path, run_prefix: str
-) -> tuple[list[dict[str, str | float | int]], dict[str, dict[str, str]]]:
-    rows: list[dict[str, str | float | int]] = []
-    # config sampled once from the first available log per benchmark mode
+) -> tuple[list[dict], dict[str, dict[str, str]]]:
+    rows: list[dict] = []
     mode_config: dict[str, dict[str, str]] = {}
 
     for variant in VARIANTS_ORDERED:
         for mode in ("multi", "single"):
             run_id = get_mode_run_id(run_prefix, mode)
-            log_files = collect_log_files(output_root, run_id, variant, mode)
-            for log_file in log_files:
+            for log_file in collect_log_files(output_root, run_id, variant, mode):
                 if mode not in mode_config:
                     mode_config[mode] = parse_log_config(log_file)
                 metrics = parse_gc_stats_file(log_file)
                 for metric_name, metric_data in metrics.items():
-                    avg_values = metric_data["avg"]
-                    max_values = metric_data["max"]
                     units = str(metric_data.get("units", ""))
-                    for sample_index, (avg_value, max_value) in enumerate(zip(avg_values, max_values), start=1):
-                        rows.append(
-                            {
-                                "run_prefix": run_prefix,
-                                "run_id": run_id,
-                                "benchmark": mode,
-                                "variant": variant,
-                                "metric": metric_name,
-                                "units": units,
-                                "sample_index": sample_index,
-                                "total_avg": avg_value,
-                                "total_max": max_value,
-                                "source_log": log_file.name,
-                            }
-                        )
-
+                    for sample_index, (avg_value, max_value) in enumerate(
+                        zip(metric_data["avg"], metric_data["max"]), start=1
+                    ):
+                        rows.append({
+                            "run_prefix": run_prefix,
+                            "run_id": run_id,
+                            "benchmark": mode,
+                            "variant": variant,
+                            "metric": metric_name,
+                            "units": units,
+                            "sample_index": sample_index,
+                            "total_avg": avg_value,
+                            "total_max": max_value,
+                            "source_log": log_file.name,
+                        })
     return rows, mode_config
+
+
+def collect_memory_rows(output_root: Path, run_prefix: str) -> list[dict]:
+    rows: list[dict] = []
+
+    for variant in VARIANTS_ORDERED:
+        for mode in ("multi", "single"):
+            run_id = get_mode_run_id(run_prefix, mode)
+            for mem_file in collect_memory_files(output_root, run_id, variant, mode):
+                for mem_row in parse_memory_file(mem_file):
+                    rows.append({
+                        "run_prefix": run_prefix,
+                        "run_id": run_id,
+                        "benchmark": mode,
+                        "variant": variant,
+                        **mem_row,
+                        "source_log": mem_file.name,
+                    })
+    return rows
 
 
 def main() -> int:
@@ -193,20 +257,30 @@ def main() -> int:
     run_prefix = normalize_run_prefix(args.run_prefix)
     csv_dir = Path(args.csv_dir) if args.csv_dir else Path("results")
 
-    rows, mode_config = collect_combined_rows(output_root, run_prefix)
-    if not rows:
+    gc_rows, mode_config = collect_gc_rows(output_root, run_prefix)
+    mem_rows = collect_memory_rows(output_root, run_prefix)
+
+    if not gc_rows and not mem_rows:
         print("No rows found. Check that both run directories exist:")
         print(f"  {output_root / ('id_' + get_mode_run_id(run_prefix, 'multi'))}")
         print(f"  {output_root / ('id_' + get_mode_run_id(run_prefix, 'single'))}")
         return 1
 
     csv_dir.mkdir(parents=True, exist_ok=True)
-    output_file = csv_dir / args.csv_name if args.csv_name else csv_dir / f"{run_prefix}_combined_variants.csv"
-    with output_file.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=FIELDNAMES)
+
+    gc_file = csv_dir / f"{run_prefix}_combined_gc.csv"
+    with gc_file.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=GC_FIELDNAMES)
         writer.writeheader()
-        writer.writerows(rows)
-    print(f"Wrote {output_file} ({len(rows)} rows)")
+        writer.writerows(gc_rows)
+    print(f"Wrote {gc_file} ({len(gc_rows)} rows)")
+
+    mem_file = csv_dir / f"{run_prefix}_combined_memory.csv"
+    with mem_file.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=MEMORY_FIELDNAMES)
+        writer.writeheader()
+        writer.writerows(mem_rows)
+    print(f"Wrote {mem_file} ({len(mem_rows)} rows)")
 
     config_file = csv_dir / "configs.json"
     all_configs: dict = {}
