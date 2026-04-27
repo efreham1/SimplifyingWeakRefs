@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import re
 from pathlib import Path
 
@@ -116,14 +117,52 @@ def parse_gc_stats_file(filename: Path) -> dict[str, dict[str, list[float] | str
     return metrics
 
 
-def collect_combined_rows(output_root: Path, run_prefix: str) -> list[dict[str, str | float | int]]:
+def parse_log_config(filename: Path) -> dict[str, str]:
+    args_value = ""
+    command_value = ""
+
+    with filename.open(encoding="utf-8") as handle:
+        for line in handle:
+            stripped = line.strip()
+            if stripped.startswith("Args:"):
+                args_value = stripped.partition(":")[2].strip()
+            elif stripped.startswith("Command:"):
+                command_value = stripped.partition(":")[2].strip()
+
+            if args_value and command_value:
+                break
+
+    xms_match = re.search(r"(?:^|\s)-Xms(\S+)", command_value)
+    xmx_match = re.search(r"(?:^|\s)-Xmx(\S+)", command_value)
+    benchmark_class = ""
+    for token in command_value.split():
+        if token.endswith(".java"):
+            benchmark_class = Path(token).name
+            break
+
+    return {
+        "benchmark_args": args_value,
+        "heap_xms": xms_match.group(1) if xms_match else "",
+        "heap_xmx": xmx_match.group(1) if xmx_match else "",
+        "benchmark_class": benchmark_class,
+        "java_command": command_value,
+    }
+
+
+def collect_combined_rows(
+    output_root: Path, run_prefix: str
+) -> tuple[list[dict[str, str | float | int]], dict[str, dict[str, str]]]:
     rows: list[dict[str, str | float | int]] = []
+    # config sampled once from the first available log per benchmark mode
+    mode_config: dict[str, dict[str, str]] = {}
 
     for variant in VARIANTS_ORDERED:
         for mode in ("multi", "single"):
             run_id = get_mode_run_id(run_prefix, mode)
             log_files = collect_log_files(output_root, run_id, variant, mode)
             for log_file in log_files:
+                if mode not in mode_config:
+                    mode_config[mode] = parse_log_config(log_file)
                 metrics = parse_gc_stats_file(log_file)
                 for metric_name, metric_data in metrics.items():
                     avg_values = metric_data["avg"]
@@ -145,7 +184,7 @@ def collect_combined_rows(output_root: Path, run_prefix: str) -> list[dict[str, 
                             }
                         )
 
-    return rows
+    return rows, mode_config
 
 
 def main() -> int:
@@ -154,7 +193,7 @@ def main() -> int:
     run_prefix = normalize_run_prefix(args.run_prefix)
     csv_dir = Path(args.csv_dir) if args.csv_dir else Path("results")
 
-    rows = collect_combined_rows(output_root, run_prefix)
+    rows, mode_config = collect_combined_rows(output_root, run_prefix)
     if not rows:
         print("No rows found. Check that both run directories exist:")
         print(f"  {output_root / ('id_' + get_mode_run_id(run_prefix, 'multi'))}")
@@ -167,8 +206,18 @@ def main() -> int:
         writer = csv.DictWriter(handle, fieldnames=FIELDNAMES)
         writer.writeheader()
         writer.writerows(rows)
-
     print(f"Wrote {output_file} ({len(rows)} rows)")
+
+    config_file = csv_dir / "configs.json"
+    all_configs: dict = {}
+    if config_file.exists():
+        with config_file.open(encoding="utf-8") as handle:
+            all_configs = json.load(handle)
+    all_configs[run_prefix] = mode_config
+    with config_file.open("w", encoding="utf-8") as handle:
+        json.dump(all_configs, handle, indent=2)
+    print(f"Updated {config_file}")
+
     return 0
 
 
