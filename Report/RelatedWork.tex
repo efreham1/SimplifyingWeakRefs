@@ -1,16 +1,39 @@
 \chapter{Related Work}
 \label{chap:related-work}
 
-This chapter situates the thesis in prior work on weak semantics in managed runtimes by focusing on Go and Python. The purpose is to establish how these two language ecosystems expose weak references, how they combine weak semantics with lifecycle callbacks, and which trade-offs they document for runtime behaviour.
+Directly published work on optimising ZGC's weak-reference pipeline is limited in the sources used for this thesis. The closest directly relevant material is therefore a combination of runtime documentation, implementation sources, and cross-language designs for weak semantics. This chapter positions the thesis against those adjacent designs. The aim is not to claim implementation equivalence between runtimes, but to clarify which trade-offs recur across language ecosystems when weak reachability, callback delivery, and runtime overhead have to coexist.
+
+\section{Java and the JVM}
+\label{sec:related-java}
+
+Java's reference API explicitly combines weak semantics with optional queue-based notification through the \texttt{ReferenceQueue} mechanism~\cite{oracle-ref-javadoc,openjdk-reference-java,openjdk-referencequeue-java}. This is a richer contract than a bare weak pointer, because it supports both non-owning reachability and callback-style handoff to application code. The design is flexible, but it also means that the runtime has to maintain queue metadata and pending-list machinery even for workloads that only need liveness probing through \texttt{WeakReference.get()}.
+
+The OpenJDK enhancement request JDK-8029205 documents this specific inefficiency by observing unnecessary pending-list traversal for references without a \texttt{ReferenceQueue}~\cite{JDK-8029205}. That issue does not itself present an implementation or an evaluation, but it establishes that the overhead targeted in this thesis is recognised within the OpenJDK ecosystem. In that sense, the present work contributes by taking a documented inefficiency and following it through implementation, benchmarking, and analysis in generational ZGC.
+
+The broader garbage-collection literature also helps frame the design space. Jones et al. emphasise that GC performance depends not only on asymptotic algorithmic behaviour but also on object representation, locality, and the amount of metadata the runtime must maintain for each managed object~\cite{jones11-gc-handbook}. That perspective is directly relevant here: the weak-field exploration is not merely an alternative API shape, but a test of whether moving weak semantics into ordinary object layout changes GC cost in a more fundamental way than improving the existing \texttt{WeakReference} pipeline.
+
+Finalisation literature provides an additional point of comparison. Boehm argues that lifecycle callbacks and finalisation-style mechanisms introduce semantic and implementation complexity that often exceeds their apparent API simplicity~\cite{boehm03-finalizers}. Although weak references are not the same as finalisers, Java's queue-based reference handling shares the same broad challenge of coordinating GC decisions with asynchronous callback-style processing.
 
 \section{Go}
 \label{sec:related-go}
 
-Go exposes weak semantics through the standard-library package \texttt{weak}, which provides weak pointers that do not by themselves keep referents alive~\cite{go-weak-pkg}. This design enables non-owning associations in cache-like or metadata-oriented structures without introducing strong retention edges.
+Go exposes weak semantics through the standard-library package \texttt{weak}, which provides weak pointers that do not by themselves keep referents alive~\cite{go-weak-pkg}. This design enables non-owning associations in cache-like or metadata-oriented structures without introducing strong retention edges. Crucially, \texttt{weak.Pointer} is callback-less by design: the only way to determine whether a referent is still live is through an explicit call to \texttt{.Value()}, which returns \texttt{nil} once the referent has been collected~\cite{go-weak-pkg}. Weak reachability and cleanup notification are entirely separate concerns in Go's model.
 
-For lifecycle callbacks, Go documents finalisation support through runtime facilities such as \texttt{SetFinalizer}~\cite{go-runtime-setfinalizer}. Importantly, Go's documentation emphasises that finalisers are not prompt resource-management mechanisms and should not be used as the primary correctness path for releasing resources. This guidance is relevant to weak semantics because weak references and finalisation are often combined in long-lived systems where cleanup latency and execution ordering can affect observable behaviour.
+For lifecycle callbacks, Go documents finalisation support through runtime facilities such as \texttt{SetFinalizer}~\cite{go-runtime-setfinalizer}. Importantly, Go's documentation emphasises that finalisers are not prompt resource-management mechanisms and should not be used as the primary correctness path for releasing resources.
 
-In summary, Go presents weak semantics as an explicit non-owning reference mechanism and presents finalisation as an auxiliary facility with carefully constrained expectations. Together, these choices prioritise clear ownership boundaries and conservative assumptions about callback timing.
+In summary, Go presents weak semantics as an explicit, callback-less non-owning reference mechanism and treats finalisation as an auxiliary facility with carefully constrained expectations. This separation between weak reachability and cleanup notification is a deliberate design decision rather than an oversight.
+
+\section{C++ and .NET}
+\label{sec:related-cpp-dotnet}
+
+In C++, \texttt{std::weak\_ptr} represents non-owning reachability within the reference-counted \texttt{shared\_ptr}/\texttt{weak\_ptr} ownership model~\cite{cppreference-weak-ptr}. Its semantics differ from Java's GC-integrated weak references, but the design illustrates an important contrast: weak semantics can be expressed without a queue-based callback mechanism. The caller invokes \texttt{.lock()} to obtain a temporary strong pointer and checks whether it is null. There is no notification on clearing, and cleanup of associated resources is handled entirely through separate mechanisms such as RAII destructors.
+
+.NET exposes a \texttt{WeakReference<T>} API and also provides \texttt{ConditionalWeakTable} for key-associated metadata that should not keep keys alive~\cite{dotnet-weakreference,dotnet-conditionalweaktable}. Like C++, \texttt{WeakReference<T>} is probe-based: callers use \texttt{TryGetTarget()} to check liveness; there is no notification callback when the referent is cleared. Compared with Java's single \texttt{Reference}/\texttt{ReferenceQueue} framework, .NET's API surface makes the use-case distinction more explicit by offering separate types for the liveness-probing and side-metadata patterns.
+
+\section{Lua and Embedded Weak Tables}
+\label{sec:related-lua}
+
+Lua offers weak semantics directly in table representation: a table can be configured so that its keys, values, or both are weak~\cite{lua54-manual}. This is conceptually close to the weak-field idea explored in this thesis. Rather than allocating a dedicated wrapper object for each weak relation, the language embeds weak semantics into an existing container or field representation. Lua's design therefore demonstrates that weak behaviour can be attached to ordinary object structure instead of being mediated by explicit weak-reference objects. As with Go's \texttt{weak.Pointer} and C++'s \texttt{std::weak\_ptr}, there is no callback when a weak entry is cleared: the entry simply stops being present after the next collection cycle.
 
 \section{Python}
 \label{sec:related-python}
@@ -24,5 +47,7 @@ Python's documentation similarly cautions that finalisation-style mechanisms sho
 \section{Synthesis}
 \label{sec:related-synthesis}
 
-Taken together, Go and Python frame weak semantics as an explicit programming abstraction rather than an implicit optimisation. Both ecosystems separate non-owning reachability from deterministic resource cleanup, and both make callback timing explicitly non-deterministic. For this thesis, these patterns are relevant because they underscore a central engineering constraint: weak-reference mechanisms should preserve clear semantic contracts while minimising avoidable runtime overhead in the common case.
+Taken together, these systems expose three recurring design patterns. First, weak semantics is consistently treated as a deliberate programming abstraction rather than as an invisible optimisation. Second, in most ecosystems, weak reachability and cleanup notification are treated as entirely separate concerns. Go's \texttt{weak.Pointer}, C++'s \texttt{std::weak\_ptr}, .NET's \texttt{WeakReference<T>}, and Lua's weak table entries all provide callback-less weak semantics, where the caller probes for liveness rather than registering for a notification. Cleanup callbacks, where needed at all, are provided through separate and explicitly more complex mechanisms. Java's \texttt{WeakReference} is notable for coupling both concerns into one object and one processing pipeline, making the two use cases architecturally indistinct at runtime. Third, runtimes differ in whether weak reachability is encoded through wrapper objects, integrated container or field semantics, or ownership metadata -- a choice with significant consequences for GC pressure.
+
+Against that background, this thesis occupies a specific niche. The queue-less \texttt{WeakReference} optimisations aim to reduce the overhead of the callback-less use case while preserving Java's existing API and object model: for applications that already choose the one-argument \texttt{WeakReference} constructor, the optimised pipeline makes the runtime cost of weak reachability closer to the lean, probe-only model that Go, C++, and .NET have long provided. The weak-field mechanism explores a more structural alternative, closer in spirit to Lua's embedded weak semantics than to Java's traditional wrapper-object approach. The comparison between these two lines of work is therefore not only an optimisation study, but also a representation study: it asks whether a substantial part of weak-reference cost arises from how weak semantics is encoded in the heap rather than only from how the reference-processing pipeline is implemented.
 

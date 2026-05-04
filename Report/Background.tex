@@ -14,7 +14,7 @@ The JVM ships with several garbage collector implementations, each designed with
     \item \textbf{Serial GC}   A single-threaded collector that performs all garbage collection work using one thread, avoiding inter-thread communication overhead. It is best suited to single-processor systems and small heaps.
     \item \textbf{Parallel GC}   A throughput-oriented generational collector that uses multiple GC threads to speed up collection on multiprocessor systems. It is intended for medium to large data sets.
     \item \textbf{G1 GC (Garbage-First)}   A mostly concurrent, region-based collector designed to scale from small to large multiprocessor machines. It targets predictable pause times with high probability while maintaining high throughput and is the default collector on most platforms~\cite{oracle-gc-collectors}.
-    \item \textbf{ZGC (Z Garbage Collector)}   A scalable, low-latency collector that performs expensive GC work concurrently with application threads. It targets pause times of only a few milliseconds (largely independent of heap size) and supports heap sizes from 8\,MB to 16\,TB.
+    \item \textbf{ZGC (Z Garbage Collector)}   A scalable, low-latency collector that performs expensive GC work concurrently with application threads. It targets pause times of only a few milliseconds (largely independent of heap size) and supports heap sizes from 8\,MB to 16\,TB~\cite{jep333-zgc,jep377-zgc-prod}.
 \end{itemize}
 
 This thesis focuses on ZGC, as its low-latency design and concurrent reference processing pipeline can particularly benefit from optimisations that reduce the amount of work done during reference processing.
@@ -89,7 +89,7 @@ Each \texttt{Reference} object maintains several fields that track its state~\ci
     \item \texttt{discovered field}   A field with dual purpose: during GC marking, it serves as a link in the garbage collector's internal \emph{discovered list}; after processing, it is reused as a link in the VM's \emph{pending list} that feeds the \texttt{ReferenceHandler} thread. Due to its first use, the GC can detect whether a reference has already been discovered by checking if this field is \texttt{null}.
 \end{itemize}
 
-A reference object transitions through the following states during its lifetime~\cite{oracle-reference-javadoc,openjdk-reference-java}:
+A reference object transitions through the following states during its lifetime~\cite{oracle-ref-javadoc,openjdk-reference-java}:
 
 \begin{enumerate}
     \item \textbf{Active}   The reference has been created and the referent is still reachable (or not yet processed).
@@ -199,7 +199,7 @@ The decorator flags are grouped by concern:
 \begin{itemize}
     \item \textbf{Reference strength} bits control how the barrier treats reachability. An access with \texttt{ON\_WEAK\_OOP\_REF} tells ZGC that the field being read is the \texttt{referent} of a \texttt{WeakReference}: the barrier must return \texttt{null} if the referent has been collected, rather than reviving it. The default, when no strength decorator is specified, is \texttt{ON\_STRONG\_OOP\_REF}.
 
-    \item \textbf{Access location} bits indicates whether the access targets a heap object field or an off-heap native data structure. Some barrier actions are conditioned on \texttt{IN\_HEAP}.
+    \item \textbf{Access location} bits indicate whether the access targets a heap object field or an off-heap native data structure. Some barrier actions are conditioned on \texttt{IN\_HEAP}.
 
     \item \textbf{Barrier strength} bits control how strong barriers should be applied. \texttt{AS\_RAW} bypasses GC barriers entirely and reads the raw memory value, which is necessary in certain internal GC paths. \texttt{AS\_NO\_KEEPALIVE} performs a correctly remapped access without keeping any objects alive, used in GC-internal scanning paths. \texttt{AS\_NORMAL} (the default) invokes the full barrier.
 
@@ -208,7 +208,7 @@ The decorator flags are grouped by concern:
 
 For ZGC, when \texttt{WeakReference.get()} is executed the \texttt{referent} field load carries \texttt{ON\_WEAK\_OOP\_REF}. ZGC's barrier for this decorator checks the colour bits of the loaded pointer and if the pointer is already good (the referent is live and remapped or null), the address is returned directly. If not, the barrier's slow path is invoked. In the slow path, the liveness of the referent is checked and the barrier either returns a coloured null if the referent is no longer live, or a correctly coloured pointer if the referent is live~\cite{openjdk-zbarrier-cpp,openjdk-accessdecorators-hpp}.
 
-Store barriers are similarly decorator-driven. A normal store carries the decorator \texttt{ ON\_STRONG\_OOP\_REF} which triggers ZGC's store barrier, which records the old value in the store-barrier buffer (needed for the snapshot-at-the-beginning marking semantics and for maintaining remembered sets in the generational case).
+Store barriers are similarly decorator-driven. A normal store carries the decorator \texttt{ON\_STRONG\_OOP\_REF} which triggers ZGC's store barrier, which records the old value in the store-barrier buffer (needed for the snapshot-at-the-beginning marking semantics and for maintaining remembered sets in the generational case).
 
 
 \section{Reference Processing Pipeline in ZGC}
