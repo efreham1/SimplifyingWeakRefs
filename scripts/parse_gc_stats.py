@@ -68,10 +68,15 @@ FILTER_ZERO_METRICS = {
 
 # Metrics included in per-variant summary statistics tables
 SUMMARY_METRICS: list[tuple[str, str, str]] = [
-    ("Old Phase: Concurrent Process Non-Strong", "Non-Strong Processing",  "nonstrong"),
-    ("Major Collection: Major Collection",        "Major Collection",        "major"),
-    ("Old Generation: Old Generation",            "Old Generation",          "oldgen"),
-    ("Old Subphase: Concurrent Mark Follow",      "Concurrent Mark Follow",  "markfollow"),
+    ("Old Phase: Concurrent Process Non-Strong",          "Non-Strong Processing",              "nonstrong"),
+    ("Major Collection: Major Collection",                "Major Collection",                   "major"),
+    ("Old Generation: Old Generation",                    "Old Generation",                     "oldgen"),
+    ("Old Phase: Concurrent Mark",                        "Old Phase: Concurrent Mark",         "old-concurrent-mark"),
+    ("Old Phase: Concurrent Relocate",                    "Old Phase: Concurrent Relocate",     "old-relocate"),
+    ("Young Generation: Young Generation (Promote All)",  "Young Generation (Promote All)",     "young-gen"),
+    ("Young Phase: Concurrent Mark",                      "Young Phase: Concurrent Mark",       "young-concurrent-mark"),
+    ("Young Phase: Concurrent Relocate",                  "Young Phase: Concurrent Relocate",   "young-relocate"),
+    ("Old Subphase: Concurrent Mark Follow",              "Concurrent Mark Follow",             "markfollow"),
 ]
 
 # LaTeX display names for variants (underscores escaped for use inside \texttt{})
@@ -91,16 +96,19 @@ MEMORY_METRICS = {
     "aux": {
         "column": "gc_committed_kb",
         "title": "Aux Memory",
+        "short": "Auxiliary GC memory summary statistics",
         "unit": "MB",
     },
     "java_heap": {
         "column": "heap_kb",
         "title": "Java Heap",
+        "short": "Java heap summary statistics",
         "unit": "MB",
     },
     "rss": {
         "column": "rss_kb",
         "title": "RSS",
+        "short": "Total process RSS summary statistics",
         "unit": "MB",
     },
 }
@@ -778,22 +786,32 @@ def write_latex_summary_stats_tables(
     TABLES_DIR.mkdir(parents=True, exist_ok=True)
 
     # ---- GC timing tables ----
+    header_row_ms = r" & \multicolumn{3}{c}{Single (ms)} & \multicolumn{3}{c}{Multi (ms)} \\"
+    subheader_row = r"\cmidrule(lr){2-4}\cmidrule(lr){5-7}"
+    col_row = r"Variant & Median & Mean & IQR & Median & Mean & IQR \\"
     for metric_key, metric_label, metric_slug in SUMMARY_METRICS:
         lines: list[str] = []
-        lines.append(r"\begin{table}[t]")
-        lines.append(r"\centering")
+        lines.append(r"\begin{longtable}{l rrr rrr}")
         lines.append(
-            rf"\caption{{Summary statistics for {metric_label} across all variants. "
+            rf"\caption[{metric_label} summary statistics]{{Summary statistics for {metric_label} across all variants. "
             rf"Values in ms; single-object benchmark uses per-run maxima, "
             rf"multi-object uses per-run averages ($n=100$ per variant).}}"
+            rf"\label{{tab:stats-{metric_slug}}} \\"
         )
-        lines.append(rf"\label{{tab:stats-{metric_slug}}}")
-        lines.append(r"\begin{tabular}{l rrr rrr}")
         lines.append(r"\toprule")
-        lines.append(r" & \multicolumn{3}{c}{Single (ms)} & \multicolumn{3}{c}{Multi (ms)} \\")
-        lines.append(r"\cmidrule(lr){2-4}\cmidrule(lr){5-7}")
-        lines.append(r"Variant & Median & Mean & IQR & Median & Mean & IQR \\")
+        lines.append(header_row_ms)
+        lines.append(subheader_row)
+        lines.append(col_row)
         lines.append(r"\midrule")
+        lines.append(r"\endfirsthead")
+        lines.append(r"\toprule")
+        lines.append(header_row_ms)
+        lines.append(subheader_row)
+        lines.append(col_row)
+        lines.append(r"\midrule")
+        lines.append(r"\endhead")
+        lines.append(r"\bottomrule")
+        lines.append(r"\endfoot")
 
         for variant in variants:
             s_vals = list(single_variants_metrics.get(variant, {}).get(metric_key, {}).get("values", []))
@@ -809,9 +827,7 @@ def write_latex_summary_stats_tables(
                 f"{m_med:.1f} & {m_mn:.1f} & {m_iqr:.1f} \\\\"
             )
 
-        lines.append(r"\bottomrule")
-        lines.append(r"\end{tabular}")
-        lines.append(r"\end{table}")
+        lines.append(r"\end{longtable}")
 
         out = TABLES_DIR / f"stats_{metric_slug}_{run_prefix}.tex"
         out.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -825,19 +841,27 @@ def write_latex_summary_stats_tables(
         slug = mem_key.replace("_", "-")
 
         lines = []
-        lines.append(r"\begin{table}[t]")
-        lines.append(r"\centering")
+        lines.append(r"\begin{longtable}{l rrr rrr}")
+        short = str(mem_info["short"])
         lines.append(
-            rf"\caption{{Summary statistics for {title} per-run maximum across all variants. "
+            rf"\caption[{short}]{{Summary statistics for {title} per-run maximum across all variants. "
             rf"Values in {unit} ($n=100$ per variant).}}"
+            rf"\label{{tab:stats-memory-{slug}}} \\"
         )
-        lines.append(rf"\label{{tab:stats-memory-{slug}}}")
-        lines.append(r"\begin{tabular}{l rrr rrr}")
         lines.append(r"\toprule")
         lines.append(rf" & \multicolumn{{3}}{{c}}{{Single ({unit})}} & \multicolumn{{3}}{{c}}{{Multi ({unit})}} \\")
         lines.append(r"\cmidrule(lr){2-4}\cmidrule(lr){5-7}")
         lines.append(r"Variant & Median & Mean & IQR & Median & Mean & IQR \\")
         lines.append(r"\midrule")
+        lines.append(r"\endfirsthead")
+        lines.append(r"\toprule")
+        lines.append(rf" & \multicolumn{{3}}{{c}}{{Single ({unit})}} & \multicolumn{{3}}{{c}}{{Multi ({unit})}} \\")
+        lines.append(r"\cmidrule(lr){2-4}\cmidrule(lr){5-7}")
+        lines.append(r"Variant & Median & Mean & IQR & Median & Mean & IQR \\")
+        lines.append(r"\midrule")
+        lines.append(r"\endhead")
+        lines.append(r"\bottomrule")
+        lines.append(r"\endfoot")
 
         for variant in variants:
             s_maxes = [float(r["max"]) for r in single_traces.get(variant, {}).get(mem_key, []) if "max" in r]
@@ -853,9 +877,7 @@ def write_latex_summary_stats_tables(
                 f"{m_med:.0f} & {m_mn:.0f} & {m_iqr:.0f} \\\\"
             )
 
-        lines.append(r"\bottomrule")
-        lines.append(r"\end{tabular}")
-        lines.append(r"\end{table}")
+        lines.append(r"\end{longtable}")
 
         out = TABLES_DIR / f"stats_memory_{mem_key}_{run_prefix}.tex"
         out.write_text("\n".join(lines) + "\n", encoding="utf-8")

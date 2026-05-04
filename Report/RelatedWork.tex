@@ -1,7 +1,7 @@
 \chapter{Related Work}
 \label{chap:related-work}
 
-Directly published work on optimising ZGC's weak-reference pipeline is limited in the sources used for this thesis. The closest directly relevant material is therefore a combination of runtime documentation, implementation sources, and cross-language designs for weak semantics. This chapter positions the thesis against those adjacent designs. The aim is not to claim implementation equivalence between runtimes, but to clarify which trade-offs recur across language ecosystems when weak reachability, callback delivery, and runtime overhead have to coexist.
+Directly published work on optimising ZGC's weak-reference pipeline is limited; the closest relevant material is therefore a combination of runtime documentation, implementation sources, and cross-language designs for weak semantics. This chapter positions the thesis against those adjacent designs. The aim is not to claim implementation equivalence between runtimes, but to clarify which trade-offs recur across language ecosystems when weak reachability, callback delivery, and runtime overhead have to coexist.
 
 \section{Java and the JVM}
 \label{sec:related-java}
@@ -21,16 +21,16 @@ Go exposes weak semantics through the standard-library package \texttt{weak}, wh
 
 For lifecycle callbacks, Go documents finalisation support through runtime facilities such as \texttt{SetFinalizer}~\cite{go-runtime-setfinalizer}. Importantly, Go's documentation emphasises that finalisers are not prompt resource-management mechanisms and should not be used as the primary correctness path for releasing resources.
 
-In summary, Go presents weak semantics as an explicit, callback-less non-owning reference mechanism and treats finalisation as an auxiliary facility with carefully constrained expectations. This separation between weak reachability and cleanup notification is a deliberate design decision rather than an oversight.
+Go therefore presents weak semantics as an explicit, callback-less non-owning reference mechanism and treats finalisation as an auxiliary facility with carefully constrained expectations -- a deliberate separation rather than an oversight.
 
 \section{C++ and .NET}
 \label{sec:related-cpp-dotnet}
 
 In C++, \texttt{std::weak\_ptr} represents non-owning reachability within the reference-counted \texttt{shared\_ptr}/\texttt{weak\_ptr} ownership model~\cite{cppreference-weak-ptr}. Its semantics differ from Java's GC-integrated weak references, but the design illustrates an important contrast: weak semantics can be expressed without a queue-based callback mechanism. The caller invokes \texttt{.lock()} to obtain a temporary strong pointer and checks whether it is null. There is no notification on clearing, and cleanup of associated resources is handled entirely through separate mechanisms such as RAII destructors.
 
-.NET exposes a \texttt{WeakReference<T>} API and also provides \texttt{ConditionalWeakTable} for key-associated metadata that should not keep keys alive~\cite{dotnet-weakreference,dotnet-conditionalweaktable}. Like C++, \texttt{WeakReference<T>} is probe-based: callers use \texttt{TryGetTarget()} to check liveness; there is no notification callback when the referent is cleared. Compared with Java's single \texttt{Reference}/\texttt{ReferenceQueue} framework, .NET's API surface makes the use-case distinction more explicit by offering separate types for the liveness-probing and side-metadata patterns.
+.NET exposes a \texttt{WeakReference<T>} API and also provides \texttt{ConditionalWeakTable} for key-associated metadata that should not keep keys alive~\cite{dotnet-weakreference,dotnet-conditionalweaktable}. Like C++, \texttt{WeakReference<T>} is probe-based: callers use \texttt{TryGetTarget()} to check liveness; there is no notification callback when the referent is cleared. Compared with Java's single \texttt{Reference}/\texttt{ReferenceQueue} framework, .NET's API makes the use-case distinction more explicit by offering separate types for the liveness-probing and side-metadata patterns.
 
-\section{Lua and Embedded Weak Tables}
+\section{Lua and Table-Level Weak Semantics}
 \label{sec:related-lua}
 
 Lua offers weak semantics directly in table representation: a table can be configured so that its keys, values, or both are weak~\cite{lua54-manual}. This is conceptually close to the weak-field idea explored in this thesis. Rather than allocating a dedicated wrapper object for each weak relation, the language embeds weak semantics into an existing container or field representation. Lua's design therefore demonstrates that weak behaviour can be attached to ordinary object structure instead of being mediated by explicit weak-reference objects. As with Go's \texttt{weak.Pointer} and C++'s \texttt{std::weak\_ptr}, there is no callback when a weak entry is cleared: the entry simply stops being present after the next collection cycle.
@@ -41,8 +41,6 @@ Lua offers weak semantics directly in table representation: a table can be confi
 Python's weak-semantics design, standardised in PEP~205, emphasises two use cases: cache construction and reduction of lifecycle coupling in graph-like object structures~\cite{python-pep205}. The language provides explicit weak-reference objects, weak mappings, and callback hooks on invalidation. A key contribution of the PEP is its explicit treatment of invalidation strategy and the cost implications of global weak-reference management.
 
 At the API level, Python exposes weak references through the \texttt{weakref} module and supports optional callbacks when referents become unreachable~\cite{python-weakref-docs}. This model is widely used for cache-like structures and registry patterns where identity tracking is needed without extending object lifetime.
-
-Python's documentation similarly cautions that finalisation-style mechanisms should not be treated as deterministic cleanup points~\cite{python-weakref-docs}. This caution aligns with the broader runtime principle that weak semantics can express ownership intent, but cleanup timing remains GC-dependent.
 
 \section{Synthesis}
 \label{sec:related-synthesis}
