@@ -1,40 +1,41 @@
 \chapter{Usage of Generative Artificial Intelligence Tools}
 \label{app:ai-usage}
 
-The generative artificial intelligence (GenAI) tool GitHub Copilot was used as support during this thesis. It was used under a student licence via Uppsala University. The tool was used to accelerate practical work and improve writing quality, while all final technical decisions, implementation choices, and evaluations remained under the author's control.
+The generative artificial intelligence (GenAI) tool GitHub Copilot was used as support during this thesis. It was used under a student licence via Uppsala University. The tool was used to accelerate practical work and improve writing quality. All final technical decisions, implementation choices, and evaluations remained under the author's control.
 
 \section{Use During Implementation}
 \label{app:ai-usage-implementation}
 
-GenAI was used as support during coding of the implementation, primarily for discussing alternative implementation approaches, suggesting code edits through auto-complete, and implementing refactorings of already functioning code.
+GenAI was used as support during coding of the implementation, primarily for discussing alternative implementation approaches, suggesting code edits through auto-complete, and implementing refactorings of already written code.
 
 \section{Use for Tests and Scripts}
 \label{app:ai-usage-tests-scripts}
 
-GenAI was used to completely generate several test files and automation scripts used in this project, including scripts for benchmarking workflows and result-processing utilities. These generated artefacts were reviewed and validated through repeated execution.
+GenAI was used to completely generate several test files and automation scripts used during this thesis, including scripts for benchmarking workflows and result-processing utilities. These generated artefacts were reviewed and validated through repeated execution.
 
 \section{Use During Writing}
 \label{app:ai-usage-writing}
 
-GenAI was used as writing support in three main ways:
+GenAI was used as writing support in four main ways:
 
 \begin{itemize}
 	\item Suggesting rephrasing for clarity, tone, and structure.
 	\item Suggesting and correcting LaTeX formatting and fixing compilation or syntax errors.
 	\item Generating first drafts of information-dense sections, especially where the text was based directly on OpenJDK source code and implementation details.
+	\item Writing the first draft of the abstract with the context of the entire finished report.
 \end{itemize}
 
-All GenAI-generated text was manually edited and verified against primary sources before inclusion in the final manuscript.
+All GenAI-generated text was manually edited and verified against primary sources before inclusion in the final report.
 
 \chapter{Source Code}
-\label{app:changed-source-code}
+\label{app:source}
 
 This appendix provides the key source code for the implemented optimisations. The code for the three core optimisations is from the combined (\texttt{all}) configuration variant, which includes all three optimisations. The code for the weak-field mechanism is from the \texttt{weak\_fields} configuration variant. Complete sources for all variants are available in the \texttt{patches/} directory of the project repository.
 
 \lstset{basicstyle=\ttfamily\footnotesize,columns=flexible}
 
 \section{Dynamic-array Data Structure}
-\label{app:dynamic-array-source}
+\label{app:source-dyn}
 \refstepcounter{listing}
 \addcontentsline{lol}{listing}{\protect\numberline{\thelisting}\texttt{zWeakRefArray.hpp}: Dynamic-array data structure}
 
@@ -46,10 +47,10 @@ This appendix provides the key source code for the implemented optimisations. Th
 ]{../patches/all/src/hotspot/share/gc/z/zWeakRefArray.hpp}
 
 \section{Reference Processor}
-\label{app:refproc-impl-source}
+\label{app:source-refproc}
 
 \subsection{Interface}
-\label{app:refproc-interface}
+\label{app:source-refproc-iface}
 \refstepcounter{listing}
 \addcontentsline{lol}{listing}{\protect\numberline{\thelisting}\texttt{zReferenceProcessor.hpp}: Reference processor interface (\texttt{all} variant)}
 
@@ -61,7 +62,7 @@ This appendix provides the key source code for the implemented optimisations. Th
 ]{../patches/all/src/hotspot/share/gc/z/zReferenceProcessor.hpp}
 
 \subsection{Implementation Excerpts}
-\label{app:refproc-excerpts}
+\label{app:source-refproc-excerpts}
 \refstepcounter{listing}
 \addcontentsline{lol}{listing}{\protect\numberline{\thelisting}\texttt{zReferenceProcessor.cpp}: Implementation excerpts (\texttt{all} variant)}
 
@@ -105,10 +106,10 @@ The following excerpts from \texttt{zReferenceProcessor.cpp} show the constructo
 ]{../patches/all/src/hotspot/share/gc/z/zReferenceProcessor.cpp}
 
 \section{Weak Fields}
-\label{app:weak-fields}
+\label{app:source-wf}
 
 \subsection{Annotation}
-\label{app:weak-fields-annotation}
+\label{app:source-wf-annotation}
 \refstepcounter{listing}
 \addcontentsline{lol}{listing}{\protect\numberline{\thelisting}\texttt{weak.java}: Weak-field annotation}
 
@@ -120,7 +121,7 @@ The following excerpts from \texttt{zReferenceProcessor.cpp} show the constructo
 ]{../patches/weak_fields/src/java.base/share/classes/java/lang/ref/weak.java}
 
 \subsection{Data Structure}
-\label{app:weak-fields-array}
+\label{app:source-wf-array}
 \refstepcounter{listing}
 \addcontentsline{lol}{listing}{\protect\numberline{\thelisting}\texttt{zWeakFieldArray.hpp}: Weak-field data structure}
 
@@ -132,7 +133,7 @@ The following excerpts from \texttt{zReferenceProcessor.cpp} show the constructo
 ]{../patches/weak_fields/src/hotspot/share/gc/z/zWeakFieldArray.hpp}
 
 \subsection{Reference Processor}
-\label{app:weak-fields-refproc}
+\label{app:source-wf-refproc}
 \refstepcounter{listing}
 \addcontentsline{lol}{listing}{\protect\numberline{\thelisting}\texttt{zReferenceProcessor.hpp} and excerpts (\texttt{weak\_fields} variant)}
 
@@ -175,7 +176,7 @@ The following excerpts from \texttt{zReferenceProcessor.cpp} show the discovery 
 ]{../patches/weak_fields/src/hotspot/share/gc/z/zReferenceProcessor.cpp}
 
 \subsection{Marking Closure}
-\label{app:weak-fields-marking}
+\label{app:source-wf-marking}
 \refstepcounter{listing}
 \addcontentsline{lol}{listing}{\protect\numberline{\thelisting}\texttt{zMark.cpp}: Weak-field discovery during marking}
 
@@ -192,7 +193,7 @@ The following excerpt from \texttt{zMark.cpp} shows how weak-annotated fields ar
 ]{../patches/weak_fields/src/hotspot/share/gc/z/zMark.cpp}
 
 \subsection{Compiler and Interpreter Support}
-\label{app:weak-fields-compiler}
+\label{app:source-wf-compiler}
 \refstepcounter{listing}
 \addcontentsline{lol}{listing}{\protect\numberline{\thelisting}Compiler and interpreter support for weak fields}
 
@@ -505,7 +506,7 @@ The following tables list every modified or added file in each patch variant, to
 \end{longtable}
 
 \chapter{Summary Statistics}
-\label{app:summary-stats}
+\label{app:stats}
 
 This appendix provides numerical summary statistics (median, mean, and interquartile range) for all configuration variants and the key metrics discussed in \cref{chap:analysis}. All tables are produced automatically by the \texttt{parse\_gc\_stats.py} script from the benchmark CSV data. The single-object benchmark values are per-run maxima; the multi-object benchmark values are per-run averages. Each cell is based on $n = 250$ independent benchmark runs.
 
@@ -520,7 +521,7 @@ This appendix provides numerical summary statistics (median, mean, and interquar
 \input{../tables/stats_oldgen_slurm-5118807_combined_gc.tex}
 
 \section{Old Phase: Concurrent Mark}
-\label{app:stats-old-concurrent-mark}
+\label{app:stats-old-mark}
 
 \input{../tables/stats_old-concurrent-mark_slurm-5118807_combined_gc.tex}
 
@@ -535,12 +536,12 @@ This appendix provides numerical summary statistics (median, mean, and interquar
 \input{../tables/stats_old-relocate_slurm-5118807_combined_gc.tex}
 
 \section{Young Generation (Promote All)}
-\label{app:stats-young-gen}
+\label{app:stats-younggen}
 
 \input{../tables/stats_young-gen_slurm-5118807_combined_gc.tex}
 
 \section{Young Phase: Concurrent Mark}
-\label{app:stats-young-concurrent-mark}
+\label{app:stats-young-mark}
 
 \input{../tables/stats_young-concurrent-mark_slurm-5118807_combined_gc.tex}
 
@@ -555,17 +556,17 @@ This appendix provides numerical summary statistics (median, mean, and interquar
 \input{../tables/stats_markfollow_slurm-5118807_combined_gc.tex}
 
 \section{Auxiliary GC Memory}
-\label{app:stats-memory-aux}
+\label{app:stats-mem-aux}
 
 \input{../tables/stats_memory_aux_slurm-5118807_combined_gc.tex}
 
 \section{Java Heap}
-\label{app:stats-memory-heap}
+\label{app:stats-mem-heap}
 
 \input{../tables/stats_memory_java_heap_slurm-5118807_combined_gc.tex}
 
 \section{Total Process RSS}
-\label{app:stats-memory-rss}
+\label{app:stats-mem-rss}
 
 \input{../tables/stats_memory_rss_slurm-5118807_combined_gc.tex}
 
@@ -580,7 +581,7 @@ Additional GC timing plots are shown for Old Phase: Concurrent Relocate (\cref{f
 \begin{figure}[t]
 	\centering
 	\includegraphics[width=\textwidth]{composite_old_phase_concurrent_relocate_slurm-5118807_combined_gc_single.pdf}
-	\caption[Old Phase: Concurrent Relocate timing (single-object)]{Old Phase: Concurrent Relocate timing, single-object benchmark (per-run maxima). Top: distribution; bottom: median \% difference vs baseline.}
+	\caption[Old Phase: Concurrent Relocate timing (single-object)]{Old Phase: Concurrent Relocate timing, single-object benchmark (per-run maxima). Top: distribution; bottom: median \,\% difference vs baseline.}
 	\label{fig:app-gc-single-old-relocate}
 \end{figure}
 
@@ -588,7 +589,7 @@ Additional GC timing plots are shown for Old Phase: Concurrent Relocate (\cref{f
 \begin{figure}[t]
 	\centering
 	\includegraphics[width=\textwidth]{composite_old_phase_concurrent_relocate_slurm-5118807_combined_gc_multi.pdf}
-	\caption[Old Phase: Concurrent Relocate timing (multi-object)]{Old Phase: Concurrent Relocate timing, multi-object benchmark (per-run averages). Top: distribution; bottom: median \% difference vs baseline.}
+	\caption[Old Phase: Concurrent Relocate timing (multi-object)]{Old Phase: Concurrent Relocate timing, multi-object benchmark (per-run averages). Top: distribution; bottom: median \,\% difference vs baseline.}
 	\label{fig:app-gc-multi-old-relocate}
 \end{figure}
 
@@ -596,7 +597,7 @@ Additional GC timing plots are shown for Old Phase: Concurrent Relocate (\cref{f
 \begin{figure}[t]
 	\centering
 	\includegraphics[width=\textwidth]{composite_young_phase_concurrent_mark_slurm-5118807_combined_gc_single.pdf}
-	\caption[Young Phase: Concurrent Mark timing (single-object)]{Young Phase: Concurrent Mark timing, single-object benchmark (per-run maxima). Top: distribution; bottom: median \% difference vs baseline.}
+	\caption[Young Phase: Concurrent Mark timing (single-object)]{Young Phase: Concurrent Mark timing, single-object benchmark (per-run maxima). Top: distribution; bottom: median \,\% difference vs baseline.}
 	\label{fig:app-gc-single-young-mark}
 \end{figure}
 
@@ -604,7 +605,7 @@ Additional GC timing plots are shown for Old Phase: Concurrent Relocate (\cref{f
 \begin{figure}[t]
 	\centering
 	\includegraphics[width=\textwidth]{composite_young_phase_concurrent_mark_slurm-5118807_combined_gc_multi.pdf}
-	\caption[Young Phase: Concurrent Mark timing (multi-object)]{Young Phase: Concurrent Mark timing, multi-object benchmark (per-run averages). Top: distribution; bottom: median \% difference vs baseline.}
+	\caption[Young Phase: Concurrent Mark timing (multi-object)]{Young Phase: Concurrent Mark timing, multi-object benchmark (per-run averages). Top: distribution; bottom: median \,\% difference vs baseline.}
 	\label{fig:app-gc-multi-young-mark}
 \end{figure}
 
@@ -612,7 +613,7 @@ Additional GC timing plots are shown for Old Phase: Concurrent Relocate (\cref{f
 \begin{figure}[t]
 	\centering
 	\includegraphics[width=\textwidth]{composite_young_phase_concurrent_relocate_slurm-5118807_combined_gc_single.pdf}
-	\caption[Young Phase: Concurrent Relocate timing (single-object)]{Young Phase: Concurrent Relocate timing, single-object benchmark (per-run maxima). Top: distribution; bottom: median \% difference vs baseline.}
+	\caption[Young Phase: Concurrent Relocate timing (single-object)]{Young Phase: Concurrent Relocate timing, single-object benchmark (per-run maxima). Top: distribution; bottom: median \,\% difference vs baseline.}
 	\label{fig:app-gc-single-young-relocate}
 \end{figure}
 
@@ -620,7 +621,7 @@ Additional GC timing plots are shown for Old Phase: Concurrent Relocate (\cref{f
 \begin{figure}[t]
 	\centering
 	\includegraphics[width=\textwidth]{composite_young_phase_concurrent_relocate_slurm-5118807_combined_gc_multi.pdf}
-	\caption[Young Phase: Concurrent Relocate timing (multi-object)]{Young Phase: Concurrent Relocate timing, multi-object benchmark (per-run averages). Top: distribution; bottom: median \% difference vs baseline.}
+	\caption[Young Phase: Concurrent Relocate timing (multi-object)]{Young Phase: Concurrent Relocate timing, multi-object benchmark (per-run averages). Top: distribution; bottom: median \,\% difference vs baseline.}
 	\label{fig:app-gc-multi-young-relocate}
 \end{figure}
 

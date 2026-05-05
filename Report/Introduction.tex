@@ -10,7 +10,7 @@
     This inefficiency has previously been identified in the OpenJDK bug tracker~\cite{JDK-8029205}, which notes the unnecessary traversal of the pending list for references without a \texttt{ReferenceQueue}. However, as of April 2026, no implementation addressing this issue has been integrated into the JDK. Building on that observation, this thesis investigates whether targeted modifications to ZGC's reference-processing pipeline can reduce reference-processing overhead. It explores three orthogonal optimisation approaches for \texttt{WeakReference}-based processing: skipping the enqueue path for references without queues, replacing the intrusive linked list with a dynamic array, and optimising the codepath for clearing references. In addition, it examines a weak-field mechanism as an alternative implementation of weak semantics that avoids \texttt{WeakReference} objects entirely.
 
     \section{Motivation}
-    \label{sec:motivation}
+    \label{sec:intro-motivation}
 
         Weak references, unlike regular references, require explicit processing by the JVM garbage collector~\cite{openjdk-zreferenceprocessor-cpp,openjdk-referenceprocessor-cpp}. Each discovered weak reference must be individually evaluated, its referent field cleared if the referent is unreachable, and the reference potentially enqueued. This per-reference processing cost scales linearly with the number of weak references, making it a bottleneck in applications that allocate many weak references.
 
@@ -19,12 +19,12 @@
         ZGC's concurrent architecture makes both of these inefficiencies particularly relevant. Because ZGC processes references concurrently with the application~\cite{jep333-zgc,openjdk-zreferenceprocessor-cpp}, any reduction in per-reference overhead translates into better application performance. This motivates two complementary lines of investigation: optimising the existing \texttt{WeakReference} pipeline for the queue-less case, and exploring whether weak semantics expressed through annotated object fields can reduce overhead further by avoiding \texttt{WeakReference} objects altogether.
 
     \section{Problem Statement}
-    \label{sec:problem-statement}
+    \label{sec:intro-problem}
 
         The current ZGC reference processing pipeline does not distinguish between weak references with and without a \texttt{ReferenceQueue} during its phases~\cite{openjdk-zreferenceprocessor-cpp}. All cleared references are threaded onto a pending list, transferred to the \texttt{ReferenceHandler} thread, and iterated regardless of whether they will actually be enqueued or not~\cite{openjdk-reference-java}. Additionally, the intrusive linked-list data structure used for discovered references exhibits poor cache locality~\cite{drepper07-memory}. Beyond these pipeline inefficiencies, representing weak semantics through separate \texttt{WeakReference} objects introduces object and heap overhead that may be avoidable if weak semantics is instead expressed directly through annotated object fields.
 
     \section{Research Questions}
-    \label{sec:research-questions}
+    \label{sec:intro-rqs}
         This thesis addresses the following research questions:
         \begin{itemize}
             \item[\textbf{RQ1}] \refstepcounter{researchquestion}\label{rq:weakref-opt} How do modifications to ZGC's processing of \texttt{WeakReference} objects without a \texttt{ReferenceQueue} affect the wall-clock time of reference processing, the total GC cycle time, the GC memory footprint, and Java heap usage in select workloads?
@@ -33,7 +33,7 @@
 
 
     \section{Scope and Delimitations}
-    \label{sec:scope}
+    \label{sec:intro-scope}
         This thesis focuses on the reference processing pipeline within ZGC, specifically targeting weak references without a \texttt{ReferenceQueue}. The primary implementation work concerns \texttt{WeakReference}-based processing, with weak fields treated as an extension evaluated in the same benchmarking framework. Although the optimisation approaches are described in general terms, the implementation and evaluation remain ZGC-specific. Furthermore, some of the optimisations, such as the optimised clear path, may have broader applicability beyond weak references without a \texttt{ReferenceQueue}. However, those broader applications fall outside the scope of this thesis and are not evaluated.
 
         The correctness of the optimisations is only verified through the standard OpenJDK test suite and manual inspection. Performance measurements are conducted on a single hardware platform under controlled conditions and therefore may not generalise to all environments.

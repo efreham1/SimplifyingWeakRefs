@@ -1,10 +1,10 @@
 \chapter{Background}
 \label{chap:background}
 
-To answer the research questions posed in \cref{sec:research-questions}, it is necessary to understand key concepts of the Java Virtual Machine's (JVM) garbage collection mechanisms, the design and implementation of the Z Garbage Collector (ZGC), the Java reference types and their processing pipeline within ZGC, and general principles of garbage collection.
+To answer the research questions posed in \cref{sec:intro-rqs}, it is necessary to understand key concepts of the Java Virtual Machine's (JVM) garbage collection mechanisms, the design and implementation of the Z Garbage Collector (ZGC), the Java reference types and their processing pipeline within ZGC, and general principles of garbage collection.
 
 \section{Garbage Collection in the JVM}
-\label{sec:gc-overview}
+\label{sec:bg-gc}
 
 The JVM provides automatic memory management through garbage collection (GC). Rather than requiring the programmer to explicitly allocate and free memory as in languages such as C or C++, the JVM tracks which objects are reachable from the application's root set and reclaims the memory of objects that are no longer reachable. The root set consists of all data that is directly accessible to the application, such as local variables on the stack, static fields, and active threads.
 
@@ -20,7 +20,7 @@ The JVM ships with several garbage collector implementations, each designed with
 This thesis focuses on ZGC, as its low-latency design and concurrent reference processing pipeline can particularly benefit from optimisations that reduce the amount of work done during reference processing.
 
 \subsection{Garbage Collection Phases}
-\label{subsec:gc-phases}
+\label{subsec:bg-gc-phases}
 
 Garbage collection generally occurs multiple times (cycles) during the lifetime of a Java application. Each cycle consists of several distinct phases, each with specific responsibilities. The exact phases and their order can vary between collectors, but a common structure is as follows:
 
@@ -37,7 +37,7 @@ Garbage collection generally occurs multiple times (cycles) during the lifetime 
 The order and concurrency model of these phases varies significantly between collectors. Serial and Parallel GC typically perform all phases in stop-the-world pauses. G1 performs marking and sweeping mostly concurrently with short pauses for synchronisation. ZGC performs marking, reference processing, and relocation concurrently, using barriers to maintain consistency with concurrent application threads.
 
 \subsection{Garbage Collection Barriers}
-\label{subsec:gc-barriers-general}
+\label{subsec:bg-gc-barriers}
 
 In JVM garbage collectors, a \emph{barrier} is a small piece of code inserted around memory accesses so that the collector can maintain correctness while the application is running~\cite{oracle-gc-implementation}. The term is slightly misleading: barriers are not global locks and do not stop threads. Instead, they are local checks or bookkeeping actions attached to individual loads and stores of object references~\cite{oracle-gc-implementation,jep333-zgc,openjdk-zbarrier-cpp}.
 
@@ -51,7 +51,7 @@ Two broad classes are common:
 \end{itemize}
 
 \subsection{Generational Collection}
-\label{subsec:generational}
+\label{subsec:bg-gc-generational}
 
 In current Oracle JDK releases, all four supported JVM garbage collectors (Serial, Parallel, G1, and Z) use \emph{generational collection}, based on the \emph{weak generational hypothesis}: most objects die young, and those that survive tend to remain live for a long time~\cite{lieberman81-realtime-gc}. To exploit this hypothesis, the heap is divided into at least two generations:
 
@@ -64,7 +64,7 @@ ZGC adopted generational collection starting with JDK~21~\cite{jep439-genzgc}. I
 
 
 \section{Java Reference Types}
-\label{sec:reference-types}
+\label{sec:bg-reftypes}
 
 In addition to ordinary (strong) references, Java provides \emph{reference objects} in the \texttt{java.lang.ref} package~\cite{oracle-ref-javadoc,openjdk-reference-java} that allow applications to reference objects without preventing their garbage collection. These reference types are:
 
@@ -78,7 +78,7 @@ In addition to ordinary (strong) references, Java provides \emph{reference objec
 All four types extend the abstract class \texttt{Reference<T>} (in the \texttt{java.lang.ref} package), which defines the key fields of the reference object and the API for retrieving the referent, clearing the referent field, and checking if it is enqueued.
 
 \subsection{The Reference Object Lifecycle}
-\label{subsec:ref-lifecycle}
+\label{subsec:bg-reftypes-lifecycle}
 
 Each \texttt{Reference} object maintains several fields that track its state~\cite{openjdk-reference-java}:
 
@@ -98,7 +98,7 @@ A reference object transitions through the following states during its lifetime~
     \item \textbf{Inactive}   The reference has been dequeued by the application, or was created without a queue and has been cleared. It is no longer tracked by the GC or queuing infrastructure.
 \end{enumerate}
 
-An important observation is that references created \emph{without} a \texttt{ReferenceQueue} can transition directly from Active to Inactive, bypassing the Pending and Enqueued states entirely. However, as discussed in \cref{sec:ref-processing}, the default implementation does not take advantage of this shortcut. The lifecycle and this direct shortcut path are illustrated in \cref{fig:reference-lifecycle}.
+An important observation is that references created \emph{without} a \texttt{ReferenceQueue} can transition directly from Active to Inactive, bypassing the Pending and Enqueued states entirely. However, as discussed in \cref{sec:bg-refproc}, the default implementation does not take advantage of this shortcut. The lifecycle and this direct shortcut path are illustrated in \cref{fig:reference-lifecycle}.
 
 \begin{figure}[t]
 \centering
@@ -122,7 +122,7 @@ An important observation is that references created \emph{without} a \texttt{Ref
 \end{figure}
 
 \subsection{WeakReference and ReferenceQueue}
-\label{subsec:weakref-queue}
+\label{subsec:bg-reftypes-queue}
 
 A \texttt{WeakReference} provides two constructors (with and without a \texttt{ReferenceQueue}), as shown in \cref{lst:weakref-constructors} and implemented in OpenJDK~\cite{openjdk-weakreference-java}.
 
@@ -143,7 +143,7 @@ public WeakReference(T referent, ReferenceQueue<? super T> q) {
 \end{listing}
 
 
-When a \texttt{WeakReference} is created with a \texttt{ReferenceQueue}, the application can be notified when the referent is collected. When created \emph{without} a queue, the reference serves only as a conditional pointer, the application can call \texttt{get()} to check whether the referent is still alive, but receives no notification upon clearing.
+When a \texttt{WeakReference} is created with a \texttt{ReferenceQueue}, the application can be notified when the referent is collected. When created \emph{without} a queue, the reference serves only as a conditional pointer: the application can call \texttt{get()} to check whether the referent is still alive, but receives no notification upon clearing.
 
 The \texttt{ReferenceQueue} is implemented as a synchronized singly-linked list using the \texttt{next} field of the \texttt{Reference} objects. It provides \texttt{poll()} for non-blocking retrieval and \texttt{remove()} for blocking retrieval with an optional timeout~\cite{openjdk-referencequeue-java}. This is the mechanism by which applications can react to the collection of referents, for example to clean up associated resources.
 
@@ -151,7 +151,7 @@ A key insight for this thesis is that Java explicitly supports queue-less weak r
 
 
 \section{The JVM Execution Model}
-\label{sec:jvm-execution}
+\label{sec:bg-jvm}
 
 To understand how garbage-collector barriers are injected and why ZGC requires different components for each execution tier, it is helpful to examine HotSpot's tiered execution model, which balances start-up latency against sustained throughput. Three execution tiers are relevant to this thesis:
 
@@ -165,16 +165,16 @@ To understand how garbage-collector barriers are injected and why ZGC requires d
 
 In tiered compilation, methods move through these tiers as their execution frequency increases. A method typically starts in the interpreter, may then be compiled by C1, and can eventually be recompiled by C2 once sufficient profiling data has been collected.
 
-\paragraph{Relevance to GC barriers.} Because a read barrier must intercept every load from the heap, and such loads occur in all three tiers, each tier requires its own barrier implementation. ZGC therefore ships three separate barrier components: \texttt{ZBarrierSetAssembler} generates barrier stubs embedded in the interpreter's dispatch table, \texttt{ZBarrierSetC1} inserts barrier nodes during C1 intermediate representation construction, and \texttt{ZBarrierSetC2} integrates barriers into the C2 sea-of-nodes graph~\cite{openjdk-zbarrier-cpp}. All three components obey the same decorator-driven barrier selection logic described in \cref{subsec:access-decorators}.
+\paragraph{Relevance to GC barriers.} Because a read barrier must intercept every load from the heap, and such loads occur in all three tiers, each tier requires its own barrier implementation. ZGC therefore ships three separate barrier components: \texttt{ZBarrierSetAssembler} generates barrier stubs embedded in the interpreter's dispatch table, \texttt{ZBarrierSetC1} inserts barrier nodes during C1 intermediate representation construction, and \texttt{ZBarrierSetC2} integrates barriers into the C2 sea-of-nodes graph~\cite{openjdk-zbarrier-cpp}. All three components obey the same decorator-driven barrier selection logic described in \cref{subsec:bg-zgc-decorators}.
 
 
 \section{The Z Garbage Collector}
-\label{sec:zgc}
+\label{sec:bg-zgc}
 
 ZGC is a concurrent, region-based, compacting garbage collector included in the JDK since JDK~11 (experimental)~\cite{jep333-zgc} and production-ready since JDK~15~\cite{jep377-zgc-prod}. Starting with JDK~21, ZGC supports generational collection, which is now the default mode~\cite{jep439-genzgc}. The collector targets millisecond-scale pause times that remain bounded regardless of heap size, and supports heaps ranging from a few hundred megabytes to several terabytes~\cite{jep333-zgc}. Achieving these goals while performing the bulk of GC work concurrently is partly realised by two closely related design decisions: encoding GC state directly in heap pointers, and using barriers to act on that state at every pointer access.
 
 \subsection{Coloured Pointers and Barriers}
-\label{subsec:coloured-pointers-and-barriers}
+\label{subsec:bg-zgc-pointers}
 
 ZGC embeds metadata directly in the unused high bits of 64-bit heap pointers. These \emph{colour bits} encode the state of a pointer relative to the current GC phase -- for example, whether the pointed-to object has been remapped after relocation, or which generation it belongs to~\cite{jep333-zgc,openjdk-zaddress-hpp}. Because the state is carried in the pointer itself, the GC can determine the status of a reference without loading the object's header or consulting external tables.
 
@@ -183,14 +183,14 @@ To act on this encoded state, ZGC inserts barriers at every oop load and store. 
 Store barriers serve a complementary role: before overwriting a heap field, the barrier records the field's previous value in a per-thread store-barrier buffer. This record is consumed by the marking phase to satisfy ZGC's snapshot-at-the-beginning (SATB) invariant -- ensuring that objects that were reachable at the start of a marking cycle are not missed -- and by the remembered-set mechanism that tracks cross-generational pointers in the generational case~\cite{openjdk-zbarrier-cpp}.
 
 \subsection{Concurrent Phases and Parallel Workers}
-\label{subsec:concurrent-phases-and-workers}
+\label{subsec:bg-zgc-phases}
 
 A ZGC collection cycle interleaves short stop-the-world pauses, used for root scanning and phase synchronisation, with longer concurrent phases in which marking, reference processing, and relocation proceed alongside running application threads~\cite{jep333-zgc,openjdk-zreferenceprocessor-cpp}. The load and store barriers described above are the mechanism that keeps the heap consistent during these concurrent phases: application threads that load a stale pointer automatically fix it up, and stores that would break the marking invariant are recorded for GC consumption.
 
 Within each phase, ZGC distributes its work across multiple GC worker threads. To minimise contention, workers maintain their own thread-local data structures -- such as per-worker discovered lists during reference discovery -- and merge results into shared state only at well-defined synchronisation points~\cite{openjdk-zworkers-cpp,openjdk-zreferenceprocessor-cpp}. This design avoids the compare-and-swap contention that would arise from multiple threads updating a single shared resource.
 
 \subsection{Access Decorators}
-\label{subsec:access-decorators}
+\label{subsec:bg-zgc-decorators}
 
 Throughout the HotSpot codebase, every load or store is annotated with a \emph{decorator set}: a compile-time or runtime bitmask of type \texttt{DecoratorSet} (a 64-bit integer) whose set bits describe the semantics of the access~\cite{openjdk-accessdecorators-hpp}. The active \texttt{BarrierSet} implementation (e.g.\ \texttt{ZBarrierSet}) inspects this bitmask to decide which barrier variant to invoke, allowing a single generic \texttt{HeapAccess<decorators>::load()} call site to resolve to the correct low-level operation at both compile time (for template-specialised paths) and runtime (for dynamically dispatched paths).
 
@@ -212,7 +212,7 @@ Store barriers are similarly decorator-driven. A normal store carries the decora
 
 
 \section{Reference Processing Pipeline in ZGC}
-\label{sec:ref-processing}
+\label{sec:bg-refproc}
 
 Reference processing is the mechanism by which the garbage collector handles \texttt{Reference} objects discovered during marking. The pipeline has three stages: \emph{discovery}, \emph{processing}, and \emph{enqueueing}. In ZGC, the first two stages run concurrently with the application during the marking phase, while the enqueue stage involves handing off references to the Java-level \texttt{ReferenceHandler} thread~\cite{openjdk-zreferenceprocessor-cpp,openjdk-reference-java}. An overview of this data flow is shown in \cref{fig:zgc-ref-pipeline}.
 
@@ -243,7 +243,7 @@ Reference processing is the mechanism by which the garbage collector handles \te
 \end{figure}
 
 \subsection{Discovery}
-\label{subsec:discovery}
+\label{subsec:bg-refproc-discovery}
 
 During the concurrent marking phase, when ZGC encounters a \texttt{Reference} object (an instance of \texttt{SoftReference}, \texttt{WeakReference}, \texttt{FinalReference}, or \texttt{PhantomReference}), it evaluates whether the reference should be \emph{discovered}, i.e. added to a list for later processing.
 
@@ -259,7 +259,7 @@ The discovery decision depends on several factors:
 Once a reference is selected for discovery, it is recorded on a \emph{discovered list}. In ZGC, each GC worker thread maintains its own discovered-list head, so discovery is implemented as a cheap, non-atomic prepend to a per-worker list~\cite{openjdk-zreferenceprocessor-cpp}. This avoids CAS contention found in shared processors where multiple threads update the same discovered head~\cite{openjdk-referenceprocessor-cpp}.
 
 \subsection{Processing}
-\label{subsec:processing}
+\label{subsec:bg-refproc-processing}
 
 After marking completes, the discovered lists are processed. For each discovered reference, the collector determines the final fate of the referent:
 
@@ -301,7 +301,7 @@ Generational interactions are important during processing: when a \texttt{Refere
 \end{figure}
 
 \subsection{Enqueue}
-\label{subsec:enqueue}
+\label{subsec:bg-refproc-enqueue}
 
 After a reference's referent field has been cleared, the reference must be made available to the application if it was created with a \texttt{ReferenceQueue}. This happens through the \emph{pending list} mechanism which feeds the \texttt{ReferenceHandler} thread~\cite{openjdk-zreferenceprocessor-cpp,openjdk-reference-java}. The handoff process is as follows:
 
