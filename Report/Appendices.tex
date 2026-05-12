@@ -1,22 +1,22 @@
-\chapter{Usage of Generative Artificial Intelligence Tools}
+\chapter{Usage of \ac{GenAI} Tools}
 \label{app:ai-usage}
 
-The generative artificial intelligence (GenAI) tool GitHub Copilot was used as support during this thesis. It was used under a student licence via Uppsala University. The tool was used to accelerate practical work and improve writing quality. All final technical decisions, implementation choices, and evaluations remained under the author's control.
+The generative artificial intelligence (\ac{GenAI}) tool GitHub Copilot was used as support during this thesis. It was used under a student licence via Uppsala University. The tool was used to accelerate practical work and improve writing quality. All final technical decisions, implementation choices, and evaluations remained under the author's control.
 
 \section{Use During Implementation}
 \label{app:ai-usage-implementation}
 
-GenAI was used as support during coding of the implementation, primarily for discussing alternative implementation approaches, suggesting code edits through auto-complete, and implementing refactorings of already written code.
+\ac{GenAI} was used as support during coding of the implementation, primarily for discussing alternative implementation approaches, suggesting code edits through auto-complete, and implementing refactorings of already written code.
 
 \section{Use for Tests and Scripts}
 \label{app:ai-usage-tests-scripts}
 
-GenAI was used to completely generate several test files and automation scripts used during this thesis, including scripts for benchmarking workflows and result-processing utilities. These generated artefacts were reviewed and validated through repeated execution.
+\ac{GenAI} was used to completely generate several test files and automation scripts used during this thesis, including scripts for benchmarking workflows and result-processing utilities. These generated artefacts were reviewed and validated through repeated execution.
 
 \section{Use During Writing}
 \label{app:ai-usage-writing}
 
-GenAI was used as writing support in four main ways:
+\ac{GenAI} was used as writing support in four main ways:
 
 \begin{itemize}
 	\item Suggesting rephrasing for clarity, tone, and structure.
@@ -25,229 +25,72 @@ GenAI was used as writing support in four main ways:
 	\item Writing the first draft of the abstract with the context of the entire finished report.
 \end{itemize}
 
-All GenAI-generated text was manually edited and verified against primary sources before inclusion in the final report.
+All \ac{GenAI}-generated text was manually edited and verified against primary sources before inclusion in the final report.
 
-\chapter{Source Code}
-\label{app:source}
+\chapter{Summary Statistics}
+\label{app:stats}
 
-This appendix provides the key source code for the implemented optimisations. The code for the three core optimisations is from the combined (\texttt{all}) configuration variant, which includes all three optimisations. The code for the weak-field mechanism is from the \texttt{weak\_fields} configuration variant. Complete sources for all variants are available in the \texttt{patches/} directory of the project repository.
+This appendix provides numerical summary statistics (median, mean, and interquartile range) for all configuration variants and the key metrics discussed in \cref{chap:analysis}. All tables are produced automatically by the \texttt{parse\_gc\_stats.py} script from the benchmark CSV data. The single-object benchmark values are per-run maxima; the multi-object benchmark values are per-run averages. Each cell is based on $n = 250$ independent benchmark runs.
 
-\lstset{basicstyle=\ttfamily\footnotesize,columns=flexible}
+\section{Major Collection Time}
+\label{app:stats-major}
 
-\section{Dynamic-array Data Structure}
-\label{app:source-dyn}
-\refstepcounter{listing}
-\addcontentsline{lol}{listing}{\protect\numberline{\thelisting}\texttt{zWeakRefArray.hpp}: Dynamic-array data structure}
+\input{../tables/stats_major_slurm-5118807_combined_gc.tex}
 
-\noindent\textbf{File:} \texttt{zWeakRefArray.hpp}
+\section{Old-Generation Collection Time}
+\label{app:stats-oldgen}
 
-\lstinputlisting[
-	nolol,
-	language=C++
-]{../patches/all/src/hotspot/share/gc/z/zWeakRefArray.hpp}
+\input{../tables/stats_oldgen_slurm-5118807_combined_gc.tex}
 
-\section{Reference Processor}
-\label{app:source-refproc}
+\section{Old Phase: Concurrent Mark}
+\label{app:stats-old-mark}
 
-\subsection{Interface}
-\label{app:source-refproc-iface}
-\refstepcounter{listing}
-\addcontentsline{lol}{listing}{\protect\numberline{\thelisting}\texttt{zReferenceProcessor.hpp}: Reference processor interface (\texttt{all} variant)}
+\input{../tables/stats_old-concurrent-mark_slurm-5118807_combined_gc.tex}
 
-\noindent\textbf{File:} \texttt{zReferenceProcessor.hpp}
+\section{Non-Strong Processing Time}
+\label{app:stats-nonstrong}
 
-\lstinputlisting[
-	nolol,
-	language=C++
-]{../patches/all/src/hotspot/share/gc/z/zReferenceProcessor.hpp}
+\input{../tables/stats_nonstrong_slurm-5118807_combined_gc.tex}
 
-\subsection{Implementation Excerpts}
-\label{app:source-refproc-excerpts}
-\refstepcounter{listing}
-\addcontentsline{lol}{listing}{\protect\numberline{\thelisting}\texttt{zReferenceProcessor.cpp}: Implementation excerpts (\texttt{all} variant)}
+\section{Old Phase: Concurrent Relocate}
+\label{app:stats-old-relocate}
 
-The following excerpts from \texttt{zReferenceProcessor.cpp} show the constructor and per-worker storage setup, the discovery path with queue-less weak-reference routing, the processing paths, and the queue sentinel initialisation.
+\input{../tables/stats_old-relocate_slurm-5118807_combined_gc.tex}
 
-\medskip
-\noindent\textbf{Constructor and per-worker storage:}
+\section{Young Generation (Promote All)}
+\label{app:stats-younggen}
 
-\lstinputlisting[
-	nolol,
-	language=C++,
-	firstline=132,
-	lastline=170
-]{../patches/all/src/hotspot/share/gc/z/zReferenceProcessor.cpp}
+\input{../tables/stats_young-gen_slurm-5118807_combined_gc.tex}
 
-\noindent\textbf{Discovery path with queue-less routing:}
+\section{Young Phase: Concurrent Mark}
+\label{app:stats-young-mark}
 
-\lstinputlisting[
-	nolol,
-	language=C++,
-	firstline=288,
-	lastline=370
-]{../patches/all/src/hotspot/share/gc/z/zReferenceProcessor.cpp}
+\input{../tables/stats_young-concurrent-mark_slurm-5118807_combined_gc.tex}
 
-\noindent\textbf{Processing paths for separate discovered lists and dynamic arrays:}
+\section{Young Phase: Concurrent Relocate}
+\label{app:stats-young-relocate}
 
-\lstinputlisting[
-	nolol,
-	language=C++,
-	firstline=419,
-	lastline=475
-]{../patches/all/src/hotspot/share/gc/z/zReferenceProcessor.cpp}
+\input{../tables/stats_young-relocate_slurm-5118807_combined_gc.tex}
 
-\noindent\textbf{Queue sentinel initialisation and queue checks:}
+\section{Concurrent Mark Follow Time}
+\label{app:stats-markfollow}
 
-\lstinputlisting[
-	nolol,
-	language=C++,
-	firstline=680,
-	lastline=713
-]{../patches/all/src/hotspot/share/gc/z/zReferenceProcessor.cpp}
+\input{../tables/stats_markfollow_slurm-5118807_combined_gc.tex}
 
-\section{Weak Fields}
-\label{app:source-wf}
+\section{Auxiliary \ac{GC} Memory}
+\label{app:stats-mem-aux}
 
-\subsection{Annotation}
-\label{app:source-wf-annotation}
-\refstepcounter{listing}
-\addcontentsline{lol}{listing}{\protect\numberline{\thelisting}\texttt{weak.java}: Weak-field annotation}
+\input{../tables/stats_memory_aux_slurm-5118807_combined_gc.tex}
 
-\noindent\textbf{File:} \texttt{java/lang/ref/weak.java}
+\section{Java Heap}
+\label{app:stats-mem-heap}
 
-\lstinputlisting[
-	nolol,
-	language=Java
-]{../patches/weak_fields/src/java.base/share/classes/java/lang/ref/weak.java}
+\input{../tables/stats_memory_java_heap_slurm-5118807_combined_gc.tex}
 
-\subsection{Data Structure}
-\label{app:source-wf-array}
-\refstepcounter{listing}
-\addcontentsline{lol}{listing}{\protect\numberline{\thelisting}\texttt{zWeakFieldArray.hpp}: Weak-field data structure}
+\section{Total Process \ac{RSS}}
+\label{app:stats-mem-rss}
 
-\noindent\textbf{File:} \texttt{zWeakFieldArray.hpp}
-
-\lstinputlisting[
-	nolol,
-	language=C++
-]{../patches/weak_fields/src/hotspot/share/gc/z/zWeakFieldArray.hpp}
-
-\subsection{Reference Processor}
-\label{app:source-wf-refproc}
-\refstepcounter{listing}
-\addcontentsline{lol}{listing}{\protect\numberline{\thelisting}\texttt{zReferenceProcessor.hpp} and excerpts (\texttt{weak\_fields} variant)}
-
-\noindent\textbf{File:} \texttt{zReferenceProcessor.hpp}
-
-\lstinputlisting[
-	nolol,
-	language=C++
-]{../patches/weak_fields/src/hotspot/share/gc/z/zReferenceProcessor.hpp}
-
-\medskip
-The following excerpts from \texttt{zReferenceProcessor.cpp} show the discovery filtering, the discovery function, and the processing function.
-
-\medskip
-\noindent\textbf{Discovery filtering:}
-
-\lstinputlisting[
-	nolol,
-	language=C++,
-	firstline=212,
-	lastline=226
-]{../patches/weak_fields/src/hotspot/share/gc/z/zReferenceProcessor.cpp}
-
-\noindent\textbf{Weak-field discovery:}
-
-\lstinputlisting[
-	nolol,
-	language=C++,
-	firstline=326,
-	lastline=360
-]{../patches/weak_fields/src/hotspot/share/gc/z/zReferenceProcessor.cpp}
-
-\noindent\textbf{Weak-field processing:}
-
-\lstinputlisting[
-	nolol,
-	language=C++,
-	firstline=393,
-	lastline=433
-]{../patches/weak_fields/src/hotspot/share/gc/z/zReferenceProcessor.cpp}
-
-\subsection{Marking Closure}
-\label{app:source-wf-marking}
-\refstepcounter{listing}
-\addcontentsline{lol}{listing}{\protect\numberline{\thelisting}\texttt{zMark.cpp}: Weak-field discovery during marking}
-
-The following excerpt from \texttt{zMark.cpp} shows how weak-annotated fields are detected and diverted to the weak-field discovery path during object marking.
-
-\medskip
-\noindent\textbf{Field annotation check and discovery diversion:}
-
-\lstinputlisting[
-	nolol,
-	language=C++,
-	firstline=297,
-	lastline=362
-]{../patches/weak_fields/src/hotspot/share/gc/z/zMark.cpp}
-
-\subsection{Compiler and Interpreter Support}
-\label{app:source-wf-compiler}
-\refstepcounter{listing}
-\addcontentsline{lol}{listing}{\protect\numberline{\thelisting}Compiler and interpreter support for weak fields}
-
-The following excerpts show how the \texttt{@weak} decorator is applied in each execution tier. In all three tiers, the pattern is the same: if the field carries the \texttt{weak} flag and ZGC is active, \texttt{ON\_WEAK\_OOP\_REF} is added to the decorator set before the access is performed.
-
-\medskip
-\noindent\textbf{C2 (opto/parse3.cpp) -- field load and store:}
-
-\lstinputlisting[
-	nolol,
-	language=C++,
-	firstline=107,
-	lastline=260
-]{../patches/weak_fields/src/hotspot/share/opto/parse3.cpp}
-
-\medskip
-\noindent\textbf{C1 (c1/c1\_LIRGenerator.cpp) -- field load decorator:}
-
-\lstinputlisting[
-	nolol,
-	language=C++,
-	firstline=1793,
-	lastline=1810
-]{../patches/weak_fields/src/hotspot/share/c1/c1_LIRGenerator.cpp}
-
-\medskip
-\noindent\textbf{C1 (c1/c1\_LIRGenerator.cpp) -- field store decorator:}
-
-\lstinputlisting[
-	nolol,
-	language=C++,
-	firstline=1593,
-	lastline=1610
-]{../patches/weak_fields/src/hotspot/share/c1/c1_LIRGenerator.cpp}
-
-\medskip
-\noindent\textbf{Template Interpreter (cpu/x86/templateTable\_x86.cpp) -- getfield weak path:}
-
-\lstinputlisting[
-	nolol,
-	language=C++,
-	firstline=2573,
-	lastline=2592
-]{../patches/weak_fields/src/hotspot/cpu/x86/templateTable_x86.cpp}
-
-\medskip
-\noindent\textbf{Template Interpreter (cpu/x86/templateTable\_x86.cpp) -- putfield weak path:}
-
-\lstinputlisting[
-	nolol,
-	language=C++,
-	firstline=2828,
-	lastline=2851
-]{../patches/weak_fields/src/hotspot/cpu/x86/templateTable_x86.cpp}
+\input{../tables/stats_memory_rss_slurm-5118807_combined_gc.tex}
 
 \chapter{Per-Variant Patch Details}
 \label{app:patch-details}
@@ -505,77 +348,12 @@ The following tables list every modified or added file in each patch variant, to
 \textbf{Total} & \textbf{+940} & \textbf{$-$257} \\
 \end{longtable}
 
-\chapter{Summary Statistics}
-\label{app:stats}
-
-This appendix provides numerical summary statistics (median, mean, and interquartile range) for all configuration variants and the key metrics discussed in \cref{chap:analysis}. All tables are produced automatically by the \texttt{parse\_gc\_stats.py} script from the benchmark CSV data. The single-object benchmark values are per-run maxima; the multi-object benchmark values are per-run averages. Each cell is based on $n = 250$ independent benchmark runs.
-
-\section{Major Collection Time}
-\label{app:stats-major}
-
-\input{../tables/stats_major_slurm-5118807_combined_gc.tex}
-
-\section{Old-Generation Collection Time}
-\label{app:stats-oldgen}
-
-\input{../tables/stats_oldgen_slurm-5118807_combined_gc.tex}
-
-\section{Old Phase: Concurrent Mark}
-\label{app:stats-old-mark}
-
-\input{../tables/stats_old-concurrent-mark_slurm-5118807_combined_gc.tex}
-
-\section{Non-Strong Processing Time}
-\label{app:stats-nonstrong}
-
-\input{../tables/stats_nonstrong_slurm-5118807_combined_gc.tex}
-
-\section{Old Phase: Concurrent Relocate}
-\label{app:stats-old-relocate}
-
-\input{../tables/stats_old-relocate_slurm-5118807_combined_gc.tex}
-
-\section{Young Generation (Promote All)}
-\label{app:stats-younggen}
-
-\input{../tables/stats_young-gen_slurm-5118807_combined_gc.tex}
-
-\section{Young Phase: Concurrent Mark}
-\label{app:stats-young-mark}
-
-\input{../tables/stats_young-concurrent-mark_slurm-5118807_combined_gc.tex}
-
-\section{Young Phase: Concurrent Relocate}
-\label{app:stats-young-relocate}
-
-\input{../tables/stats_young-relocate_slurm-5118807_combined_gc.tex}
-
-\section{Concurrent Mark Follow Time}
-\label{app:stats-markfollow}
-
-\input{../tables/stats_markfollow_slurm-5118807_combined_gc.tex}
-
-\section{Auxiliary GC Memory}
-\label{app:stats-mem-aux}
-
-\input{../tables/stats_memory_aux_slurm-5118807_combined_gc.tex}
-
-\section{Java Heap}
-\label{app:stats-mem-heap}
-
-\input{../tables/stats_memory_java_heap_slurm-5118807_combined_gc.tex}
-
-\section{Total Process RSS}
-\label{app:stats-mem-rss}
-
-\input{../tables/stats_memory_rss_slurm-5118807_combined_gc.tex}
-
 \chapter{Additional Benchmark Plots}
 \label{app:additional-plots}
 
-This appendix contains the remaining GC timing and memory plots from the benchmark evaluation. The metrics shown here (Old Phase: Concurrent Relocate, Young Phase: Concurrent Mark, and Young Phase: Concurrent Relocate) were not included in the main evaluation chapter as they are less central to the optimised reference processing pipeline. Memory maximum distributions are included here to complement the median percentage-difference histograms shown in the main chapter.
+This appendix contains the remaining \ac{GC} timing and memory plots from the benchmark evaluation. The metrics shown here (Old Phase: Concurrent Relocate, Young Phase: Concurrent Mark, and Young Phase: Concurrent Relocate) were not included in the main evaluation chapter as they are less central to the optimised reference processing pipeline. Memory maximum distributions are included here to complement the median percentage-difference histograms shown in the main chapter.
 
-Additional GC timing plots are shown for Old Phase: Concurrent Relocate (\cref{fig:app-gc-single-old-relocate,fig:app-gc-multi-old-relocate}), Young Phase: Concurrent Mark (\cref{fig:app-gc-single-young-mark,fig:app-gc-multi-young-mark}), and Young Phase: Concurrent Relocate (\cref{fig:app-gc-single-young-relocate,fig:app-gc-multi-young-relocate}) for both benchmark families. Memory per-run maximum distributions are shown for auxiliary GC memory, Java heap, and total process RSS for both the single-object and multi-object benchmarks (\cref{fig:app-mem-single-max,fig:app-mem-multi-max}).
+Additional \ac{GC} timing plots are shown for Old Phase: Concurrent Relocate (\cref{fig:app-gc-single-old-relocate,fig:app-gc-multi-old-relocate}), Young Phase: Concurrent Mark (\cref{fig:app-gc-single-young-mark,fig:app-gc-multi-young-mark}), and Young Phase: Concurrent Relocate (\cref{fig:app-gc-single-young-relocate,fig:app-gc-multi-young-relocate}) for both benchmark families. Memory per-run maximum distributions are shown for auxiliary \ac{GC} memory, Java heap, and total process \ac{RSS} for both the single-object and multi-object benchmarks (\cref{fig:app-mem-single-max,fig:app-mem-multi-max}).
 
 % ---------- Old Phase: Concurrent Relocate – single ----------
 \begin{figure}[t]
@@ -629,7 +407,7 @@ Additional GC timing plots are shown for Old Phase: Concurrent Relocate (\cref{f
 \begin{figure}[t]
 	\centering
 	\includegraphics[width=\textwidth]{memory_max_slurm-5118807_combined_gc_single.pdf}
-	\caption[Memory per-run maximum distributions (single-object)]{Distribution of per-run maximum memory across variants, single-object benchmark. Top to bottom: auxiliary GC memory, Java heap, total process RSS.}
+	\caption[Memory per-run maximum distributions (single-object)]{Distribution of per-run maximum memory across variants, single-object benchmark. Top to bottom: auxiliary \ac{GC} memory, Java heap, total process \ac{RSS}.}
 	\label{fig:app-mem-single-max}
 \end{figure}
 
@@ -637,6 +415,228 @@ Additional GC timing plots are shown for Old Phase: Concurrent Relocate (\cref{f
 \begin{figure}[t]
 	\centering
 	\includegraphics[width=\textwidth]{memory_max_slurm-5118807_combined_gc_multi.pdf}
-	\caption[Memory per-run maximum distributions (multi-object)]{Distribution of per-run maximum memory across variants, multi-object benchmark. Top to bottom: auxiliary GC memory, Java heap, total process RSS.}
+	\caption[Memory per-run maximum distributions (multi-object)]{Distribution of per-run maximum memory across variants, multi-object benchmark. Top to bottom: auxiliary \ac{GC} memory, Java heap, total process \ac{RSS}.}
 	\label{fig:app-mem-multi-max}
 \end{figure}
+\chapter{Source Code}
+\label{app:source}
+
+This appendix provides the key source code for the implemented optimisations. The code for the three core optimisations is from the combined (\texttt{all}) configuration variant, which includes all three optimisations. The code for the weak-field mechanism is from the \texttt{weak\_fields} configuration variant. Complete sources for all variants are available in the \texttt{patches/} directory of the project repository.
+
+\lstset{basicstyle=\ttfamily\footnotesize,columns=flexible}
+
+\section{Dynamic-array Data Structure}
+\label{app:source-dyn}
+\refstepcounter{listing}
+\addcontentsline{lol}{listing}{\protect\numberline{\thelisting}\texttt{zWeakRefArray.hpp}: Dynamic-array data structure}
+
+\noindent\textbf{File:} \texttt{zWeakRefArray.hpp}
+
+\lstinputlisting[
+	nolol,
+	language=C++
+]{../patches/all/src/hotspot/share/gc/z/zWeakRefArray.hpp}
+
+\section{Reference Processor}
+\label{app:source-refproc}
+
+\subsection{Interface}
+\label{app:source-refproc-iface}
+\refstepcounter{listing}
+\addcontentsline{lol}{listing}{\protect\numberline{\thelisting}\texttt{zReferenceProcessor.hpp}: Reference processor interface (\texttt{all} variant)}
+
+\noindent\textbf{File:} \texttt{zReferenceProcessor.hpp}
+
+\lstinputlisting[
+	nolol,
+	language=C++
+]{../patches/all/src/hotspot/share/gc/z/zReferenceProcessor.hpp}
+
+\subsection{Implementation Excerpts}
+\label{app:source-refproc-excerpts}
+\refstepcounter{listing}
+\addcontentsline{lol}{listing}{\protect\numberline{\thelisting}\texttt{zReferenceProcessor.cpp}: Implementation excerpts (\texttt{all} variant)}
+
+The following excerpts from \texttt{zReferenceProcessor.cpp} show the constructor and per-worker storage setup, the discovery path with queue-less weak-reference routing, the processing paths, and the queue sentinel initialisation.
+
+\medskip
+\noindent\textbf{Constructor and per-worker storage:}
+
+\lstinputlisting[
+	nolol,
+	language=C++,
+	firstline=132,
+	lastline=170
+]{../patches/all/src/hotspot/share/gc/z/zReferenceProcessor.cpp}
+
+\noindent\textbf{Discovery path with queue-less routing:}
+
+\lstinputlisting[
+	nolol,
+	language=C++,
+	firstline=288,
+	lastline=370
+]{../patches/all/src/hotspot/share/gc/z/zReferenceProcessor.cpp}
+
+\noindent\textbf{Processing paths for separate discovered lists and dynamic arrays:}
+
+\lstinputlisting[
+	nolol,
+	language=C++,
+	firstline=419,
+	lastline=475
+]{../patches/all/src/hotspot/share/gc/z/zReferenceProcessor.cpp}
+
+\noindent\textbf{Queue sentinel initialisation and queue checks:}
+
+\lstinputlisting[
+	nolol,
+	language=C++,
+	firstline=680,
+	lastline=713
+]{../patches/all/src/hotspot/share/gc/z/zReferenceProcessor.cpp}
+
+\section{Weak Fields}
+\label{app:source-wf}
+
+\subsection{Annotation}
+\label{app:source-wf-annotation}
+\refstepcounter{listing}
+\addcontentsline{lol}{listing}{\protect\numberline{\thelisting}\texttt{weak.java}: Weak-field annotation}
+
+\noindent\textbf{File:} \texttt{java/lang/ref/weak.java}
+
+\lstinputlisting[
+	nolol,
+	language=Java
+]{../patches/weak_fields/src/java.base/share/classes/java/lang/ref/weak.java}
+
+\subsection{Data Structure}
+\label{app:source-wf-array}
+\refstepcounter{listing}
+\addcontentsline{lol}{listing}{\protect\numberline{\thelisting}\texttt{zWeakFieldArray.hpp}: Weak-field data structure}
+
+\noindent\textbf{File:} \texttt{zWeakFieldArray.hpp}
+
+\lstinputlisting[
+	nolol,
+	language=C++
+]{../patches/weak_fields/src/hotspot/share/gc/z/zWeakFieldArray.hpp}
+
+\subsection{Reference Processor}
+\label{app:source-wf-refproc}
+\refstepcounter{listing}
+\addcontentsline{lol}{listing}{\protect\numberline{\thelisting}\texttt{zReferenceProcessor.hpp} and excerpts (\texttt{weak\_fields} variant)}
+
+\noindent\textbf{File:} \texttt{zReferenceProcessor.hpp}
+
+\lstinputlisting[
+	nolol,
+	language=C++
+]{../patches/weak_fields/src/hotspot/share/gc/z/zReferenceProcessor.hpp}
+
+\medskip
+The following excerpts from \texttt{zReferenceProcessor.cpp} show the discovery filtering, the discovery function, and the processing function.
+
+\medskip
+\noindent\textbf{Discovery filtering:}
+
+\lstinputlisting[
+	nolol,
+	language=C++,
+	firstline=212,
+	lastline=226
+]{../patches/weak_fields/src/hotspot/share/gc/z/zReferenceProcessor.cpp}
+
+\noindent\textbf{Weak-field discovery:}
+
+\lstinputlisting[
+	nolol,
+	language=C++,
+	firstline=326,
+	lastline=360
+]{../patches/weak_fields/src/hotspot/share/gc/z/zReferenceProcessor.cpp}
+
+\noindent\textbf{Weak-field processing:}
+
+\lstinputlisting[
+	nolol,
+	language=C++,
+	firstline=393,
+	lastline=433
+]{../patches/weak_fields/src/hotspot/share/gc/z/zReferenceProcessor.cpp}
+
+\subsection{Marking Closure}
+\label{app:source-wf-marking}
+\refstepcounter{listing}
+\addcontentsline{lol}{listing}{\protect\numberline{\thelisting}\texttt{zMark.cpp}: Weak-field discovery during marking}
+
+The following excerpt from \texttt{zMark.cpp} shows how weak-annotated fields are detected and diverted to the weak-field discovery path during object marking.
+
+\medskip
+\noindent\textbf{Field annotation check and discovery diversion:}
+
+\lstinputlisting[
+	nolol,
+	language=C++,
+	firstline=297,
+	lastline=362
+]{../patches/weak_fields/src/hotspot/share/gc/z/zMark.cpp}
+
+\subsection{Compiler and Interpreter Support}
+\label{app:source-wf-compiler}
+\refstepcounter{listing}
+\addcontentsline{lol}{listing}{\protect\numberline{\thelisting}Compiler and interpreter support for weak fields}
+
+The following excerpts show how the \texttt{@weak} decorator is applied in each execution tier. In all three tiers, the pattern is the same: if the field carries the \texttt{weak} flag and \ac{ZGC} is active, \texttt{ON\_WEAK\_OOP\_REF} is added to the decorator set before the access is performed.
+
+\medskip
+\noindent\textbf{C2 (opto/parse3.cpp) -- field load and store:}
+
+\lstinputlisting[
+	nolol,
+	language=C++,
+	firstline=107,
+	lastline=260
+]{../patches/weak_fields/src/hotspot/share/opto/parse3.cpp}
+
+\medskip
+\noindent\textbf{C1 (c1/c1\_LIRGenerator.cpp) -- field load decorator:}
+
+\lstinputlisting[
+	nolol,
+	language=C++,
+	firstline=1793,
+	lastline=1810
+]{../patches/weak_fields/src/hotspot/share/c1/c1_LIRGenerator.cpp}
+
+\medskip
+\noindent\textbf{C1 (c1/c1\_LIRGenerator.cpp) -- field store decorator:}
+
+\lstinputlisting[
+	nolol,
+	language=C++,
+	firstline=1593,
+	lastline=1610
+]{../patches/weak_fields/src/hotspot/share/c1/c1_LIRGenerator.cpp}
+
+\medskip
+\noindent\textbf{Template Interpreter (cpu/x86/templateTable\_x86.cpp) -- getfield weak path:}
+
+\lstinputlisting[
+	nolol,
+	language=C++,
+	firstline=2573,
+	lastline=2592
+]{../patches/weak_fields/src/hotspot/cpu/x86/templateTable_x86.cpp}
+
+\medskip
+\noindent\textbf{Template Interpreter (cpu/x86/templateTable\_x86.cpp) -- putfield weak path:}
+
+\lstinputlisting[
+	nolol,
+	language=C++,
+	firstline=2828,
+	lastline=2851
+]{../patches/weak_fields/src/hotspot/cpu/x86/templateTable_x86.cpp}
+

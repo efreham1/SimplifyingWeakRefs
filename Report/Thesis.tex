@@ -159,6 +159,9 @@
 % Symbols (checkmark etc.)
 \usepackage{amssymb}
 
+% Acronym list
+\usepackage{acronym}
+
 % Diagrams
 \usepackage{tikz}
 \usetikzlibrary{arrows.meta,positioning,calc,fit}
@@ -220,11 +223,11 @@
 % Abstract
 \abstractdummy{
 	\begin{abstract}
-	Weak references are a non-trivial source of garbage collection overhead in workloads that maintain many weakly reachable objects. In the Z Garbage Collector (ZGC), all discovered weak references follow the same processing pipeline regardless of whether they are associated with a \texttt{ReferenceQueue}, incurring unnecessary pending-list and enqueue-path work for references that are never registered with a queue. This thesis investigates whether targeted modifications to ZGC's reference-processing pipeline can reduce this overhead, and whether representing weak semantics directly in object fields rather than through separate \texttt{WeakReference} objects can reduce overhead further.
+	In Java, weak references are a non-trivial source of garbage collection overhead in workloads that maintain many weakly reachable objects. In the Z Garbage Collector (ZGC), all discovered weak references follow the same processing pipeline regardless of whether they are associated with a \texttt{ReferenceQueue}. For references that are never registered with a queue this leads to unnecessary pending-list and enqueue-path work. This thesis investigates whether targeted modifications to ZGC's reference-processing pipeline can reduce this overhead, and whether representing weak semantics directly in object fields rather than through separate \texttt{WeakReference} objects can reduce overhead further.
 
 	Three orthogonal pipeline optimisations for queue-less \texttt{WeakReference} processing were implemented in an OpenJDK research fork: a skip-enqueue separation that routes queue-less weak references to a separate discovered list, bypassing the pending list entirely; a dynamic-array representation that replaces the intrusive linked list used during reference discovery to improve traversal locality; and a specialised clear path that removes unnecessary per-reference CAS operations. In addition, an exploratory weak-field mechanism was implemented through a Java field annotation and corresponding ZGC VM support, enabling a representation-level comparison under the same experimental setup.
 
-	The implementations were evaluated using synthetic microbenchmarks executed on a supercomputer cluster, with 250 repeated runs per variant under CPU-isolated, exclusive-node conditions. Two benchmark designs were used: a single-object stress benchmark that concentrates the entire weak-reference load into one GC cycle, and a multi-object benchmark that releases references gradually across five GC cycles. All seven combinations of the three \texttt{WeakReference} pipeline optimisations and the separate weak-field variant were compared against an unmodified baseline.
+	The implementations were evaluated using synthetic microbenchmarks executed on a supercomputer cluster, with 250 repeated runs per variant under CPU-isolated, exclusive-node conditions. Two benchmark designs were used: a single-object stress benchmark that concentrates the entire weak-reference load into one GC cycle, and a multi-object benchmark that releases references gradually across five GC cycles. All combinations of the three \texttt{WeakReference} pipeline optimisations and the separate weak-field variant were compared against an unmodified baseline.
 
 	The results show that combining the specialised clear path with the dynamic array is the most effective pipeline configuration. In the single-object benchmark, this combination reduces median non-strong reference-processing time by 81\,\% and median major-collection time by 8\,\%. In the multi-object benchmark, the non-strong subphase reduction is 57\,\%, while the end-to-end major-collection gain remains small. The skip-enqueue separation provides negligible improvement under these workloads, indicating that the gains are driven by improved traversal locality and reduced per-reference work rather than by the list split alone. Dynamic-array variants also incur substantially higher auxiliary GC memory than the linked-list baseline, up to ten times greater in the single-object benchmark. Adding the skip-enqueue separation, as in the \texttt{all} variant, reduces this overhead by approximately 30\% relative to the clear-path-plus-array combination alone, while matching its 81\,\% reduction in non-strong processing time, making \texttt{all} the better-balanced choice among the pipeline configurations.
 
@@ -258,7 +261,7 @@
 
 	The performance evaluations were enabled by resources provided by the National Academic Infrastructure for Supercomputing in Sweden (NAISS), partially funded by the Swedish Research Council through grant agreement no. 2022-06725.
     
-    I want to express my gratitude to my supervisor for his general support throughout this thesis and my subject reviewer for his academic guidance on the thesis as a whole and feedback on this report.
+    I want to express my gratitude to my supervisor Stefan Johansson for his general support throughout this thesis and my subject reviewer Tobias Wrigstad for his academic guidance on the thesis as a whole and feedback on this report.
     
 	Additionally, I want to thank my colleagues at Oracle for their insights and feedback on my work throughout the development process.
     
@@ -279,6 +282,35 @@
     \listoftables
     \listoffigures
 	\listoflistings
+
+    % List of acronyms
+    \chapter*{List of Acronyms}
+    \addcontentsline{toc}{chapter}{List of Acronyms}
+    % Suppress broken list->body forward links: \acs{} never places \label{acro:KEY},
+    % so \AC@hyperref[acro:KEY] in the list would be undefined. Redefine to plain text
+    % within this scope; body->list \hyperlink{KEY} links remain working.
+    \makeatletter\long\def\AC@hyperref[#1]#2{#2}\makeatother
+    \begin{acronym}[UPPMAX]
+        \acro{API}{Application Programming Interface}
+        \acro{CAS}{Compare-And-Swap}
+        \acro{CPU}{Central Processing Unit}
+        \acro{GC}{Garbage Collector / Garbage Collection}
+        \acro{GenAI}{Generative Artificial Intelligence}
+        \acro{IQR}{Interquartile Range}
+        \acro{JDK}{Java Development Kit}
+        \acro{JIT}{Just-In-Time (compilation)}
+        \acro{JVM}{Java Virtual Machine}
+        \acro{NAISS}{National Academic Infrastructure for Supercomputing in Sweden}
+        \acro{NUMA}{Non-Uniform Memory Access}
+        \acro{PEP}{Python Enhancement Proposal}
+        \acro{RAII}{Resource Acquisition Is Initialisation}
+        \acro{RSS}{Resident Set Size}
+        \acro{SATB}{Snapshot-At-The-Beginning}
+        \acro{SLURM}{Simple Linux Utility for Resource Management}
+        \acro{STW}{Stop-The-World}
+        \acro{UPPMAX}{Uppsala Multidisciplinary Center for Advanced Computational Science}
+        \acro{ZGC}{Z Garbage Collector}
+    \end{acronym}
 
 \mainmatter
 \setcounter{page}{1}
