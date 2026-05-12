@@ -112,7 +112,7 @@ benchmark_normalise_cpu_list() {
     local cpu_list=$1
     local -a cpus=()
 
-    mapfile -t cpus < <(benchmark_expand_cpu_list "$cpu_list") || return 1
+    mapfile -t cpus < <(benchmark_expand_cpu_list "$cpu_list" | sort -n) || return 1
     if [ "${#cpus[@]}" -eq 0 ]; then
         benchmark_fail "CPU list resolves to zero CPUs"
         return 1
@@ -255,8 +255,7 @@ benchmark_resolve_core_sets() {
 
         mapfile -t allowed_cpus < <(benchmark_expand_cpu_list "$allowed_list")
         jvm_cpus=("${allowed_cpus[@]:0:jvm_core_count}")
-        aux_start=$((allowed_count - aux_core_count))
-        aux_cpus=("${allowed_cpus[@]:aux_start:aux_core_count}")
+        aux_cpus=("${allowed_cpus[@]:jvm_core_count:aux_core_count}")
 
         BENCHMARK_JVM_CORE_SET="$(IFS=,; printf '%s' "${jvm_cpus[*]}")"
         BENCHMARK_AUX_CORE_SET="$(IFS=,; printf '%s' "${aux_cpus[*]}")"
@@ -567,6 +566,11 @@ run_single() {
         echo "Affinity: $(benchmark_affinity_summary)"
         echo "Args: ${CURRENT_BENCHMARK_ARGS:-<none>}"
         echo "Command: ${cmd[*]}"
+        echo "JVM_CORE_COUNT: ${BENCHMARK_JVM_CORE_COUNT:-}"
+        echo "AUX_CORE_COUNT: ${BENCHMARK_AUX_CORE_COUNT:-}"
+        echo "OUTER_ITERATIONS: ${OUTER_ITERATIONS:-}"
+        echo "WARMUP_ITERATIONS: ${WARMUP_ITERATIONS:-}"
+        echo "COOLDOWN_SECONDS: ${COOLDOWN_SECONDS:-}"
         echo ""
     } >> "$log_file"
 

@@ -4,9 +4,9 @@
 The implemented optimisations described in \cref{chap:design-and-implementation} were evaluated through custom microbenchmarks designed to synthetically target the reference processing pipeline. The benchmarks were executed on a supercomputer cluster under controlled conditions, and the resulting GC timing statistics and memory usage metrics were collected to enable comparison between the baseline and optimised variants.
 
 \section{Optimisation Variants}
-\label{sec:optimisation-variants}
+\label{sec:eval-variants}
 
-Nine optimisation variants were evaluated in total. Eight of them cover all combinations of the three \texttt{WeakReference} pipeline optimisations described in \cref{chap:design-and-implementation}: the optimised clear path, skipping enqueue for queue-less references via separate discovered lists, and the dynamic array. \Cref{tab:eval-variants} shows which optimisations each variant enables. The \texttt{none} variant serves as the unmodified baseline. The remaining variants enable a subset of the three optimisations, allowing their individual and combined effects to be isolated. The \texttt{all} variant enables all three simultaneously. The ninth and final variant, \texttt{weak\_fields}, corresponds to the \texttt{@weak} field annotation described in \cref{sec:weak-fields-method}.
+Nine optimisation variants were evaluated in total. Eight of them cover all combinations of the three \texttt{WeakReference} pipeline optimisations described in \cref{chap:design-and-implementation}: the optimised clear path, skipping enqueue for queue-less references via separate discovered lists, and the dynamic array. \Cref{tab:eval-variants} shows which optimisations each variant enables. The \texttt{none} variant serves as the unmodified baseline. The remaining variants enable a subset of the three optimisations, allowing their individual and combined effects to be isolated. The \texttt{all} variant enables all three simultaneously. The ninth and final variant, \texttt{weak\_fields}, corresponds to the \texttt{@weak} field annotation described in \cref{sec:di-wf}.
 
 \begin{table}[t]
 \centering
@@ -33,50 +33,50 @@ Each variant is implemented as a set of patches under \texttt{patches/<variant>/
 
 \begin{table}[t]
 \centering
-\caption[Patch sizes per variant]{Files changed and diff size per variant relative to upstream. Variants marked with $\dagger$ include the shared base patch (8~files, +43/$-$16~lines) in their totals.}
+\caption[Patch sizes per variant]{Files changed and diff size per variant relative to upstream. Variants marked with $\dagger$ include the shared base patch (8~files, +39/$-$17~lines) in their totals.}
 \label{tab:patch-sizes}
 \begin{tabular}{lrrrrrr}
 \toprule
 \textbf{Variant} & \textbf{Modified} & \textbf{New} & \textbf{Ins.} & \textbf{Del.} & \textbf{Net} \\
 \midrule
-\texttt{all}$^\dagger$             & 10 & 1 & +397 & $-$68  & +329 \\
-\texttt{clear\_path\_dyn}$^\dagger$  & 10 & 1 & +399 & $-$84  & +315 \\
-\texttt{clear\_path\_only}$^\dagger$ & 10 & 0 & +188 & $-$41  & +147 \\
-\texttt{clear\_path\_sep}$^\dagger$  & 10 & 0 & +214 & $-$46  & +168 \\
-\texttt{dyn\_only}        & 2  & 1 & +205 & $-$69  & +136 \\
-\texttt{sep\_dyn}$^\dagger$         & 10 & 1 & +360 & $-$61  & +299 \\
-\texttt{sep\_only}$^\dagger$        & 10 & 0 & +173 & $-$43  & +130 \\
-\texttt{weak\_fields}     & 28 & 2 & +748 & $-$232 & +516 \\
+\texttt{all}$^\dagger$             & 10 & 1 & +436 & $-$65  & +371 \\
+\texttt{clear\_path\_dyn}$^\dagger$  & 10 & 1 & +448 & $-$87  & +361 \\
+\texttt{clear\_path\_only}$^\dagger$ & 10 & 0 & +233 & $-$44  & +189 \\
+\texttt{clear\_path\_sep}$^\dagger$  & 10 & 0 & +256 & $-$43  & +213 \\
+\texttt{dyn\_only}        & 2  & 1 & +210 & $-$43  & +167 \\
+\texttt{sep\_dyn}$^\dagger$         & 10 & 1 & +398 & $-$58  & +340 \\
+\texttt{sep\_only}$^\dagger$        & 10 & 0 & +213 & $-$42  & +171 \\
+\texttt{weak\_fields}     & 27 & 2 & +940 & $-$257 & +683 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 \section{Performance Evaluation}
-\label{sec:performance-evaluation}
+\label{sec:eval-perf}
 
 To evaluate the performance impact of the optimisation approaches, four microbenchmarks were used under controlled conditions: two \texttt{WeakReference}-based benchmarks and two weak-field counterparts with analogous workload structure. The benchmarks and their execution environment are described below.
 
 \subsection{Benchmark Design}
-\label{subsec:benchmark-design}
+\label{subsec:eval-benchmarks}
 
 Two benchmark families were used to evaluate the optimisation approaches. The first family isolates reference-processing cost around a single shared referent, and the second is a more realistic multi-object workload that introduces greater allocation and liveness variability. Each family was implemented both with \texttt{WeakReference} objects and with weak fields. In order to enable \texttt{WeakReference}-to-weak-field comparison, both benchmark families use holder objects that either contain a \texttt{WeakReference} or an annotated weak field.
 
 \subsubsection{Single-Object Benchmark}
-\label{subsubsec:single-object-benchmark}
+\label{subsubsec:eval-benchmarks-single}
 
-The Single-Object benchmarks allocate 10 million holder objects with either a \texttt{WeakReference} object or an annotated weak field each that all point to a single target object. The holder objects are allocated and stored in a randomised order using a Fisher-Yates shuffle~\cite{knuth97-taocp2} to avoid artificial locality patterns. None of the weak references are created with a \texttt{ReferenceQueue}. After a brief holding period, the single strong reference to the target object is released and a GC cycle is triggered manually. Because all weak references become clearable simultaneously in a single GC cycle, this benchmark maximises the per-cycle reference processing load and isolates the cost of the processing pipeline itself.
+The single-object benchmarks allocate 20 million holder objects, each containing either a \texttt{WeakReference} object or an annotated weak field that points to a single shared target object. The holder objects are allocated and stored in a randomised order using a Fisher-Yates shuffle~\cite{knuth97-taocp2} to avoid locality patterns. None of the weak references are created with a \texttt{ReferenceQueue}. After a short pause, the single strong reference to the target object is released and a GC cycle is triggered via \texttt{System.gc()}. Because all weak references become clearable simultaneously in one GC cycle, this benchmark maximises the per-cycle reference-processing load and isolates the cost of the processing pipeline itself.
 
 \subsubsection{Multi-Object Benchmark}
-\label{subsubsec:multi-object-benchmark}
+\label{subsubsec:eval-benchmarks-multi}
 
-The multi-object benchmarks represent a slightly more realistic workload. They allocate approximately 7.3 million objects, each containing a randomly sized byte array payload (between 509 and 1097 bytes). Each object has a strong reference and a corresponding holder object with either a \texttt{WeakReference} object or an annotated weak field. The allocation and storing order of both strong references and holder objects are randomised using separate Fisher-Yates shuffles~\cite{knuth97-taocp2} to avoid artificial locality patterns.
+The multi-object benchmarks represent a slightly more realistic workload. They allocate 2 million objects, each containing a randomly sized byte array payload (between 509 and 1097 bytes). Each object has a strong reference and a corresponding holder object with either a \texttt{WeakReference} object or an annotated weak field. The allocation and storing order of both strong references and holder objects are randomised using separate Fisher-Yates shuffles~\cite{knuth97-taocp2} to avoid locality patterns.
 
-Unlike the Single-Object benchmark, the strong references are not all released at once. Instead, the benchmark proceeds through five rounds of clearing. In each round, 20\% of the strong references are nulled in a randomised order, making the corresponding objects eligible for garbage collection. Between rounds, the benchmark sleeps to allow GC cycles to discover and process the weak references whose referent now is unreachable. This gradual release pattern means that weak references/fields are discovered and processed across multiple GC cycles rather than in a single burst.
+Unlike the single-object benchmark, the strong references are not all released at once. Instead, the benchmark proceeds through five rounds of clearing. In each round, 20\,\% of the strong references are nulled in a randomised order, making the corresponding objects eligible for garbage collection. After each round, \texttt{System.gc()} is called explicitly to trigger a collection cycle. This gradual release pattern means that weak references and weak fields are discovered and processed across multiple GC cycles rather than in a single burst. Furthermore, it tests how the pipeline performs when the referents have different sizes and lifetimes, which may affect locality and traversal cost.
 
 \subsection{Execution Environment}
-\label{subsec:execution-environment}
+\label{subsec:eval-env}
 
-The benchmarks were executed on UPPMAX, a supercomputer cluster at Uppsala University. \Cref{tab:cluster-specs} lists the hardware specification of the cluster nodes. Each variant was run using its pre-built JDK binary (see \cref{sec:optimisation-variants}). \Cref{tab:jvm-options} lists the JVM options used for each benchmark family.
+The benchmarks were executed on Uppsala Multidisciplinary Center for Advanced Computational Science's (UPPMAX) supercomputer cluster Pelle. UPPMAX is part of the National Academic Infrastructure for Supercomputing in Sweden (NAISS), partially funded by the Swedish Research Council through grant agreement no. 2022-06725. \Cref{tab:cluster-specs} lists the hardware specification of the cluster nodes. Each variant was run using its pre-built JDK binary (see \cref{sec:eval-variants}). To prevent file-system I/O from introducing timing variance, the JDK binaries, output log files, and results data were all stored on a RAM-backed file system. \Cref{tab:jvm-options} lists the JVM options used in all benchmark runs.
 
 \begin{table}[t]
 \centering
@@ -86,48 +86,48 @@ The benchmarks were executed on UPPMAX, a supercomputer cluster at Uppsala Unive
 \toprule
 \textbf{Property} & \textbf{Value} \\
 \midrule
-Total nodes & 80 \\
 CPU & AMD EPYC 9454P (Zen 4), 2.75\,GHz \\
 Physical cores & 48 \\
 Threads & 96 \\
 Memory & 768\,GiB \\
-Scratch & 1.7\,TiB \\
-GPUs & None \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 \begin{table}[t]
 \centering
-\caption{JVM options per benchmark family}
+\small
+\caption{JVM options used in all benchmark runs}
 \label{tab:jvm-options}
-\begin{tabularx}{\textwidth}{@{}llX@{}}
+\begingroup
+\renewcommand{\arraystretch}{1.15}
+\begin{tabularx}{\textwidth}{@{}>{\hsize=1.35\hsize\raggedright\arraybackslash\ttfamily}X>{\hsize=0.65\hsize\raggedright\arraybackslash}X@{}}
 \toprule
-\textbf{Option} & \textbf{Benchmark} & \textbf{Purpose} \\
+\textbf{Option} & \textbf{Purpose} \\
 \midrule
-\texttt{-Xms7g -Xmx7g}        & Single & Fixed 7\,GB heap \\
-\texttt{-Xms8g -Xmx8g}        & Multi  & Fixed 8\,GB heap \\
-\texttt{-XX:+UseZGC}           & Both   & Enable ZGC \\
-\texttt{-XX:InitialTenuringThreshold=1}  & Both & Promote objects to old generation after one cycle \\
-\texttt{-XX:MaxTenuringThreshold=1}      & Both & Cap tenuring at 1 \\
-\texttt{-Xlog:gc+stats,gc+ref} & Both   & GC statistics and reference processing logs \\
-\texttt{-XX:NativeMemoryTracking=summary} & Both & Native Memory Tracking \\
-\texttt{-XX:ZCollectionIntervalMajor=0.5} & Multi & Force major collection every 0.5\,s \\
-\texttt{-XX:+ZCollectionIntervalOnly}     & Multi & Only timer-triggered major collections \\
+-Xms100g -Xmx100g    & Fixed 100\,GB heap \\
+-XX:+UseZGC           & Enable ZGC \\
+-XX:InitialTenuringThreshold=1 & Promote objects to old generation after one cycle \\
+-XX:MaxTenuringThreshold=1     & Cap tenuring at 1 \\
+-XX:-ZProactive       & Disable proactive GC \\
+-XX:ZCollectionIntervalMajor\allowbreak=315360000 & Effectively disable timer-driven major collections \\
+-XX:+ZCollectionIntervalOnly   & Suppress allocation-pressure-driven major collections \\
+-Xlog:gc+stats,gc+ref & GC statistics and reference processing logs \\
+-XX:NativeMemoryTracking=summary & Native Memory Tracking \\
 \bottomrule
 \end{tabularx}
+\endgroup
+\normalsize
 \end{table}
 
-A 10-second cooldown period was inserted between variant runs to allow the system to return to a stable state.
-
 \subsection{Measurement Methodology}
-\label{subsec:measurement-methodology}
+\label{subsec:eval-method}
 
-Each benchmark was run for a total of 100 iterations. Jobs were submitted via SLURM and allocated two nodes running in exclusive mode. Hyperthreading was disabled at the SLURM level, so only the 48 physical cores per node were available. To parallelise execution across the two nodes, iterations were split across 8 parallel instances (4 per node). Each instance was pinned via \texttt{taskset} to a disjoint set of 10 JVM cores and 2 auxiliary cores (12 cores per instance), preventing interference between concurrently running instances. Each instance ran its share of the 100 iterations preceded by 1 warm-up iteration whose results were discarded. The warm-up executed the full benchmark workload for every variant. Within each measurement iteration, all nine optimisation variants were run in sequence with a 10-second cooldown between each. This interleaved ordering mitigates systematic drift in system conditions affecting one configuration more than others.
+Each benchmark was run for a total of 250 iterations. Jobs were submitted via SLURM and allocated one node running in exclusive mode. Iterations were split across 4 parallel instances. Each instance was pinned via \texttt{taskset} to a set of 10 JVM cores and 2 auxiliary cores (12 cores per instance), preventing interference between concurrently running instances. Each instance ran its share of the 250 iterations preceded by 1 warm-up iteration whose results were discarded. The warm-up executed the full benchmark workload for every variant. Within each measurement iteration, all nine optimisation variants were run in sequence with a 10-second cooldown between each. This interleaved ordering mitigates systematic drift in system conditions affecting one configuration more than others.
 
 During each run, a memory monitoring script samples memory metrics from the process at high frequency. See \cref{tab:memory-monitoring-metrics} for the memory metrics collected.
 
-In addition to the continuous memory samples, GC statistics are parsed from the log files of each run. For each GC metric, the parser extracts the Total Avg/Max pair and unit reported by ZGC. The single-object benchmark concentrates its entire weak-reference load into a single collection cycle, so the per-run \emph{maximum} is the relevant statistic. But since the multi-object benchmark spreads work across many cycles the per-run \emph{average} is used instead. \Cref{tab:gc-log-metrics} lists the GC log metrics collected.
+In addition to the continuous memory samples, GC statistics are parsed from the log files of each run. For each GC metric, the parser extracts the total average and total maximum values reported by ZGC per run. The single-object benchmark concentrates its entire weak-reference load into a single collection cycle, so the per-run \emph{maximum} is the relevant statistic. The multi-object benchmark spreads work across several cycles, so the per-run \emph{average} is used instead. \Cref{tab:gc-log-metrics} lists the GC log metrics collected. The rest of the GC log metrics were also collected but are not the focus of this evaluation, they are however available in the published dataset~\cite{hammarberg2026-zenodo}.
 
 \begin{table}[t]
 \centering
@@ -137,8 +137,7 @@ In addition to the continuous memory samples, GC statistics are parsed from the 
 \toprule
 \textbf{Metric} & \textbf{Units} & \textbf{Description} \\
 \midrule
-Timestamp & ms & Sample timestamp used to align and aggregate runs over time. \\
-RSS & kB & Process resident set size (RSS), representing total physical memory in use by the JVM process. \\
+RSS & kB & Process resident set size, representing total physical memory in use by the JVM process. \\
 GC Committed Memory & kB & GC-related memory currently committed by the JVM. \\
 Java Heap & kB & Java heap usage. \\
 \bottomrule
@@ -158,17 +157,15 @@ Old Generation & ms & Total time spent in old-generation collection work. \\
 Old Phase: Concurrent Mark & ms & Time spent in old-generation concurrent marking. \\
 Old Phase: Concurrent Process Non-Strong & ms & Time spent processing non-strong references in the old generation. \\
 Old Phase: Concurrent Relocate & ms & Time spent in old-generation concurrent relocation. \\
-Young Generation\textsuperscript{\textdagger} & ms & Total time in young-generation collection. For multi-object, zero values (cycles without young-gen work) are excluded. \\
+Young Generation (Promote All) & ms & Total time in young-generation collection. Because the benchmarks use \texttt{System.gc()} every young-generation collection is a Promote All, which evacuates all surviving objects directly to the old generation. \\
 Young Phase: Concurrent Mark & ms & Time spent in young-generation concurrent marking. \\
 Young Phase: Concurrent Relocate & ms & Time spent in young-generation concurrent relocation. \\
 \bottomrule
 \end{tabularx}
-\smallskip
-\noindent\textsuperscript{\textdagger}Multi-object uses ``Young Generation: Young Generation''; single-object uses ``Young Generation: Young Generation (Promote All)''.
 \end{table}
 
 \section{Presentation of Results}
-\label{sec:results-presentation}
+\label{sec:eval-results}
 
 Results are presented for all nine variants listed in \cref{tab:eval-variants}: the unmodified baseline (\texttt{none}), the seven \texttt{WeakReference} pipeline variants, and \texttt{weak\_fields}. This enables two complementary comparisons:
 \begin{itemize}
@@ -176,182 +173,100 @@ Results are presented for all nine variants listed in \cref{tab:eval-variants}: 
 	\item \textbf{Inter-model comparison} between the best-performing \texttt{WeakReference} variants and the weak-field representation, evaluating whether avoiding \texttt{WeakReference} objects altogether offers additional benefit.
 \end{itemize}
 
-Two families of plots are used. GC timing behaviour is shown as box plots (\cref{fig:gc-timing-single,fig:gc-timing-single-2,fig:gc-timing-single-3} for the single-object benchmark; \cref{fig:gc-timing-multi,fig:gc-timing-multi-2,fig:gc-timing-multi-3} for the multi-object benchmark). Each box spans the interquartile range (IQR) from the 25th to the 75th percentile, with a horizontal line at the median. Whiskers extend to the most extreme data point within $1.5 \times \mathrm{IQR}$ of the box edge, and points beyond the whiskers are plotted individually as outliers. For the single-object benchmark, each data point is the per-run maximum of the metric; for the multi-object benchmark it is the per-run average, following the rationale in \cref{subsec:measurement-methodology}.
+Each GC timing figure shows a composite plot: a violin plot (top) with the full per-run distribution and a median percentage-difference histogram (bottom) showing all variants relative to the \texttt{none} baseline, including \texttt{none} itself at 0\,\%. The single-object benchmark uses per-run maxima and the multi-object benchmark uses per-run averages, following the rationale in \cref{subsec:eval-method}. The median is used for comparison rather than the mean, as the non-symmetric distributions tend to skew the mean. Note that the violin plot y-axis does not start at zero, it is range-fitted to the observed values so that the shape of each distribution is easier to see. GC timing results are shown for five metrics for each benchmark: Major Collection (\cref{fig:gc-single-major,fig:gc-multi-major}), Old Generation (\cref{fig:gc-single-old-gen,fig:gc-multi-old-gen}), Old Phase: Concurrent Mark (\cref{fig:gc-single-old-mark,fig:gc-multi-old-mark}), Old Phase: Concurrent Process Non-Strong (\cref{fig:gc-single-nonstrong,fig:gc-multi-nonstrong}), and Young Generation -- Promote All (\cref{fig:gc-single-young-gen,fig:gc-multi-young-gen}). Memory results are shown as median percentage-difference histograms of per-run maxima for three metrics: auxiliary GC memory, Java heap, and total process RSS, for both benchmarks (\cref{fig:mem-single-hist,fig:mem-multi-hist}). Figures for remaining GC metrics from \cref{tab:gc-log-metrics} are shown in \cref{app:additional-plots}.
 
-Memory behaviour is shown as continuous time-series traces (\cref{fig:memory-single} for single-object; \cref{fig:memory-multi} for multi-object). Each trace plots the mean value across all runs as a solid line, with a shaded band showing $\pm 1$ standard deviation. Three metrics are tracked: total process RSS, GC auxiliary memory, and Java heap usage.
-
-% ---------- GC timing box plots: single-object ----------
+% ---------- Major Collection – single ----------
 \begin{figure}[t]
 	\centering
-	\begin{subfigure}[b]{0.7\textwidth}
-		\includegraphics[width=\textwidth]{boxplot_major_collection_major_collection_single_full-20260409-211258-single.pdf}
-		\caption{Major Collection}
-		\label{fig:bp-single-major}
-	\end{subfigure}
-
-	\begin{subfigure}[b]{0.7\textwidth}
-		\includegraphics[width=\textwidth]{boxplot_old_generation_old_generation_single_full-20260409-211258-single.pdf}
-		\caption{Old Generation}
-		\label{fig:bp-single-old-gen}
-	\end{subfigure}
-
-	\begin{subfigure}[b]{0.7\textwidth}
-		\includegraphics[width=\textwidth]{boxplot_old_phase_concurrent_mark_single_full-20260409-211258-single.pdf}
-		\caption{Old Phase: Concurrent Mark}
-		\label{fig:bp-single-old-mark}
-	\end{subfigure}
-	\caption[GC timing metrics (single-object, part 1)]{Box plots of GC timing metrics across evaluated configurations for the single-object benchmark (per-run maxima), part~1.}
-	\label{fig:gc-timing-single}
+	\includegraphics[width=\textwidth]{composite_major_collection_major_collection_slurm-5118807_combined_gc_single.pdf}
+	\caption[Major Collection timing (single-object)]{Major Collection timing, single-object benchmark (per-run maxima). Top: distribution; bottom: median \,\% difference vs baseline.}
+	\label{fig:gc-single-major}
 \end{figure}
 
+% ---------- Major Collection – multi ----------
 \begin{figure}[t]
 	\centering
-	\begin{subfigure}[b]{0.7\textwidth}
-		\includegraphics[width=\textwidth]{boxplot_old_phase_concurrent_process_non-strong_single_full-20260409-211258-single.pdf}
-		\caption{Old Phase: Concurrent Process Non-Strong}
-		\label{fig:bp-single-old-nonstrong}
-	\end{subfigure}
-
-	\begin{subfigure}[b]{0.7\textwidth}
-		\includegraphics[width=\textwidth]{boxplot_old_phase_concurrent_relocate_single_full-20260409-211258-single.pdf}
-		\caption{Old Phase: Concurrent Relocate}
-		\label{fig:bp-single-old-relocate}
-	\end{subfigure}
-
-	\begin{subfigure}[b]{0.7\textwidth}
-		\includegraphics[width=\textwidth]{boxplot_young_generation_young_generation_promote_all_single_full-20260409-211258-single.pdf}
-		\caption{Young Generation (Promote All)}
-		\label{fig:bp-single-young-gen}
-	\end{subfigure}
-	\caption[GC timing metrics (single-object, part 2)]{Box plots of GC timing metrics across evaluated configurations for the single-object benchmark (per-run maxima), part~2.}
-	\label{fig:gc-timing-single-2}
+	\includegraphics[width=\textwidth]{composite_major_collection_major_collection_slurm-5118807_combined_gc_multi.pdf}
+	\caption[Major Collection timing (multi-object)]{Major Collection timing, multi-object benchmark (per-run averages). Top: distribution; bottom: median \,\% difference vs baseline.}
+	\label{fig:gc-multi-major}
 \end{figure}
 
+% ---------- Old Generation – single ----------
 \begin{figure}[t]
 	\centering
-	\begin{subfigure}[b]{0.7\textwidth}
-		\includegraphics[width=\textwidth]{boxplot_young_phase_concurrent_mark_single_full-20260409-211258-single.pdf}
-		\caption{Young Phase: Concurrent Mark}
-		\label{fig:bp-single-young-mark}
-	\end{subfigure}
-
-	\begin{subfigure}[b]{0.7\textwidth}
-		\includegraphics[width=\textwidth]{boxplot_young_phase_concurrent_relocate_single_full-20260409-211258-single.pdf}
-		\caption{Young Phase: Concurrent Relocate}
-		\label{fig:bp-single-young-relocate}
-	\end{subfigure}
-	\caption[GC timing metrics (single-object, part 3)]{Box plots of GC timing metrics across evaluated configurations for the single-object benchmark (per-run maxima), part~3.}
-	\label{fig:gc-timing-single-3}
+	\includegraphics[width=\textwidth]{composite_old_generation_old_generation_slurm-5118807_combined_gc_single.pdf}
+	\caption[Old Generation timing (single-object)]{Old Generation timing, single-object benchmark (per-run maxima). Top: distribution; bottom: median \,\% difference vs baseline.}
+	\label{fig:gc-single-old-gen}
 \end{figure}
 
-% ---------- GC timing box plots: multi-object ----------
+% ---------- Old Generation – multi ----------
 \begin{figure}[t]
 	\centering
-	\begin{subfigure}[b]{0.7\textwidth}
-		\includegraphics[width=\textwidth]{boxplot_major_collection_major_collection_multi_full-20260409-211258-multi.pdf}
-		\caption{Major Collection}
-		\label{fig:bp-multi-major}
-	\end{subfigure}
-
-	\begin{subfigure}[b]{0.7\textwidth}
-		\includegraphics[width=\textwidth]{boxplot_old_generation_old_generation_multi_full-20260409-211258-multi.pdf}
-		\caption{Old Generation}
-		\label{fig:bp-multi-old-gen}
-	\end{subfigure}
-
-	\begin{subfigure}[b]{0.7\textwidth}
-		\includegraphics[width=\textwidth]{boxplot_old_phase_concurrent_mark_multi_full-20260409-211258-multi.pdf}
-		\caption{Old Phase: Concurrent Mark}
-		\label{fig:bp-multi-old-mark}
-	\end{subfigure}
-	\caption[GC timing metrics (multi-object, part 1)]{Box plots of GC timing metrics across evaluated configurations for the multi-object benchmark (per-run averages), part~1.}
-	\label{fig:gc-timing-multi}
+	\includegraphics[width=\textwidth]{composite_old_generation_old_generation_slurm-5118807_combined_gc_multi.pdf}
+	\caption[Old Generation timing (multi-object)]{Old Generation timing, multi-object benchmark (per-run averages). Top: distribution; bottom: median \,\% difference vs baseline.}
+	\label{fig:gc-multi-old-gen}
 \end{figure}
 
+% ---------- Old Phase: Concurrent Mark – single ----------
 \begin{figure}[t]
 	\centering
-	\begin{subfigure}[b]{0.7\textwidth}
-		\includegraphics[width=\textwidth]{boxplot_old_phase_concurrent_process_non-strong_multi_full-20260409-211258-multi.pdf}
-		\caption{Old Phase: Concurrent Process Non-Strong}
-		\label{fig:bp-multi-old-nonstrong}
-	\end{subfigure}
-
-	\begin{subfigure}[b]{0.7\textwidth}
-		\includegraphics[width=\textwidth]{boxplot_old_phase_concurrent_relocate_multi_full-20260409-211258-multi.pdf}
-		\caption{Old Phase: Concurrent Relocate}
-		\label{fig:bp-multi-old-relocate}
-	\end{subfigure}
-
-	\begin{subfigure}[b]{0.7\textwidth}
-		\includegraphics[width=\textwidth]{boxplot_young_generation_young_generation_multi_full-20260409-211258-multi.pdf}
-		\caption{Young Generation}
-		\label{fig:bp-multi-young-gen}
-	\end{subfigure}
-	\caption[GC timing metrics (multi-object, part 2)]{Box plots of GC timing metrics across evaluated configurations for the multi-object benchmark (per-run averages), part~2.}
-	\label{fig:gc-timing-multi-2}
+	\includegraphics[width=\textwidth]{composite_old_phase_concurrent_mark_slurm-5118807_combined_gc_single.pdf}
+	\caption[Old Phase: Concurrent Mark timing (single-object)]{Old Phase: Concurrent Mark timing, single-object benchmark (per-run maxima). Top: distribution; bottom: median \,\% difference vs baseline.}
+	\label{fig:gc-single-old-mark}
 \end{figure}
 
+% ---------- Old Phase: Concurrent Mark – multi ----------
 \begin{figure}[t]
 	\centering
-	\begin{subfigure}[b]{0.7\textwidth}
-		\includegraphics[width=\textwidth]{boxplot_young_phase_concurrent_mark_multi_full-20260409-211258-multi.pdf}
-		\caption{Young Phase: Concurrent Mark}
-		\label{fig:bp-multi-young-mark}
-	\end{subfigure}
-
-	\begin{subfigure}[b]{0.7\textwidth}
-		\includegraphics[width=\textwidth]{boxplot_young_phase_concurrent_relocate_multi_full-20260409-211258-multi.pdf}
-		\caption{Young Phase: Concurrent Relocate}
-		\label{fig:bp-multi-young-relocate}
-	\end{subfigure}
-	\caption[GC timing metrics (multi-object, part 3)]{Box plots of GC timing metrics across evaluated configurations for the multi-object benchmark (per-run averages), part~3.}
-	\label{fig:gc-timing-multi-3}
+	\includegraphics[width=\textwidth]{composite_old_phase_concurrent_mark_slurm-5118807_combined_gc_multi.pdf}
+	\caption[Old Phase: Concurrent Mark timing (multi-object)]{Old Phase: Concurrent Mark timing, multi-object benchmark (per-run averages). Top: distribution; bottom: median \,\% difference vs baseline.}
+	\label{fig:gc-multi-old-mark}
 \end{figure}
 
-% ---------- Memory traces: single-object ----------
+% ---------- Old Phase: Concurrent Process Non-Strong – single ----------
 \begin{figure}[t]
 	\centering
-	\begin{subfigure}[b]{0.8\textwidth}
-		\includegraphics[width=\textwidth]{memory_rss_single_full-20260409-211258-single.pdf}
-		\caption{Total Process RSS}
-		\label{fig:mem-single-rss}
-	\end{subfigure}
-
-	\begin{subfigure}[b]{0.8\textwidth}
-		\includegraphics[width=\textwidth]{memory_gc_auxiliary_single_full-20260409-211258-single.pdf}
-		\caption{GC Auxiliary Memory}
-		\label{fig:mem-single-gc}
-	\end{subfigure}
-
-	\begin{subfigure}[b]{0.8\textwidth}
-		\includegraphics[width=\textwidth]{memory_java_heap_single_full-20260409-211258-single.pdf}
-		\caption{Java Heap}
-		\label{fig:mem-single-heap}
-	\end{subfigure}
-	\caption[Continuous memory traces (single-object)]{Continuous memory traces for the single-object benchmark (mean \textpm\ 1 std dev across runs).}
-	\label{fig:memory-single}
+	\includegraphics[width=\textwidth]{composite_old_phase_concurrent_process_non-strong_slurm-5118807_combined_gc_single.pdf}
+	\caption[Old Phase: Concurrent Process Non-Strong timing (single-object)]{Old Phase: Concurrent Process Non-Strong timing, single-object benchmark (per-run maxima). Top: distribution; bottom: median \,\% difference vs baseline.}
+	\label{fig:gc-single-nonstrong}
 \end{figure}
 
-% ---------- Memory traces: multi-object ----------
+% ---------- Old Phase: Concurrent Process Non-Strong – multi ----------
 \begin{figure}[t]
 	\centering
-	\begin{subfigure}[b]{0.8\textwidth}
-		\includegraphics[width=\textwidth]{memory_rss_multi_full-20260409-211258-multi.pdf}
-		\caption{Total Process RSS}
-		\label{fig:mem-multi-rss}
-	\end{subfigure}
+	\includegraphics[width=\textwidth]{composite_old_phase_concurrent_process_non-strong_slurm-5118807_combined_gc_multi.pdf}
+	\caption[Old Phase: Concurrent Process Non-Strong timing (multi-object)]{Old Phase: Concurrent Process Non-Strong timing, multi-object benchmark (per-run averages). Top: distribution; bottom: median \,\% difference vs baseline.}
+	\label{fig:gc-multi-nonstrong}
+\end{figure}
 
-	\begin{subfigure}[b]{0.8\textwidth}
-		\includegraphics[width=\textwidth]{memory_gc_auxiliary_multi_full-20260409-211258-multi.pdf}
-		\caption{GC Auxiliary Memory}
-		\label{fig:mem-multi-gc}
-	\end{subfigure}
+% ---------- Young Generation (Promote All) – single ----------
+\begin{figure}[t]
+	\centering
+	\includegraphics[width=\textwidth]{composite_young_generation_young_generation_promote_all_slurm-5118807_combined_gc_single.pdf}
+	\caption[Young Generation (Promote All) timing (single-object)]{Young Generation (Promote All) timing, single-object benchmark (per-run maxima). Top: distribution; bottom: median \,\% difference vs baseline.}
+	\label{fig:gc-single-young-gen}
+\end{figure}
 
-	\begin{subfigure}[b]{0.8\textwidth}
-		\includegraphics[width=\textwidth]{memory_java_heap_multi_full-20260409-211258-multi.pdf}
-		\caption{Java Heap}
-		\label{fig:mem-multi-heap}
-	\end{subfigure}
-	\caption[Continuous memory traces (multi-object)]{Continuous memory traces for the multi-object benchmark (mean \textpm\ 1 std dev across runs).}
-	\label{fig:memory-multi}
+% ---------- Young Generation (Promote All) – multi ----------
+\begin{figure}[t]
+	\centering
+	\includegraphics[width=\textwidth]{composite_young_generation_young_generation_promote_all_slurm-5118807_combined_gc_multi.pdf}
+	\caption[Young Generation (Promote All) timing (multi-object)]{Young Generation (Promote All) timing, multi-object benchmark (per-run averages). Top: distribution; bottom: median \,\% difference vs baseline.}
+	\label{fig:gc-multi-young-gen}
+\end{figure}
+
+% ---------- Memory median diff histograms – single ----------
+\begin{figure}[t]
+	\centering
+	\includegraphics[width=\textwidth]{memory_median_diff_hist_slurm-5118807_combined_gc_single.pdf}
+	\caption[Memory median percentage differences (single-object)]{Median percentage difference in per-run maximum memory usage relative to the \texttt{none} baseline, single-object benchmark. Top to bottom: auxiliary GC memory, Java heap, total process RSS.}
+	\label{fig:mem-single-hist}
+\end{figure}
+
+% ---------- Memory median diff histograms – multi ----------
+\begin{figure}[t]
+	\centering
+	\includegraphics[width=\textwidth]{memory_median_diff_hist_slurm-5118807_combined_gc_multi.pdf}
+	\caption[Memory median percentage differences (multi-object)]{Median percentage difference in per-run maximum memory usage relative to the \texttt{none} baseline, multi-object benchmark. Top to bottom: auxiliary GC memory, Java heap, total process RSS.}
+	\label{fig:mem-multi-hist}
 \end{figure}
