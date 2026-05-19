@@ -44,9 +44,9 @@ One interesting observation is that the \texttt{weak\_fields} variant also follo
 \section{Structural Advantage of Weak Fields}
 \label{sec:disc-wf}
 
-The \texttt{weak\_fields} variant achieves improvements across all measured \ac{GC} metrics because its advantage is structural rather than algorithmic: eliminating the \texttt{WeakReference} wrapper objects reduces the number of live objects the \ac{GC} must process in every phase of the collection cycle, not just in reference processing.
+The \texttt{weak\_fields} variant achieves improvements across all measured \ac{GC} metrics because its advantage is structural rather than algorithmic: eliminating the \texttt{WeakReference} wrapper objects reduces the number of live objects the \ac{GCr} must process in every phase of the collection cycle, not just in reference processing.
 
-In the single-object benchmark, 20 million \texttt{WeakReference} objects are heap-allocated Java objects. Each such object must be individually processed during each phase of each \ac{GC} cycle. In contrast, the \texttt{weak\_fields} variant eliminates these objects entirely, so the \ac{GC} only processes the holder objects and the referents, which are already present in the heap for the Java application. This leads to a reduction in \ac{GC} workload across the board, from marking to compaction, and from young generation to old generation.
+In the single-object benchmark, 20 million \texttt{WeakReference} objects are heap-allocated Java objects. Each such object must be individually processed during each phase of each \ac{GC} cycle. In contrast, the \texttt{weak\_fields} variant eliminates these objects entirely, so the \ac{GCr} only processes the holder objects and the referents, which are already present in the heap for the Java application. This leads to a reduction in \ac{GC} workload across the board, from marking to compaction, and from young generation to old generation.
 
 The heap usage data confirms the claim that there are fewer objects allocated: \texttt{weak\_fields} uses 806\,MB versus 1\,720\,MB for all \texttt{WeakReference} variants in the single-object benchmark (53\,\% lower). In the multi-object benchmark the absolute effect is smaller because the 2 million references represent a smaller fraction of total heap activity, from 1\,926\,MB to 1\,834\,MB, a 5\,\% reduction.
 
@@ -57,7 +57,7 @@ On the processing side, \texttt{weak\_fields} is mechanically similar to \texttt
 
 This structural parallel is reflected in the non-strong processing times. \texttt{weak\_fields} achieves a 51\,\% reduction in the single-object benchmark, compared to \texttt{sep\_dyn}'s 42\,\% and \texttt{dyn\_only}'s 36\,\%. The somewhat better figure for \texttt{weak\_fields} is consistent with the simpler per-entry structure: annotated fields are stored and cleared directly, without the \texttt{WeakReference} object header, queue field, next field, and discovered field.
 
-The result does not reach the 81\,\% reductions of \texttt{clear\_path\_dyn} and \texttt{all} for the reason mentioned previously: the clear path for weak fields can not be optimised in the same way as for queue-less \texttt{WeakReference} objects, so the per-entry processing logic still involves a CAS operation, which is not the case for \texttt{clear\_path\_dyn} and \texttt{all}.
+The result does not reach the 81\,\% reductions of \texttt{clear\_path\_dyn} and \texttt{all} for the reason mentioned previously: the clear path for weak fields cannot be optimised in the same way as for queue-less \texttt{WeakReference} objects, so the per-entry processing logic still involves a \ac{CAS} operation, which is not the case for \texttt{clear\_path\_dyn} and \texttt{all}.
 
 \section{Limitations}
 \label{sec:disc-limits}

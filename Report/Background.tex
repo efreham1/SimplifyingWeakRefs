@@ -1,19 +1,30 @@
 \chapter{Background}
 \label{chap:background}
 
-To answer the research questions posed in \cref{sec:intro-rqs}, it is necessary to understand key concepts of the \ac{JVM} and its HotSpot implementation, \ac{GC} mechanisms, the design and implementation of \ac{ZGC}, the Java reference types and their processing pipeline within \ac{ZGC}, and general principles of \ac{GC}.
+To answer the research questions posed in \cref{sec:intro-rqs}, it is necessary to understand key concepts of the \ac{JVM} and its HotSpot implementation, \ac{GC} mechanisms, the Java reference types, the design and implementation of \ac{ZGC}, and the reference-processing pipeline within \ac{ZGC}.
+
+\section{The \ac{JVM} and HotSpot}
+\label{sec:bg-jvm-hotspot}
+
+The \ac{JVM} is a language-independent abstract computing machine that provides a managed execution environment for programs compiled to Java bytecode~\cite{oracle-gc-implementation}. Rather than targeting a specific physical processor, Java source code is compiled to bytecode -- a compact, platform-neutral instruction set -- which the \ac{JVM} then executes on the host machine. This separation allows the same bytecode to run without modification on any platform for which a \ac{JVM} implementation exists. The \ac{JVM} is responsible for loading class files, verifying bytecode, managing memory (including automatic \ac{GC}), and providing the runtime services (threading, synchronisation, reflection) that Java programs rely on.
+
+There are multiple \ac{JVM} implementations. The reference implementation, developed and maintained by Oracle and the OpenJDK community, is \textbf{HotSpot}~\cite{oracle-hotspot-jvm,openjdk-hotspot-overview}. HotSpot is the \ac{JVM} shipped with Oracle \ac{JDK} and OpenJDK distributions, and it is the implementation targeted by this thesis. Its name reflects a key design principle: rather than interpreting all bytecode uniformly, HotSpot identifies frequently executed \emph{hot spots} and compiles them to native machine code using \ac{JIT} compilation, while less frequently executed code continues to run in the interpreter. This adaptive strategy allows HotSpot to achieve throughput that approaches that of ahead-of-time compiled languages for hot code paths, whilst retaining fast start-up through interpretation.
+
+HotSpot's internal architecture spans the garbage collectors (Serial, Parallel, G1, and \ac{ZGC}), the \ac{JIT} compilers (C1 and C2), the template interpreter, the class loader, and the object memory model~\cite{oracle-hotspot-jvm}. These components interact closely: the \ac{GCr} depends on the compiler and interpreter to emit barriers at every heap access, the \ac{JIT} depends on the \ac{GCr} to provide runtime type and liveness information, and the class loader and memory model together define how objects are laid out in the heap.
+
+All implementation details discussed in this thesis -- the execution tiers, the barrier mechanism, the object representation, and the reference-processing pipeline -- are specific to HotSpot. Other \ac{JVM} implementations may differ substantially in their internal organisation, even if they conform to the same \ac{JVM} specification.
 
 \section{\ac{GC} in the \ac{JVM}}
 \label{sec:bg-gc}
 
 The \ac{JVM} provides automatic memory management through \ac{GC}. Rather than requiring the programmer to explicitly allocate and free memory as in languages such as C or C++, the \ac{JVM} tracks which objects are reachable from the application's root set and reclaims the memory of objects that are no longer reachable. The root set consists of all data that is directly accessible to the application, such as local variables on the stack, static fields, and active threads.
 
-The \ac{JVM} ships with several \ac{GC} implementations, each designed with different trade-offs between throughput, latency, and memory footprint~\cite{oracle-gc-collectors}. The collectors are:
+HotSpot ships with several \ac{GCr} implementations, each designed with different trade-offs between throughput, latency, and memory footprint~\cite{oracle-gc-collectors}. The collectors are:
 
 \begin{itemize}
-    \item \textbf{Serial \ac{GC}}   A single-threaded collector that performs all \ac{GC} work using one thread, avoiding inter-thread communication overhead. It is best suited to single-processor systems and small heaps.
-    \item \textbf{Parallel \ac{GC}}   A throughput-oriented generational collector that uses multiple \ac{GC} threads to speed up collection on multiprocessor systems. It is intended for medium to large data sets.
-    \item \textbf{G1 \ac{GC} (Garbage-First)}   A mostly concurrent, region-based collector designed to scale from small to large multiprocessor machines. It targets predictable pause times with high probability while maintaining high throughput and is the default collector on most platforms~\cite{oracle-gc-collectors}.
+    \item \textbf{Serial \ac{GCr}}   A single-threaded collector that performs all \ac{GC} work using one thread, avoiding inter-thread communication overhead. It is best suited to single-processor systems and small heaps.
+    \item \textbf{Parallel \ac{GCr}}   A throughput-oriented generational collector that uses multiple \ac{GC} threads to speed up collection on multiprocessor systems. It is intended for medium to large data sets.
+    \item \textbf{G1 \ac{GCr} (Garbage-First)}   A mostly concurrent, region-based collector designed to scale from small to large multiprocessor machines. It targets predictable pause times with high probability while maintaining high throughput and is the default collector on most platforms~\cite{oracle-gc-collectors}.
     \item \textbf{\ac{ZGC}}   A scalable, low-latency collector that performs expensive \ac{GC} work concurrently with application threads. It targets pause times of only a few milliseconds (largely independent of heap size) and supports heap sizes from 8\,MB to 16\,TB~\cite{jep333-zgc,jep377-zgc-prod}.
 \end{itemize}
 
@@ -34,12 +45,12 @@ This thesis focuses on \ac{ZGC}, as its low-latency design and concurrent refere
     \item \textbf{Compaction/Relocation Phase}   Some collectors compact the heap to eliminate fragmentation, moving live objects to consolidate free space. Others relocate objects incrementally as part of the collection process.
 \end{enumerate}
 
-The order and concurrency model of these phases varies significantly between collectors. Serial and Parallel \ac{GC} typically perform all phases in \ac{STW} pauses. G1 performs marking and sweeping mostly concurrently with short pauses for synchronisation. \ac{ZGC} performs marking, reference processing, and relocation concurrently, using barriers to maintain consistency with concurrent application threads.
+The order and concurrency model of these phases varies significantly between collectors. Serial and Parallel \ac{GCr} typically perform all phases in \ac{STW} pauses. G1 performs marking and sweeping mostly concurrently with short pauses for synchronisation. \ac{ZGC} performs marking, reference processing, and relocation concurrently, using barriers to maintain consistency with concurrent application threads.
 
 \subsection{\ac{GC} Barriers}
 \label{subsec:bg-gc-barriers}
 
-In \ac{JVM} \ac{GC}s, a \emph{barrier} is a small piece of code inserted around memory accesses so that the collector can maintain correctness while the application is running~\cite{oracle-gc-implementation}. The term is slightly misleading: barriers are not global locks and do not stop threads. Instead, they are local checks or bookkeeping actions attached to individual loads and stores of object references~\cite{oracle-gc-implementation,jep333-zgc,openjdk-zbarrier-cpp}.
+In \ac{JVM} \ac{GCr}s, a \emph{barrier} is a small piece of code inserted around memory accesses so that the collector can maintain correctness while the application is running~\cite{oracle-gc-implementation}. The term is slightly misleading: barriers are not global locks and do not stop threads. Instead, they are local checks or bookkeeping actions attached to individual loads and stores of object references~\cite{oracle-gc-implementation,jep333-zgc,openjdk-zbarrier-cpp}.
 
 Barriers are especially important in concurrent collectors because \ac{GC} and application threads observe and modify heap state at the same time. Rather than pausing the application for long periods, the collector uses barriers to spread consistency work across ordinary execution~\cite{jep333-zgc,oracle-gc-implementation}.
 
@@ -53,7 +64,7 @@ Two broad classes are common:
 \subsection{Generational Collection}
 \label{subsec:bg-gc-generational}
 
-In current Oracle \ac{JDK} releases, all four supported \ac{JVM} \ac{GC}s (Serial, Parallel, G1, and Z) use \emph{generational collection}, based on the \emph{weak generational hypothesis}: most objects die young, and those that survive tend to remain live for a long time~\cite{lieberman81-realtime-gc}. To exploit this hypothesis, the heap is divided into at least two generations:
+In current Oracle \ac{JDK} releases, all four supported \ac{JVM} \ac{GCr}s (Serial, Parallel, G1, and Z) use \emph{generational collection}, based on the \emph{weak generational hypothesis}: most objects die young, and those that survive tend to remain live for a long time~\cite{lieberman81-realtime-gc}. To exploit this hypothesis, the heap is divided into at least two generations:
 
 \begin{itemize}
     \item The \textbf{young generation}, where newly allocated objects reside. Young generation collections are frequent but fast, since most young objects are short-lived.
@@ -69,10 +80,10 @@ In current Oracle \ac{JDK} releases, all four supported \ac{JVM} \ac{GC}s (Seria
 In addition to ordinary (strong) references, Java provides \emph{reference objects} in the \texttt{java.lang.ref} package~\cite{oracle-ref-javadoc,openjdk-reference-java} that allow applications to reference objects without preventing their \ac{GC}. These reference types are:
 
 \begin{enumerate}
-    \item \textbf{SoftReference}   The referent field is cleared at the discretion of the \ac{GC}, typically when memory is low. Commonly used for memory-sensitive caches.
+    \item \textbf{SoftReference}   The referent field is cleared at the discretion of the \ac{GCr}, typically when memory is low. Commonly used for memory-sensitive caches.
     \item \textbf{WeakReference}   The referent field is cleared as soon as it becomes weakly reachable (i.e., no strong or soft references exist to it). Widely used in caching frameworks, canonical mappings, and listener registrations.
-    \item \textbf{FinalReference}   An internal \ac{JVM} type (not part of the public \ac{API}) used to implement the \texttt{finalize()} mechanism. Objects with finalisers are wrapped in a \texttt{FinalReference} so that the \ac{GC} can schedule finalisation before reclaiming the object. This scheduling is done via a \texttt{ReferenceQueue}, which means that \texttt{FinalReference}s always have an associated \texttt{ReferenceQueue}.
-    \item \textbf{PhantomReference}   The referent is never accessible through the reference; \texttt{get()} always returns \texttt{null}. Used for post-mortem cleanup actions, often to avoid the pitfalls of finalisation. Phantom references must be registered with a \texttt{ReferenceQueue} to be useful.
+    \item \textbf{FinalReference}   An internal \ac{JVM} type (not part of the public \ac{API}) used to implement the \texttt{finalize()} mechanism. Objects with finalisers are wrapped in a \texttt{FinalReference} so that the \ac{GCr} can schedule finalisation before reclaiming the object. This scheduling is done via a \texttt{ReferenceQueue}, which means that \texttt{FinalReference}s always have an associated \texttt{ReferenceQueue}.
+    \item \textbf{PhantomReference}   The referent is never accessible through the reference, \texttt{get()} always returns \texttt{null}. Used for post-mortem cleanup actions, often to avoid the pitfalls of finalisation. Phantom references must be registered with a \texttt{ReferenceQueue} to be useful.
 \end{enumerate}
 
 All four types extend the abstract class \texttt{Reference<T>} (in the \texttt{java.lang.ref} package), which defines the key fields of the reference object and the \ac{API} for retrieving the referent, clearing the referent field, and checking if it is enqueued.
@@ -83,19 +94,19 @@ All four types extend the abstract class \texttt{Reference<T>} (in the \texttt{j
 Each \texttt{Reference} object maintains several fields that track its state~\cite{openjdk-reference-java}:
 
 \begin{itemize}
-    \item \texttt{referent field}   The referenced object. The \ac{GC} may clear this field (set it to \texttt{null}) when the referent becomes eligible for collection according to the reference's type.
+    \item \texttt{referent field}   The referenced object. The \ac{GCr} may clear this field (set it to \texttt{null}) when the referent becomes eligible for collection according to the reference's type.
     \item \texttt{queue field}   The \texttt{ReferenceQueue} this reference is registered with. If the reference was not created with a queue, this field points to the sentinel object \texttt{ReferenceQueue.NULL\_QUEUE}.
     \item \texttt{next field}   Used as a link pointer when the reference is enqueued in a \texttt{ReferenceQueue}.
-    \item \texttt{discovered field}   A field with dual purpose: during \ac{GC} marking, it serves as a link in the \ac{GC}'s internal \emph{discovered list}; after processing, it is reused as a link in the VM's \emph{pending list} that feeds the \texttt{ReferenceHandler} thread. Due to its first use, the \ac{GC} can detect whether a reference has already been discovered by checking if this field is \texttt{null}.
+    \item \texttt{discovered field}   A field with dual purpose: during \ac{GC} marking, it serves as a link in the \ac{GCr}'s internal \emph{discovered list}, after processing, it is reused as a link in the VM's \emph{pending list} that feeds the \texttt{ReferenceHandler} thread. Due to its first use, the \ac{GCr} can detect whether a reference has already been discovered by checking if this field is \texttt{null}.
 \end{itemize}
 
 A reference object transitions through the following states during its lifetime~\cite{oracle-ref-javadoc,openjdk-reference-java}:
 
 \begin{enumerate}
     \item \textbf{Active}   The reference has been created and the referent is still reachable (or not yet processed).
-    \item \textbf{Pending}   The \ac{GC} has determined the referent is eligible for clearing and has added the reference to the VM's pending list. The \texttt{ReferenceHandler} thread will process it.
+    \item \textbf{Pending}   The \ac{GCr} has determined the referent is eligible for clearing and has added the reference to the VM's pending list. The \texttt{ReferenceHandler} thread will process it.
     \item \textbf{Enqueued}   The \texttt{ReferenceHandler} thread has moved the reference into its associated \texttt{ReferenceQueue}, where the application can retrieve it via \texttt{poll()} or \texttt{remove()}.
-    \item \textbf{Inactive}   The reference has been dequeued by the application, or was created without a queue and has been cleared. It is no longer tracked by the \ac{GC} or queuing infrastructure.
+    \item \textbf{Inactive}   The reference has been dequeued by the application, or was created without a queue and has been cleared. It is no longer tracked by the \ac{GCr} or queuing infrastructure.
 \end{enumerate}
 
 An important observation is that references created \emph{without} a \texttt{ReferenceQueue} can transition directly from Active to Inactive, bypassing the Pending and Enqueued states entirely. However, as discussed in \cref{sec:bg-refproc}, the default implementation does not take advantage of this shortcut. The lifecycle and this direct shortcut path are illustrated in \cref{fig:reference-lifecycle}.
@@ -107,15 +118,15 @@ An important observation is that references created \emph{without} a \texttt{Ref
     state/.style={draw, rounded corners, minimum width=18mm, minimum height=8mm, align=center},
     edge/.style={-Latex, thick}
 ]
-\node[state] (active) {Active};
-\node[state, right=of active] (pending) {Pending};
-\node[state, right=of pending] (enqueued) {Enqueued};
-\node[state, right=of enqueued] (inactive) {Inactive};
+\node[state] (active) {Active},
+\node[state, right=of active] (pending) {Pending},
+\node[state, right=of pending] (enqueued) {Enqueued},
+\node[state, right=of enqueued] (inactive) {Inactive},
 
-\draw[edge] (active) -- (pending);
-\draw[edge] (pending) -- (enqueued);
-\draw[edge] (enqueued) -- (inactive);
-\draw[edge, dashed, bend left=20] (active) to node[above, align=center] {\footnotesize no queue\footnotesize} (inactive);
+\draw[edge] (active) -- (pending),
+\draw[edge] (pending) -- (enqueued),
+\draw[edge] (enqueued) -- (inactive),
+\draw[edge, dashed, bend left=20] (active) to node[above, align=center] {\footnotesize no queue\footnotesize} (inactive),
 \end{tikzpicture}
 \caption[Reference lifecycle states]{Lifecycle of \texttt{Reference} objects. References without a queue can bypass Pending and Enqueued.}
 \label{fig:reference-lifecycle}
@@ -130,12 +141,12 @@ A \texttt{WeakReference} provides two constructors (with and without a \texttt{R
 \begin{lstlisting}[language=Java]
 // Without a queue - queue field set to NULL_QUEUE
 public WeakReference(T referent) {
-    super(referent);
+    super(referent),
 }
 
 // With a queue
 public WeakReference(T referent, ReferenceQueue<? super T> q) {
-    super(referent, q);
+    super(referent, q),
 }
 \end{lstlisting}
 \caption[WeakReference constructors]{WeakReference constructors}
@@ -149,18 +160,6 @@ The \texttt{ReferenceQueue} is implemented as a synchronized singly-linked list 
 
 A key insight for this thesis is that Java explicitly supports queue-less weak references through the one-argument \texttt{WeakReference} constructor~\cite{openjdk-weakreference-java}. For workloads that only need liveness probing via \texttt{get()}, queue registration is unnecessary. In such cases, the VM still performs enqueue-path preparation work in the default pipeline, which motivated JDK-8029205 and the optimisation work in this thesis~\cite{JDK-8029205,openjdk-reference-java,openjdk-zreferenceprocessor-cpp}.
 
-
-
-\section{The \ac{JVM} and HotSpot}
-\label{sec:bg-jvm-hotspot}
-
-The \ac{JVM} is a language-independent abstract computing machine that provides a managed execution environment for programs compiled to Java bytecode~\cite{oracle-gc-implementation}. Rather than targeting a specific physical processor, Java source code is compiled to bytecode -- a compact, platform-neutral instruction set -- which the \ac{JVM} then executes on the host machine. This separation allows the same bytecode to run without modification on any platform for which a \ac{JVM} implementation exists. The \ac{JVM} is responsible for loading class files, verifying bytecode, managing memory (including automatic \ac{GC}), and providing the runtime services (threading, synchronisation, reflection) that Java programs rely on.
-
-There are multiple \ac{JVM} implementations. The reference implementation, developed and maintained by Oracle and the OpenJDK community, is \textbf{HotSpot}~\cite{oracle-hotspot-jvm,openjdk-hotspot-overview}. HotSpot is the \ac{JVM} shipped with Oracle \ac{JDK} and OpenJDK distributions, and it is the implementation targeted by this thesis. Its name reflects a key design principle: rather than interpreting all bytecode uniformly, HotSpot identifies frequently executed \emph{hot spots} and compiles them to native machine code using \ac{JIT} compilation, while less frequently executed code continues to run in the interpreter. This adaptive strategy allows HotSpot to achieve throughput that approaches that of ahead-of-time compiled languages for hot code paths, whilst retaining fast start-up through interpretation.
-
-HotSpot's internal architecture spans the garbage collectors (Serial, Parallel, G1, and \ac{ZGC}), the \ac{JIT} compilers (C1 and C2), the template interpreter, the class loader, and the object memory model~\cite{oracle-hotspot-jvm}. These components interact closely: the \ac{GC} depends on the compiler and interpreter to emit barriers at every heap access, the \ac{JIT} depends on the \ac{GC} to provide runtime type and liveness information, and the class loader and memory model together define how objects are laid out in the heap.
-
-All implementation details discussed in this thesis -- the execution tiers, the barrier mechanism, the object representation, and the reference-processing pipeline -- are specific to HotSpot. Other \ac{JVM} implementations may differ substantially in their internal organisation, even if they conform to the same \ac{JVM} specification.
 
 
 \section{HotSpot Internals}
@@ -184,12 +183,12 @@ In tiered compilation, methods move through these tiers as their execution frequ
 \section{The \ac{ZGC}}
 \label{sec:bg-zgc}
 
-\ac{ZGC} is a concurrent, region-based, compacting \ac{GC} included in the \ac{JDK} since \ac{JDK}~11 (experimental)~\cite{jep333-zgc} and production-ready since \ac{JDK}~15~\cite{jep377-zgc-prod}. Starting with \ac{JDK}~21, \ac{ZGC} supports generational collection, which is now the default mode~\cite{jep439-genzgc}. The collector targets millisecond-scale pause times that remain bounded regardless of heap size, and supports heaps ranging from a few hundred megabytes to several terabytes~\cite{jep333-zgc}. Achieving these goals while performing the bulk of \ac{GC} work concurrently is partly realised by two closely related design decisions: encoding \ac{GC} state directly in heap pointers, and using barriers to act on that state at every pointer access.
+\ac{ZGC} is a concurrent, region-based, compacting \ac{GCr} included in the \ac{JDK} since \ac{JDK}~11 (experimental)~\cite{jep333-zgc} and production-ready since \ac{JDK}~15~\cite{jep377-zgc-prod}. Starting with \ac{JDK}~21, \ac{ZGC} supports generational collection, which is now the default mode~\cite{jep439-genzgc}. The collector targets millisecond-scale pause times that remain bounded regardless of heap size, and supports heaps ranging from a few hundred megabytes to several terabytes~\cite{jep333-zgc}. Achieving these goals while performing the bulk of \ac{GC} work concurrently is partly realised by two closely related design decisions: encoding \ac{GC} state directly in heap pointers, and using barriers to act on that state at every pointer access.
 
 \subsection{Coloured Pointers and Barriers}
 \label{subsec:bg-zgc-pointers}
 
-\ac{ZGC} embeds metadata directly in the unused high bits of 64-bit heap pointers. These \emph{colour bits} encode the state of a pointer relative to the current \ac{GC} phase -- for example, whether the pointed-to object has been remapped after relocation, or which generation it belongs to~\cite{jep333-zgc,openjdk-zaddress-hpp}. Because the state is carried in the pointer itself, the \ac{GC} can determine the status of a reference without loading the object's header or consulting external tables.
+\ac{ZGC} embeds metadata directly in the unused high bits of 64-bit heap pointers. These \emph{colour bits} encode the state of a pointer relative to the current \ac{GC} phase -- for example, whether the pointed-to object has been remapped after relocation, or which generation it belongs to~\cite{jep333-zgc,openjdk-zaddress-hpp}. Because the state is carried in the pointer itself, the \ac{GCr} can determine the status of a reference without loading the object's header or consulting external tables.
 
 To act on this encoded state, \ac{ZGC} inserts barriers at every oop load and store. On a load, the barrier reads the colour bits of the retrieved pointer and checks whether they encode a \emph{good} state for the current \ac{GC} phase. If the pointer is stale -- for example because the object has been relocated since the pointer was written -- the barrier's slow path applies the necessary fixup (remapping the pointer to the new address) before returning the address to the caller~\cite{jep333-zgc,openjdk-zbarrier-cpp}. Because these fixups happen lazily on access rather than eagerly during relocation, the collector can relocate objects concurrently without stalling the application.
 
@@ -227,7 +226,7 @@ Store barriers are similarly decorator-driven. A normal store carries the decora
 \section{Reference Processing Pipeline in \ac{ZGC}}
 \label{sec:bg-refproc}
 
-Reference processing is the mechanism by which the \ac{GC} handles \texttt{Reference} objects discovered during marking. The pipeline has three stages: \emph{discovery}, \emph{processing}, and \emph{enqueueing}. In \ac{ZGC}, the first two stages run concurrently with the application during the marking phase, while the enqueue stage involves handing off references to the Java-level \texttt{ReferenceHandler} thread~\cite{openjdk-zreferenceprocessor-cpp,openjdk-reference-java}. An overview of this data flow is shown in \cref{fig:zgc-ref-pipeline}.
+Reference processing is the mechanism by which the \ac{GCr} handles \texttt{Reference} objects discovered during marking. The pipeline has three stages: \emph{discovery}, \emph{processing}, and \emph{enqueueing}. In \ac{ZGC}, the first two stages run concurrently with the application during the marking phase, while the enqueue stage involves handing off references to the Java-level \texttt{ReferenceHandler} thread~\cite{openjdk-zreferenceprocessor-cpp,openjdk-reference-java}. An overview of this data flow is shown in \cref{fig:zgc-ref-pipeline}.
 
 \begin{figure}[t]
 \centering
@@ -237,18 +236,18 @@ Reference processing is the mechanism by which the \ac{GC} handles \texttt{Refer
     data/.style={draw, minimum width=52mm, minimum height=7mm, align=center},
     edge/.style={-Latex, thick}
 ]
-\node[box] (disc) {Discovery (concurrent)};
-\node[data, right=14mm of disc] (dlist) {Per-worker discovered lists};
-\node[box, below=of disc] (proc) {Processing (concurrent)};
-\node[data, right=14mm of proc] (plist) {Per-worker pending lists};
-\node[box, below=of proc] (enqueue) {Enqueue (single-threaded)};
-\node[data, right=14mm of enqueue] (vmp) {\ac{GC} local pending list and\\ Global VM pending list};
+\node[box] (disc) {Discovery (concurrent)},
+\node[data, right=14mm of disc] (dlist) {Per-worker discovered lists},
+\node[box, below=of disc] (proc) {Processing (concurrent)},
+\node[data, right=14mm of proc] (plist) {Per-worker pending lists},
+\node[box, below=of proc] (enqueue) {Enqueue (single-threaded)},
+\node[data, right=14mm of enqueue] (vmp) {\ac{GC} local pending list and\\ Global VM pending list},
 
-\draw[edge] (disc) -- node[above] {uses} (dlist);
-\draw[edge] (disc) -- (proc);
-\draw[edge] (proc) -- node[above] {uses} (plist);
-\draw[edge] (proc) -- (enqueue);
-\draw[edge] (enqueue) -- node[above] {uses} (vmp);
+\draw[edge] (disc) -- node[above] {uses} (dlist),
+\draw[edge] (disc) -- (proc),
+\draw[edge] (proc) -- node[above] {uses} (plist),
+\draw[edge] (proc) -- (enqueue),
+\draw[edge] (enqueue) -- node[above] {uses} (vmp),
 
 \end{tikzpicture}
 \caption[\ac{ZGC} reference-processing pipeline]{\ac{ZGC} reference-processing pipeline and data flow from discovery to Java-level enqueue handling.}
@@ -264,9 +263,9 @@ The discovery decision depends on several factors:
 
 \begin{enumerate}
     \item \textbf{Is the reference active?} Only active references are eligible. For non-\texttt{FinalReference} types, an inactive reference has a \texttt{null} referent field. For \texttt{FinalReference}, inactivity is indicated by a non-null \texttt{next} field.
-    \item \textbf{Is the referent still strongly reachable?} If the referent is already marked as strongly live, the reference does not need processing. The \ac{GC} checks this via its liveness information.
+    \item \textbf{Is the referent still strongly reachable?} If the referent is already marked as strongly live, the reference does not need processing. The \ac{GCr} checks this via its liveness information.
     \item \textbf{Soft reference policy.} For \texttt{SoftReference} objects, the collector applies a policy (based on available memory and the reference's last access time) to decide whether to keep the referent alive or clear the referent field~\cite{openjdk-referenceprocessor-cpp,openjdk-referencepolicy-cpp}.
-    \item \textbf{Generational considerations.} In \ac{ZGC}, only references residing in the old generation are discovered; young-generation references are always treated as strong~\cite{jep439-genzgc,openjdk-zreferenceprocessor-cpp}. This is because reference processing introduces additional delay and uncertainty to the duration of the young-generation collection. By treating young references as strong, \ac{ZGC} can complete young collections more predictably, which decreases the risk of the application running out of memory during a long young collection. 
+    \item \textbf{Generational considerations.} In \ac{ZGC}, only references residing in the old generation are discovered, young-generation references are always treated as strong~\cite{jep439-genzgc,openjdk-zreferenceprocessor-cpp}. This is because reference processing introduces additional delay and uncertainty to the duration of the young-generation collection. By treating young references as strong, \ac{ZGC} can complete young collections more predictably, which decreases the risk of the application running out of memory during a long young collection. 
 \end{enumerate}
 
 Once a reference is selected for discovery, it is recorded on a \emph{discovered list}. In \ac{ZGC}, each \ac{GC} worker thread maintains its own discovered-list head, so discovery is implemented as a cheap, non-atomic prepend to a per-worker list~\cite{openjdk-zreferenceprocessor-cpp}. This avoids \ac{CAS} contention found in shared processors where multiple threads update the same discovered head~\cite{openjdk-referenceprocessor-cpp}.
@@ -296,18 +295,18 @@ Generational interactions are important during processing: when a \texttt{Refere
     obj/.style={draw, minimum width=24mm, minimum height=8mm, align=center},
     edge/.style={-Latex, thick}
 ]
-\node[gen] (old) {};
-\node[gen, right=of old] (young) {};
+\node[gen] (old) {},
+\node[gen, right=of old] (young) {},
 
-\node[align=center, font=\footnotesize] at ($(old.north)+(0,4mm)$) {Old generation};
-\node[align=center, font=\footnotesize] at ($(young.north)+(0,4mm)$) {Young generation};
+\node[align=center, font=\footnotesize] at ($(old.north)+(0,4mm)$) {Old generation},
+\node[align=center, font=\footnotesize] at ($(young.north)+(0,4mm)$) {Young generation},
 
-\node[obj] (ref) at ($(old.center)+(0,4mm)$) {\texttt{Reference}};
-\node[obj] (target) at ($(young.center)+(0,4mm)$) {Referent};
+\node[obj] (ref) at ($(old.center)+(0,4mm)$) {\texttt{Reference}},
+\node[obj] (target) at ($(young.center)+(0,4mm)$) {Referent},
 
-\draw[edge] (ref) -- node[above] {\footnotesize weak pointer} (target);
-\node[align=center, font=\footnotesize] at ($(old.south)+(0,3.5mm)$) {discovered};
-\node[align=center, font=\footnotesize] at ($(young.south)+(0,3.5mm)$) {treated as strongly reachable};
+\draw[edge] (ref) -- node[above] {\footnotesize weak pointer} (target),
+\node[align=center, font=\footnotesize] at ($(old.south)+(0,3.5mm)$) {discovered},
+\node[align=center, font=\footnotesize] at ($(young.south)+(0,3.5mm)$) {treated as strongly reachable},
 \end{tikzpicture}
 \caption[Cross-generational reference case]{If an old-generation \texttt{Reference} points to a young referent, the young referent must remain alive during young collection.}
 \label{fig:cross-gen-reference}
@@ -319,10 +318,10 @@ Generational interactions are important during processing: when a \texttt{Refere
 After a reference's referent field has been cleared, the reference must be made available to the application if it was created with a \texttt{ReferenceQueue}. This happens through the \emph{pending list} mechanism which feeds the \texttt{ReferenceHandler} thread~\cite{openjdk-zreferenceprocessor-cpp,openjdk-reference-java}. The handoff process is as follows:
 
 \begin{enumerate}
-    \item The \ac{GC} has built an internal pending list by linking cleared references together via their \texttt{discovered} field.
-    \item Under the heap lock, the \ac{GC} atomically prepends its internal pending list onto the global VM pending list.
+    \item The \ac{GCr} has built an internal pending list by linking cleared references together via their \texttt{discovered} field.
+    \item Under the heap lock, the \ac{GCr} atomically prepends its internal pending list onto the global VM pending list.
     \item The \texttt{ReferenceHandler} daemon thread is notified.
-    \item The \texttt{ReferenceHandler} thread wakes up, atomically retrieves the pending list, and iterates over it. For each reference, it checks whether \texttt{queue != NULL\_QUEUE}. If the reference has a real queue, it calls \texttt{queue.enqueue(this)}; otherwise it simply advances to the next reference.
+    \item The \texttt{ReferenceHandler} thread wakes up, atomically retrieves the pending list, and iterates over it. For each reference, it checks whether \texttt{queue != NULL\_QUEUE}. If the reference has a real queue, it calls \texttt{queue.enqueue(this)}, otherwise it simply advances to the next reference.
 \end{enumerate}
 
 This handoff reveals an inefficiency: references created without a \texttt{ReferenceQueue} are still linked into the pending list, transferred to the \texttt{ReferenceHandler} thread, and iterated over only to be skipped~\cite{openjdk-reference-java,openjdk-zreferenceprocessor-cpp}. For workloads where the majority of weak references lack queues, this results in a considerable amount of extra work. This behaviour has been reported in an OpenJDK enhancement issue~\cite{JDK-8029205}. Avoiding enqueue-path work for references with \texttt{NULL\_QUEUE} is one of the primary optimisation targets explored in this thesis.
@@ -348,4 +347,10 @@ The three optimisations investigated in this thesis each address a specific inef
 
 \emph{Benefits.} The standard \ac{ZGC} clear path executes three operations per reference: a load barrier to resolve the referent pointer, a virtual call to dispatch on reference type, and a \ac{CAS} via a \ac{ZGC} barrier to atomically clear the referent field~\cite{openjdk-zreferenceprocessor-cpp,openjdk-zbarrier-cpp}. For queue-less old-generation \texttt{WeakReference} objects, all three can be simplified. The load barrier is unnecessary when the referent was pre-loaded during discovery. The virtual call can be replaced by a direct call since the reference type is statically \texttt{REF\_WEAK}. Most importantly, the \ac{CAS} can be replaced by a direct store: the only concurrent operation that can modify the referent field is an application thread explicitly calling \texttt{WeakReference.clear()}, which sets it to null~\cite{openjdk-reference-java}. Since no thread can set a null field to a non-null value, overwriting a non-null referent with a coloured null is safe with a plain store. Together these reductions substantially lower instruction count and memory-access overhead per reference~\cite{openjdk-zbarrier-cpp,openjdk-zreferenceprocessor-cpp}.
 
-\emph{Limitations.} The correctness argument for replacing the \ac{CAS} with a direct store is non-trivial and tightly coupled to the current \texttt{WeakReference} \ac{API} contract~\cite{openjdk-reference-java,openjdk-zbarrier-cpp}. Any future change to the concurrency model of \texttt{Reference} objects could invalidate the assumption. The optimisation is therefore limited to old-generation \texttt{WeakReference} objects without a \texttt{ReferenceQueue}: extending it to \texttt{SoftReference} or \texttt{PhantomReference} objects, or to \texttt{WeakReference} objects with queues, requires re-examining the concurrency argument for each type. Additionally, when used without the dynamic array (the \texttt{clear\_path\_only} variant), the referent must still be loaded through a barrier at processing time, since no pre-loading occurred during discovery; the saving is then limited to eliminating the virtual call and replacing the \ac{CAS} with a store.
+\emph{Limitations.} The correctness argument for replacing the \ac{CAS} with a direct store is non-trivial and tightly coupled to the current \texttt{WeakReference} \ac{API} contract~\cite{openjdk-reference-java,openjdk-zbarrier-cpp}. Any future change to the concurrency model of \texttt{Reference} objects could invalidate the assumption. The optimisation is therefore limited to old-generation \texttt{WeakReference} objects without a \texttt{ReferenceQueue}: extending it to \texttt{SoftReference} or \texttt{PhantomReference} objects, or to \texttt{WeakReference} objects with queues, requires re-examining the concurrency argument for each type. Additionally, when used without the dynamic array (the \texttt{clear\_path\_only} variant), the referent must still be loaded through a barrier at processing time, since no pre-loading occurred during discovery, the saving is then limited to eliminating the virtual call and replacing the \ac{CAS} with a store.
+
+\paragraph{Weak-field mechanism.}
+
+\emph{Benefits.} The fundamental overhead of \texttt{WeakReference} objects is structural: each weak-reference relationship requires a separate \texttt{WeakReference} heap object, which must be allocated, discovered by the \ac{GCr}, processed through the clearing pipeline, and eventually collected~\cite{openjdk-weakreference-java,openjdk-zreferenceprocessor-cpp}. In applications that use weak references purely for liveness probing -- without a \texttt{ReferenceQueue} -- all of this object-level machinery exists solely to carry the weak semantics of a single field pointer. Expressing those semantics directly on a field annotation removes the \texttt{WeakReference} wrapper entirely: no object is allocated, no object appears in the discovered list, and the \ac{GCr} processes the field address directly. This should reduce per-\ac{GC}-cycle cost on two fronts. First, reference-processing overhead is reduced: the \ac{GCr} processes field addresses rather than \texttt{WeakReference} objects, avoiding the object-header indirection and the enqueue path entirely. Second, heap allocation pressure is reduced: fewer live objects mean shorter \ac{GC} pause times and a lower memory footprint, since \ac{GC} cost is broadly proportional to the number of live objects~\cite{oracle-gc-implementation}.
+
+\emph{Limitations.} The mechanism requires changes in multiple \ac{JVM} layers -- annotation parsing, class-file metadata, compiler and interpreter barrier emission, and the \ac{GC}-side marking closure -- making it substantially more intrusive than the three pipeline optimisations. The current implementation supports only old-generation fields, weak fields in young-generation objects fall back to strong-reference treatment. There is no \texttt{ReferenceQueue} integration: applications that need post-clear notification must continue to use \texttt{WeakReference} objects. The annotation is non-standard and not part of any Java specification, which limits its applicability to HotSpot deployments. Finally, the standard \texttt{Reference} \ac{API} (\texttt{get()}, \texttt{clear()}, \texttt{isEnqueued()}) is unavailable for weak fields, callers check for null directly on the field.

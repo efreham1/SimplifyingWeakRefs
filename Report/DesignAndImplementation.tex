@@ -1,7 +1,7 @@
 \chapter{Design and Implementation}
 \label{chap:design-and-implementation}
 
-The motivation and trade-offs for each technique are established in \cref{subsec:bg-refproc-tradeoffs}; this chapter describes their design and implementation. Three optimisations target \ac{ZGC}'s processing of \texttt{WeakReference} objects without a \texttt{ReferenceQueue}: skip-enqueue separation (\cref{sec:di-sep}), the dynamic array (\cref{sec:di-dyn}), and the specialised clear path (\cref{sec:di-clear}). In addition, an exploratory weak-field implementation (\cref{sec:di-wf}) was developed to evaluate an alternative way of expressing weak semantics that avoids the overhead of \texttt{WeakReference} objects entirely.
+The motivation and trade-offs for each technique are established in \cref{subsec:bg-refproc-tradeoffs}, this chapter describes their design and implementation. Three optimisations target \ac{ZGC}'s processing of \texttt{WeakReference} objects without a \texttt{ReferenceQueue}: skip-enqueue separation (\cref{sec:di-sep}), the dynamic array (\cref{sec:di-dyn}), and the specialised clear path (\cref{sec:di-clear}). In addition, an exploratory weak-field implementation (\cref{sec:di-wf}) was developed to evaluate an alternative way of expressing weak semantics that avoids the overhead of \texttt{WeakReference} objects entirely.
 
 \section{Skipping Enqueue Path}
 \label{sec:di-sep}
@@ -16,24 +16,24 @@ The discovered lists are separated rather than handled through conditional branc
 \begin{listing}[t]
 \begin{lstlisting}[language=C++]
 bool discover_reference(oop ref_obj, ReferenceType type) {
-    zaddress ref = to_zaddress(ref_obj); // convert to ZGC-coloured pointer
+    zaddress ref = to_zaddress(ref_obj), // convert to ZGC-coloured pointer
 
     if (!should_discover(ref, type)) {   // skip already-discovered or ineligible refs
-        return false;
+        return false,
     }
 
     if (type == REF_WEAK && !has_reference_queue(ref)) {
         // Queue-less weak ref: goes to the no-enqueue list, bypasses
         // pending-list hand-off and ReferenceHandler thread entirely
-        weak_no_queue_list_per_worker.append(ref);
+        weak_no_queue_list_per_worker.append(ref),
     } else {
         // All other reference types (and queue-backed weak refs) follow
         // the standard discovered list and enqueue pipeline
-        discovered_list_per_worker.append(ref);
+        discovered_list_per_worker.append(ref),
     }
 
-    mark_discovered(ref); // set discovered field to prevent re-discovery
-    return true;
+    mark_discovered(ref), // set discovered field to prevent re-discovery
+    return true,
 }
 \end{lstlisting}
 \caption[Queue-less weak discovery split]{Pseudocode of the null-queue fast path during discovery. Queue-less weak references are routed to a separate discovered list and processed by a no-enqueue pipeline (see \cref{app:source-refproc}).}
@@ -59,25 +59,25 @@ See \cref{lst:dynamic-array-processing} for a pseudocode summary and \cref{app:s
 \begin{lstlisting}[language=C++]
 void discover_reference(oop ref_obj, ReferenceType type) {
     //...
-    ZWeakRefData data;
-    data.set_from_ref(ref);       // pre-load referent field address and value
-    worker_array.append(data);    // O(1) amortised; array grows on the C heap if needed
+    ZWeakRefData data,
+    data.set_from_ref(ref),       // pre-load referent field address and value
+    worker_array.append(data),    // O(1) amortised, array grows on the C heap if needed
     //...
 }
 
 void process_worker_discovered_weak_refs_without_queue(ZWeakRefArray& arr) {
-    size_t dropped = 0;
-    for (size_t i = 0; i < arr.length(); i++) {
-        const ZWeakRefData& data = arr.at(i); // index-based: contiguous, cache-friendly
-        data.mark_not_discovered();            // clear discovered field before liveness check
+    size_t dropped = 0,
+    for (size_t i = 0, i < arr.length(), i++) {
+        const ZWeakRefData& data = arr.at(i), // index-based: contiguous, cache-friendly
+        data.mark_not_discovered(),            // clear discovered field before liveness check
 
         if (try_make_inactive(data)) { // clear referent if no longer strongly reachable
-            cleared_weak_no_queue_count++;
+            cleared_weak_no_queue_count++,
         } else {
-            dropped++; // reference stayed active; slot kept for next GC cycle
+            dropped++, // reference stayed active, slot kept for next GC cycle
         }
     }
-    arr.clear_and_reserve(dropped); // retain capacity to avoid reallocation next cycle
+    arr.clear_and_reserve(dropped), // retain capacity to avoid reallocation next cycle
 }
 \end{lstlisting}
 \caption[Dynamic-array weak processing]{Pseudocode for the \texttt{ZWeakRefArray}-backed queue-less weak-reference path. Discovery appends pre-loaded fields and processing scans the array sequentially (see \cref{app:source-dyn,app:source-refproc}).}
@@ -118,33 +118,33 @@ See \cref{lst:gen-opt-fast-inactive} for a pseudocode summary and \cref{app:sour
 \begin{lstlisting}[language=C++]
 bool try_make_inactive_fast(const ZWeakRefData& data) {
     // Array variant: referent address pre-loaded at discovery (no barrier needed)
-    zaddress referent = data.referent_addr;
+    zaddress referent = data.referent_addr,
 
     // Linked-list variant: must load through a barrier to get the live address
-    zaddress referent = load_barrier(data.referent_field_addr);
+    zaddress referent = load_barrier(data.referent_field_addr),
 
     // Young referents cannot be cleared here: they are kept alive by
     // generational rules and are only processed in a young-gen collection
     if (is_young(referent)) {
         if (young_mark_is_active()) {
-            mark_young_root(referent); // preserve cross-generational liveness
+            mark_young_root(referent), // preserve cross-generational liveness
         }
-        return false; // keep active
+        return false, // keep active
     }
 
     // Old referent is dead: no thread can store a non-null value back, so
     // a plain store is safe (no CAS required)
     if (!is_strongly_live(referent)) {
-        *data.referent_field_addr = to_zpointer(zaddress::null);
-        return true; // became inactive
+        *data.referent_field_addr = to_zpointer(zaddress::null),
+        return true, // became inactive
     }
 
     // Referent is still live: update pointer colour bits for the current
     // GC phase, but avoid overwriting a null written by an application thread
-    zpointer observed = data.referent_field_value;
-    zpointer recoloured = remap_with_good_metadata(referent);
-    cas_referent_if_non_null(data.referent_field_addr, observed, recoloured);
-    return false;
+    zpointer observed = data.referent_field_value,
+    zpointer recoloured = remap_with_good_metadata(referent),
+    cas_referent_if_non_null(data.referent_field_addr, observed, recoloured),
+    return false,
 }
 \end{lstlisting}
 \caption[Optimised-clear-path fast inactive check]{Pseudocode for the specialised queue-less weak-reference inactive check. The old-generation clear path uses direct stores, while recolouring uses \ac{CAS} to avoid null-to-non-null races (see \cref{app:source-refproc}).}
@@ -154,7 +154,7 @@ bool try_make_inactive_fast(const ZWeakRefData& data) {
 \section{Weak Fields}
 \label{sec:di-wf}
 
-To answer \cref{rq:weak-fields}, an exploratory weak-field mechanism was implemented to test whether expressing weak semantics directly on object fields can reduce the overhead of \texttt{WeakReference} objects. The mechanism allows developers to annotate object fields as weak, indicating that the \ac{GC} should treat those fields with weak semantics. The \ac{GC} then applies weak semantic rules directly to the annotated field without requiring a separate \texttt{WeakReference} object. This is expected to slightly reduce reference-processing overhead and to reduce Java heap usage by eliminating the need for separate \texttt{WeakReference} objects. The reduction in Java heap usage should also reduce \ac{GC} cycle time, since garbage-collection cost is broadly proportional to the number of live objects~\cite{oracle-gc-implementation}.
+As established in \cref{subsec:bg-refproc-tradeoffs}, replacing \texttt{WeakReference} wrapper objects with annotated fields should reduce both reference-processing overhead and heap allocation pressure. To answer \cref{rq:weak-fields}, an exploratory weak-field mechanism was implemented. The mechanism allows developers to annotate object fields as weak, indicating that the \ac{GCr} should treat those fields with weak semantics. The \ac{GCr} then applies weak semantic rules directly to the annotated field without requiring a separate \texttt{WeakReference} object.
 
 \subsection{Implementation of Weak Fields}
 \label{subsec:di-wf-impl}
@@ -167,13 +167,13 @@ A new runtime-retained field annotation, \texttt{@java.lang.ref.weak}, was added
 
 \begin{listing}[t]
 \begin{lstlisting}[language=Java]
-package java.lang.ref;
+package java.lang.ref,
 
 @Retention(RetentionPolicy.RUNTIME) // visible to the VM at class-loading time
 @Target(ElementType.FIELD)          // applies to fields only, not classes or methods
 public @interface weak {}
 \end{lstlisting}
-\caption[Weak-field annotation]{The \texttt{@weak} annotation. Applied to a field, it instructs the \ac{GC} to treat the field value with weak-reference semantics (see \cref{app:source-wf-annotation}).}
+\caption[Weak-field annotation]{The \texttt{@weak} annotation. Applied to a field, it instructs the \ac{GCr} to treat the field value with weak-reference semantics (see \cref{app:source-wf-annotation}).}
 \label{lst:weak-annotation}
 \end{listing}
 
@@ -191,28 +191,28 @@ Each \ac{GC} worker thread maintains its own \texttt{ZWeakFieldArray} instance t
 void do_oop(oop* p) {
     if (is_weak_annotated_field(p)) {  // check weak flag in field metadata
         if (discover_weak_field(p)) {
-            return; // diverted to weak path; skip strong marking
+            return, // diverted to weak path, skip strong marking
         }
     }
     // ... normal strong marking ...
 }
 
 bool discover_weak_field(oop* field) {
-    encountered_weak_fields_count++;
+    encountered_weak_fields_count++,
 
     if (is_young(field)) {
-        return false; // young-generation weak fields are not supported
+        return false, // young-generation weak fields are not supported
     }
 
     if (is_null(field) || is_strongly_live(field)) {
-        return false; // no clearing needed: already null or strongly reachable
+        return false, // no clearing needed: already null or strongly reachable
     }
 
     // Record field address and current pointer value for the processing phase
-    discovered_weak_fields_count++;
-    ZWeakFieldData data(field);
-    worker_weak_field_array.append(data); // per-worker array avoids contention
-    return true;
+    discovered_weak_fields_count++,
+    ZWeakFieldData data(field),
+    worker_weak_field_array.append(data), // per-worker array avoids contention
+    return true,
 }
 \end{lstlisting}
 \caption[Weak-field discovery]{Pseudocode for weak-field discovery during marking. Annotated fields are diverted from the strong mark barrier and recorded in a per-worker array (see \cref{app:source-wf-refproc}).}
@@ -226,16 +226,16 @@ During the reference-processing phase, each \ac{GC} worker iterates through its 
 \begin{listing}[t]
 \begin{lstlisting}[language=C++]
 void process_worker_discovered_weak_fields(ZWeakFieldArray& weak_fields) {
-    size_t dropped = 0;
-    for (size_t i = 0; i < weak_fields.length(); i++) {
-        const ZWeakFieldData& data = weak_fields.at(i); // sequential: cache-friendly
+    size_t dropped = 0,
+    for (size_t i = 0, i < weak_fields.length(), i++) {
+        const ZWeakFieldData& data = weak_fields.at(i), // sequential: cache-friendly
         if (try_make_inactive_fast(data)) { // clear dead referent or recolour live one
-            cleared_weak_fields_count++;
+            cleared_weak_fields_count++,
         } else {
-            dropped++; // field stayed active; reserve space for next GC cycle
+            dropped++, // field stayed active, reserve space for next GC cycle
         }
     }
-    weak_fields.clear_and_reserve(dropped); // avoid reallocation if count is stable
+    weak_fields.clear_and_reserve(dropped), // avoid reallocation if count is stable
 }
 \end{lstlisting}
 \caption[Weak-field processing]{Pseudocode for weak-field processing. Each entry is passed to the clean barrier, which clears dead referents and recolours live ones (see \cref{app:source-wf-refproc}).}
@@ -243,4 +243,4 @@ void process_worker_discovered_weak_fields(ZWeakFieldArray& weak_fields) {
 \end{listing}
 
 \subsubsection{Compiler and Interpreter Support}
-The \texttt{@weak} annotation metadata is also made available to the \ac{JIT} compilers and interpreter. This is necessary to ensure that any loads or stores to a weak field outside \ac{GC} processing are handled correctly with respect to weak semantics. The implementation adds a decorator to loads and stores that target a field carrying the \texttt{weak} flag in its metadata. \ac{ZGC} then inserts barriers that apply the required semantics to all accesses with this decorator. Without the load decorator, a load from a weak field could return a non-null reference whose referent will be cleared by the \ac{GC}. The store decorator is needed so that the \ac{GC} does not record the previous value of the field, unlike in the default strong-reference case used to preserve the \ac{SATB} marking semantics. See \cref{subsec:bg-zgc-decorators} for more details on decorators and \cref{app:source-wf-compiler} for the implementations.
+The \texttt{@weak} annotation metadata is also made available to the \ac{JIT} compilers and interpreter. This is necessary to ensure that any loads or stores to a weak field outside \ac{GC} processing are handled correctly with respect to weak semantics. The implementation adds a decorator to loads and stores that target a field carrying the \texttt{weak} flag in its metadata. \ac{ZGC} then inserts barriers that apply the required semantics to all accesses with this decorator. Without the load decorator, a load from a weak field could return a non-null reference whose referent will be cleared by the \ac{GCr}. The store decorator is needed so that the \ac{GCr} does not record the previous value of the field, unlike in the default strong-reference case used to preserve the \ac{SATB} marking semantics. See \cref{subsec:bg-zgc-decorators} for more details on decorators and \cref{app:source-wf-compiler} for the implementations.
