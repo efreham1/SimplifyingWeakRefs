@@ -118,15 +118,15 @@ An important observation is that references created \emph{without} a \texttt{Ref
     state/.style={draw, rounded corners, minimum width=18mm, minimum height=8mm, align=center},
     edge/.style={-Latex, thick}
 ]
-\node[state] (active) {Active},
-\node[state, right=of active] (pending) {Pending},
-\node[state, right=of pending] (enqueued) {Enqueued},
-\node[state, right=of enqueued] (inactive) {Inactive},
+\node[state] (active) {Active};
+\node[state, right=of active] (pending) {Pending};
+\node[state, right=of pending] (enqueued) {Enqueued};
+\node[state, right=of enqueued] (inactive) {Inactive};
 
-\draw[edge] (active) -- (pending),
-\draw[edge] (pending) -- (enqueued),
-\draw[edge] (enqueued) -- (inactive),
-\draw[edge, dashed, bend left=20] (active) to node[above, align=center] {\footnotesize no queue\footnotesize} (inactive),
+\draw[edge] (active) -- (pending);
+\draw[edge] (pending) -- (enqueued);
+\draw[edge] (enqueued) -- (inactive);
+\draw[edge, dashed, bend left=20] (active) to node[above, align=center] {\footnotesize no queue\footnotesize} (inactive);
 \end{tikzpicture}
 \caption[Reference lifecycle states]{Lifecycle of \texttt{Reference} objects. References without a queue can bypass Pending and Enqueued.}
 \label{fig:reference-lifecycle}
@@ -236,18 +236,18 @@ Reference processing is the mechanism by which the \ac{GCr} handles \texttt{Refe
     data/.style={draw, minimum width=52mm, minimum height=7mm, align=center},
     edge/.style={-Latex, thick}
 ]
-\node[box] (disc) {Discovery (concurrent)},
-\node[data, right=14mm of disc] (dlist) {Per-worker discovered lists},
-\node[box, below=of disc] (proc) {Processing (concurrent)},
-\node[data, right=14mm of proc] (plist) {Per-worker pending lists},
-\node[box, below=of proc] (enqueue) {Enqueue (single-threaded)},
-\node[data, right=14mm of enqueue] (vmp) {\ac{GC} local pending list and\\ Global VM pending list},
+\node[box] (disc) {Discovery (concurrent)};
+\node[data, right=14mm of disc] (dlist) {Per-worker discovered lists};
+\node[box, below=of disc] (proc) {Processing (concurrent)};
+\node[data, right=14mm of proc] (plist) {Per-worker pending lists};
+\node[box, below=of proc] (enqueue) {Enqueue (single-threaded)};
+\node[data, right=14mm of enqueue] (vmp) {\ac{GC} local pending list and\\ Global VM pending list};
 
-\draw[edge] (disc) -- node[above] {uses} (dlist),
-\draw[edge] (disc) -- (proc),
-\draw[edge] (proc) -- node[above] {uses} (plist),
-\draw[edge] (proc) -- (enqueue),
-\draw[edge] (enqueue) -- node[above] {uses} (vmp),
+\draw[edge] (disc) -- node[above] {uses} (dlist);
+\draw[edge] (disc) -- (proc);
+\draw[edge] (proc) -- node[above] {uses} (plist);
+\draw[edge] (proc) -- (enqueue);
+\draw[edge] (enqueue) -- node[above] {uses} (vmp);
 
 \end{tikzpicture}
 \caption[\ac{ZGC} reference-processing pipeline]{\ac{ZGC} reference-processing pipeline and data flow from discovery to Java-level enqueue handling.}
@@ -295,18 +295,18 @@ Generational interactions are important during processing: when a \texttt{Refere
     obj/.style={draw, minimum width=24mm, minimum height=8mm, align=center},
     edge/.style={-Latex, thick}
 ]
-\node[gen] (old) {},
-\node[gen, right=of old] (young) {},
+\node[gen] (old) {};
+\node[gen, right=of old] (young) {};
 
-\node[align=center, font=\footnotesize] at ($(old.north)+(0,4mm)$) {Old generation},
-\node[align=center, font=\footnotesize] at ($(young.north)+(0,4mm)$) {Young generation},
+\node[align=center, font=\footnotesize] at ($(old.north)+(0,4mm)$) {Old generation};
+\node[align=center, font=\footnotesize] at ($(young.north)+(0,4mm)$) {Young generation};
 
-\node[obj] (ref) at ($(old.center)+(0,4mm)$) {\texttt{Reference}},
-\node[obj] (target) at ($(young.center)+(0,4mm)$) {Referent},
+\node[obj] (ref) at ($(old.center)+(0,4mm)$) {\texttt{Reference}};
+\node[obj] (target) at ($(young.center)+(0,4mm)$) {Referent};
 
-\draw[edge] (ref) -- node[above] {\footnotesize weak pointer} (target),
-\node[align=center, font=\footnotesize] at ($(old.south)+(0,3.5mm)$) {discovered},
-\node[align=center, font=\footnotesize] at ($(young.south)+(0,3.5mm)$) {treated as strongly reachable},
+\draw[edge] (ref) -- node[above] {\footnotesize weak pointer} (target);
+\node[align=center, font=\footnotesize] at ($(old.south)+(0,3.5mm)$) {discovered};
+\node[align=center, font=\footnotesize] at ($(young.south)+(0,3.5mm)$) {treated as strongly reachable};
 \end{tikzpicture}
 \caption[Cross-generational reference case]{If an old-generation \texttt{Reference} points to a young referent, the young referent must remain alive during young collection.}
 \label{fig:cross-gen-reference}
