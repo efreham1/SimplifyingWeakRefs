@@ -5,7 +5,7 @@
 %%% Master's Thesis, Uppsala University, 2026
 %%% Author: Fredrik Hammarberg
 
-\documentclass{beamer}
+\documentclass[aspectratio=169]{beamer}
 
 \usepackage[english]{babel}
 \usepackage{hyperref}
@@ -22,6 +22,18 @@
 
 \usepackage{UU_beamer} % Uppsala University beamer style
 
+% Modern bullet points
+\setbeamertemplate{itemize item}{%
+    {\raisebox{.2ex}{\scriptsize\color{uppsalared}$\blacktriangleright$}}}
+\setbeamertemplate{itemize subitem}{%
+    {\raisebox{.2ex}{\scriptsize\color{uppsalared!65}$\triangleright$}}}
+\setbeamertemplate{itemize subsubitem}{%
+    {\raisebox{.2ex}{\tiny\color{uppsalared!45}$-$}}}
+
+% Subtle alert block (lighter than the default deep red fill)
+\setbeamercolor{block title alerted}{bg=uppsalared!85,fg=white}
+\setbeamercolor{block body alerted}{bg=uppsalared!8,fg=black}
+
 % ------ CODE COLOUR DEFINITIONS ------ %
 \definecolor{codered}{rgb}{0.6,0,0}
 \definecolor{codeblue}{rgb}{0,0,0.8}
@@ -35,7 +47,13 @@
     stringstyle=\color{codepurple},
     numbers=left,
     numberstyle=\tiny\color{almostwhite},
-    frame=shadowbox,
+    frame=tb,
+    rulecolor=\color{uppsalared!50},
+    backgroundcolor=\color{black!4},
+    xleftmargin=6pt,
+    xrightmargin=4pt,
+    aboveskip=5pt,
+    belowskip=3pt,
     commentstyle=\color{codegreen},
     breaklines=true,
     showstringspaces=false,
@@ -48,14 +66,15 @@
 \newcommand{\shortconference}{Master's Thesis}
 \newcommand{\contact}{\textit{fredrik.hammarberg00@outlook.com}}
 
-\author[F.\ Hammarberg, \contact]{\href{}{Fredrik Hammarberg}}
-\institute[IT Dept., UU]{%
-    \href{}{Department of Information Technology, Uppsala University}
+\author[F.\ Hammarberg]{\href{}{Fredrik Hammarberg}}
+\institute[MSc CIE, UU]{%
+    \href{}{MSc Computer and Information Engineering, Uppsala University}
     \\ \smallskip \contact}
 \title[Optimising Weak References in ZGC]{%
     Optimising Weak Reference Processing\\in OpenJDK's ZGC}
 \subtitle[\shortconference]{Master's Thesis in Computer Science}
-\date[May 2026]{\small May 2026 \\ \fullconference}
+\date[May 2026]{\small May 2026 \\ \fullconference \\[6pt]
+    \includegraphics[scale=0.40]{style/uu_logo.pdf}}
 
 \graphicspath{{../images/}}
 \setbeamertemplate{navigation symbols}{}
@@ -66,11 +85,8 @@
 {
 \setbeamertemplate{footline}{}
 \setbeamertemplate{headline}{}
-\begin{frame}\label{start}
+\begin{frame}[shrink=12]\label{start}
     \titlepage
-    \begin{figure}
-        \includegraphics[scale=0.55]{style/uu_logo.pdf}
-    \end{figure}
 \end{frame}
 }
 
@@ -361,7 +377,7 @@ void process_no_queue_refs(ZWeakRefArray& arr) {
 \section{Results \& Analysis}
 % ============================================================ %
 
-\begin{frame}{Non-Strong Processing Time}
+\begin{frame}[shrink=5]{Non-Strong Processing Time}
     \begin{columns}
         \column{0.45\textwidth}
         \small
