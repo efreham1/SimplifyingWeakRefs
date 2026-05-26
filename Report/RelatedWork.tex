@@ -1,9 +1,9 @@
 \chapter{Related Work}
 \label{chap:related-work}
 
-Directly published work on optimising \ac{ZGC}'s weak-reference pipeline is limited, the closest relevant material is therefore a combination of runtime documentation, implementation sources, and cross-language designs for weak semantics. This chapter positions the thesis against those adjacent designs.
+Published work directly addressing the optimisation of \ac{ZGC}'s weak-reference pipeline is limited; the closest relevant material is therefore a combination of runtime documentation, implementation sources, and cross-language designs for weak semantics. This chapter positions the thesis against those adjacent designs.
 
-\section{Java and the \ac{JVM}}
+\section{Java and the JVM}
 \label{sec:rw-java}
 
 Java's reference \ac{API} explicitly combines weak semantics with optional queue-based notification through the \texttt{ReferenceQueue} mechanism~\cite{oracle-ref-javadoc,openjdk-reference-java,openjdk-referencequeue-java}. This is a richer contract than a bare weak pointer, because it supports both non-owning reachability and callback-style handoff to application code. The design is flexible, but it also means that the runtime has to maintain queue metadata and pending-list machinery even for workloads that only need liveness probing through \texttt{WeakReference.get()}.
