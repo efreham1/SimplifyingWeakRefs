@@ -1,0 +1,588 @@
+% !TEX program = xelatex
+% !TEX root = Presentation.tex
+%%% Thesis Defence Presentation
+%%% Optimising Weak Reference Processing in OpenJDK's ZGC
+%%% Master's Thesis, Uppsala University, 2026
+%%% Author: Fredrik Hammarberg
+
+\documentclass{beamer}
+
+\usepackage[english]{babel}
+\usepackage{hyperref}
+\usepackage{graphicx}
+\usepackage{listings}
+\usepackage{caption}
+\usepackage{amsmath}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{fontspec}
+\setmainfont{TeX Gyre Termes}
+\setsansfont{TeX Gyre Heros}
+\setmonofont[HyphenChar=45]{TeX Gyre Cursor}
+
+\usepackage{UU_beamer} % Uppsala University beamer style
+
+% ------ CODE COLOUR DEFINITIONS ------ %
+\definecolor{codered}{rgb}{0.6,0,0}
+\definecolor{codeblue}{rgb}{0,0,0.8}
+\definecolor{codegreen}{rgb}{0,0.5,0}
+\definecolor{almostwhite}{gray}{0.55}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+
+\lstset{
+    basicstyle=\ttfamily\tiny,
+    keywordstyle=\bfseries\color{codeblue},
+    stringstyle=\color{codepurple},
+    numbers=left,
+    numberstyle=\tiny\color{almostwhite},
+    frame=shadowbox,
+    commentstyle=\color{codegreen},
+    breaklines=true,
+    showstringspaces=false,
+    morekeywords={zaddress, ZWeakRefData, ZWeakRefArray, ReferenceType,
+                  REF_WEAK, oop, bool, size_t, void, const}
+}
+
+% ------------- PRESENTATION METADATA --------------- %
+\newcommand{\fullconference}{Master's Thesis Defence -- Uppsala University}
+\newcommand{\shortconference}{Master's Thesis}
+\newcommand{\contact}{\textit{fredrik.hammarberg00@outlook.com}}
+
+\author[F.\ Hammarberg, \contact]{\href{}{Fredrik Hammarberg}}
+\institute[IT Dept., UU]{%
+    \href{}{Department of Information Technology, Uppsala University}
+    \\ \smallskip \contact}
+\title[Optimising Weak References in ZGC]{%
+    Optimising Weak Reference Processing\\in OpenJDK's ZGC}
+\subtitle[\shortconference]{Master's Thesis in Computer Science}
+\date[May 2026]{\small May 2026 \\ \fullconference}
+
+\graphicspath{{../images/}}
+\setbeamertemplate{navigation symbols}{}
+
+\begin{document}
+
+% =============== TITLE SLIDE =============== %
+{
+\setbeamertemplate{footline}{}
+\setbeamertemplate{headline}{}
+\begin{frame}\label{start}
+    \titlepage
+    \begin{figure}
+        \includegraphics[scale=0.55]{style/uu_logo.pdf}
+    \end{figure}
+\end{frame}
+}
+
+% =============== AGENDA =============== %
+\begin{frame}{Agenda}
+    \tableofcontents[sectionstyle=show,
+                     subsectionstyle=show/shaded/hide,
+                     subsubsectionstyle=show/shaded/hide]
+\end{frame}
+
+
+% ============================================================ %
+\section{Background \& Motivation}
+% ============================================================ %
+
+\begin{frame}[shrink=3]{GC Performance in Managed Runtimes}
+    \begin{itemize}
+        \item GC pauses affect application latency; concurrent GC work competes
+              with application threads for CPU and memory bandwidth
+        \item \textbf{ZGC} achieves sub-millisecond pauses independent of heap size;
+              marking, reference processing, and relocation are mostly concurrent
+        \item One underoptimised component: \textbf{weak reference processing}\\
+              -- cost scales linearly with the number of \texttt{WeakReference} objects
+    \end{itemize}
+    \begin{block}{Motivation}
+        ZGC's reference-processing pipeline treats all weak references uniformly,
+        even those that do not need the callback mechanism it provides.
+    \end{block}
+\end{frame}
+
+\begin{frame}[shrink=5]{Weak References in Java}
+    \begin{columns}
+        \column{0.52\textwidth}
+        \begin{itemize}
+            \item \texttt{WeakReference<T>} allows objects to be reclaimed
+                  despite being referenced
+            \item Optional \texttt{ReferenceQueue}: callback when referent
+                  is collected
+            \item \textbf{Without a queue} (common case): pure weak
+                  semantics, no GC callback needed
+            \item Widely used in \texttt{WeakHashMap}, caches, observer patterns
+        \end{itemize}
+
+        \column{0.48\textwidth}
+        \begin{block}{Without queue}
+            \small\texttt{new WeakReference<>(obj)}\\[4pt]
+            Only weak reachability required
+        \end{block}
+        \begin{exampleblock}{With queue}
+            \small\texttt{new WeakReference<>(obj, q)}\\[4pt]
+            GC notification when \texttt{obj} is cleared
+        \end{exampleblock}
+    \end{columns}
+\end{frame}
+
+\begin{frame}{ZGC's Reference-Processing Pipeline}
+    \begin{enumerate}
+        \item \textbf{Discovery} -- reference objects appended to per-worker
+              \emph{intrusive linked lists} via hidden \texttt{discovered} field
+        \item \textbf{Processing} -- check referent liveness; clear if unreachable
+        \item \textbf{Enqueue} -- cleared references put on the \emph{pending list};
+              \texttt{ReferenceHandler} delivers them to their \texttt{ReferenceQueue}
+    \end{enumerate}
+    \vspace{0.5em}
+    \begin{alertblock}{The Problem}
+        Steps 1--3 are applied \emph{uniformly} to all weak references --
+        even queue-less ones that will never be enqueued. Wasted traversal
+        and linked-list overhead for the most common case.
+    \end{alertblock}
+\end{frame}
+
+\begin{frame}{Research Questions}
+    \begin{block}{RQ1 -- Pipeline Optimisations}
+        How do targeted modifications to ZGC's processing of \texttt{WeakReference}
+        objects \emph{without} a \texttt{ReferenceQueue} affect reference-processing
+        time, total GC cycle time, GC memory, and Java heap usage?
+    \end{block}
+    \vspace{0.8em}
+    \begin{block}{RQ2 -- Weak Fields}
+        How does expressing weak semantics through \emph{annotated object fields}
+        affect the same metrics compared to the optimised \texttt{WeakReference}
+        pipeline approach?
+    \end{block}
+\end{frame}
+
+
+% ============================================================ %
+\section{Design \& Implementation}
+% ============================================================ %
+
+\begin{frame}{Four Mechanisms, Eight Variants}
+    \begin{columns}
+        \column{0.58\textwidth}
+        \small
+        Three pipeline optimisations for queue-less \texttt{WeakReference}:
+        \begin{itemize}
+            \item \textbf{sep} -- skip-enqueue separation
+            \item \textbf{dyn} -- dynamic array replacing the linked list
+            \item \textbf{clear\_path} -- specialised clear path
+        \end{itemize}
+        \vspace{0.3em}
+        One structural alternative:
+        \begin{itemize}
+            \item \textbf{weak\_fields} -- \texttt{@weak} field annotation
+        \end{itemize}
+        \vspace{0.3em}
+        All $2^3 = 8$ combinations benchmarked independently.
+
+        \column{0.42\textwidth}
+        \small
+        \begin{tabular}{lccc}
+            \toprule
+            \textbf{Variant} & \textbf{cp} & \textbf{sep} & \textbf{dyn} \\
+            \midrule
+            \texttt{none}     & -- & -- & -- \\
+            \texttt{dyn}      & -- & -- & \checkmark \\
+            \texttt{sep}      & -- & \checkmark & -- \\
+            \texttt{sep\_dyn} & -- & \checkmark & \checkmark \\
+            \texttt{cp}       & \checkmark & -- & -- \\
+            \texttt{cp\_dyn}  & \checkmark & -- & \checkmark \\
+            \texttt{cp\_sep}  & \checkmark & \checkmark & -- \\
+            \texttt{all}      & \checkmark & \checkmark & \checkmark \\
+            \bottomrule
+        \end{tabular}
+    \end{columns}
+\end{frame}
+
+\begin{frame}[fragile, shrink=5]{Mechanism 1: Skip-Enqueue Separation}
+    \textbf{Idea:} Route queue-less weak refs to a separate discovered list --
+    bypasses the pending list and \texttt{ReferenceHandler} thread entirely.
+
+    \begin{lstlisting}[language=C++, caption={Discovery split -- pseudocode}]
+bool discover_reference(oop ref, ReferenceType type) {
+    if (!should_discover(ref, type)) return false,
+
+    if (type == REF_WEAK && !has_reference_queue(ref)) {
+        // Queue-less: no-enqueue list, never touches ReferenceHandler
+        no_queue_list_per_worker.append(ref),
+    } else {
+        // Queue-backed and all other types: standard pipeline
+        discovered_list_per_worker.append(ref),
+    }
+    mark_discovered(ref),  return true,
+}
+    \end{lstlisting}
+    \begin{itemize}
+        \item Each GC worker has its own list -- no inter-thread contention
+        \item Queue-less list processed by a specialised loop that never enqueues
+    \end{itemize}
+\end{frame}
+
+\begin{frame}[fragile, shrink=5]{Mechanism 2: Dynamic Array}
+    \textbf{Idea:} Replace the intrusive linked list with a contiguous
+    \texttt{ZWeakRefArray} for cache-friendly traversal and pre-loaded referent data.
+
+    \begin{lstlisting}[language=C++, caption={Array-based processing -- pseudocode}]
+void process_no_queue_refs(ZWeakRefArray& arr) {
+    size_t kept = 0,
+    for (size_t i = 0, i < arr.length(), i++) {
+        const ZWeakRefData& d = arr.at(i),  // sequential: cache-friendly
+        d.mark_not_discovered(),
+        if (try_make_inactive(d)) { cleared++, }
+        else { kept++, }
+    }
+    arr.clear_and_reserve(kept),  // retain capacity for next cycle
+}
+    \end{lstlisting}
+    \begin{itemize}
+        \item Array grows on the C heap; amortised O(1) append per discovery
+        \item Referent address and value \emph{pre-loaded} during discovery
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Mechanism 3: Specialised Clear Path}
+    \textbf{Idea:} For old-generation queue-less \texttt{WeakReference} objects,
+    replace the CAS-based clear with a plain store.
+
+    \vspace{0.5em}
+    \begin{columns}
+        \column{0.48\textwidth}
+        \begin{block}{Standard clear path}
+            \small
+            1. Load barrier on referent\\
+            2. CAS: referent $\to$ coloured null
+        \end{block}
+
+        \column{0.48\textwidth}
+        \begin{block}{Specialised clear path}
+            \small
+            1. Use pre-loaded value (no barrier)\\
+            2. Direct store (no CAS)
+        \end{block}
+    \end{columns}
+
+    \vspace{0.6em}
+    \begin{alertblock}{Why safe?}
+        In the relevant STW pause, no application thread can update the referent
+        of an old-generation queue-less reference -- only the GC can.
+        The CAS is therefore unnecessary.
+    \end{alertblock}
+\end{frame}
+
+\begin{frame}{Superadditive Interaction: dyn + clear\_path}
+    \begin{columns}
+        \column{0.52\textwidth}
+        \small
+        \begin{itemize}
+            \item \textbf{dyn alone}: $-$36\%
+                  \quad{\tiny(cache locality, but still CAS)}
+            \item \textbf{clear\_path alone}: $-$7\%
+                  \quad{\tiny(faster clear, still linked list)}
+            \item \textbf{dyn + clear\_path}: $\mathbf{-81\%}$
+        \end{itemize}
+        \vspace{0.4em}
+        \begin{alertblock}{Why superadditive?}
+            \small
+            \texttt{dyn} pre-loads referent data during discovery.\\[3pt]
+            \texttt{clear\_path} uses pre-loaded data -- removing
+            the load barrier \emph{and} the pointer-chase simultaneously.
+        \end{alertblock}
+
+        \column{0.48\textwidth}
+        \includegraphics[width=\textwidth]{%
+            composite_old_phase_concurrent_process_non-strong_slurm-5118807_combined_gc_single.pdf}
+        \vspace{-0.5em}
+        \scriptsize Non-strong time (single-object)
+    \end{columns}
+\end{frame}
+
+\begin{frame}{Mechanism 4: Weak Fields}
+    \textbf{Idea:} Weakness as a \emph{field property} -- no
+    \texttt{WeakReference} wrapper object required.
+
+    \vspace{0.3em}
+    \begin{block}{Usage}
+        \small
+        \texttt{import java.lang.ref.weak;} \quad
+        \texttt{class Holder \{ @weak Target ref; \}}
+    \end{block}
+
+    \vspace{0.4em}
+    \begin{itemize}
+        \item Annotation recognised by the class-file parser (ZGC-only;
+              27 files across compiler, interpreter, JIT, GC)
+        \item Fields discovered during old-generation marking; stored in
+              per-worker \texttt{ZWeakFieldArray}
+        \item Unreachable referent: annotated field zeroed directly --
+              no pending list, no \texttt{ReferenceHandler}
+        \item \textbf{Key:} no wrapper objects allocated or promoted
+    \end{itemize}
+\end{frame}
+
+
+% ============================================================ %
+\section{Evaluation}
+% ============================================================ %
+
+\begin{frame}{Benchmark Design}
+    \begin{columns}
+        \column{0.5\textwidth}
+        \textbf{Single-object}
+        \begin{itemize}
+            \item 20M holder objects pointing to one shared target
+            \item Target released; \texttt{System.gc()} triggered
+            \item Maximises per-cycle reference-processing load
+        \end{itemize}
+
+        \column{0.5\textwidth}
+        \textbf{Multi-object}
+        \begin{itemize}
+            \item 2M objects, random-size payloads
+            \item 5 rounds: 20\% of strong refs released per round
+            \item More realistic liveness and locality patterns
+        \end{itemize}
+    \end{columns}
+
+    \vspace{0.5em}
+    \begin{block}{Execution Environment}
+        \small
+        UPPMAX supercomputer (SLURM), 48-core nodes, 100\,GB heap,
+        \texttt{-XX:+UseZGC}, 250 outer iterations,
+        4 instances pinned to isolated CPU sets.
+    \end{block}
+\end{frame}
+
+
+% ============================================================ %
+\section{Results \& Analysis}
+% ============================================================ %
+
+\begin{frame}{Non-Strong Processing Time}
+    \begin{columns}
+        \column{0.45\textwidth}
+        \small
+        \begin{tabular}{lr}
+            \toprule
+            \textbf{Variant} & \textbf{Median (ms)} \\
+            \midrule
+            \texttt{none}      & 996.9 \\
+            \texttt{sep\_only} & 943.8 \; ($-$5\%) \\
+            \texttt{cp\_only}  & 923.7 \; ($-$7\%) \\
+            \texttt{dyn\_only} & 639.1 \; ($-$36\%) \\
+            \texttt{sep\_dyn}  & 576.9 \; ($-$42\%) \\
+            \texttt{cp\_dyn}   & 187.9 \; ($-$\textbf{81\%}) \\
+            \texttt{all}       & 184.4 \; ($-$\textbf{81\%}) \\
+            \midrule
+            \texttt{wf}        & 484.6 \; ($-$51\%) \\
+            \bottomrule
+        \end{tabular}
+
+        \column{0.55\textwidth}
+        \includegraphics[width=\textwidth]{%
+            composite_old_phase_concurrent_process_non-strong_slurm-5118807_combined_gc_single.pdf}
+    \end{columns}
+\end{frame}
+
+\begin{frame}{Major Collection Time -- The Ceiling}
+    \begin{columns}
+        \column{0.5\textwidth}
+        \includegraphics[width=\textwidth]{%
+            composite_major_collection_major_collection_slurm-5118807_combined_gc_single.pdf}
+
+        \column{0.5\textwidth}
+        \small
+        \begin{tabular}{lr}
+            \toprule
+            \textbf{Variant} & \textbf{Median (ms)} \\
+            \midrule
+            \texttt{none} & 6{,}958 \\
+            \texttt{all}  & 6{,}377 \; ($-$8\%) \\
+            \midrule
+            \texttt{wf}   & 4{,}136 \; ($-$\textbf{41\%}) \\
+            \bottomrule
+        \end{tabular}
+        \vspace{0.5em}
+        \begin{alertblock}{Why only 8\%?}
+            \small
+            Non-strong processing = \textbf{14.3\%} of total major
+            GC time. Even 81\% reduction there moves the needle
+            by at most $\approx$11\%.
+        \end{alertblock}
+    \end{columns}
+\end{frame}
+
+\begin{frame}[shrink=8]{Multi-Object Benchmark}
+    \begin{columns}
+        \column{0.5\textwidth}
+        \includegraphics[width=\textwidth]{%
+            composite_major_collection_major_collection_slurm-5118807_combined_gc_multi.pdf}
+
+        \column{0.5\textwidth}
+        \begin{itemize}
+            \item Non-strong = only \textbf{4.5\%} of baseline major
+                  GC time in this benchmark
+            \item All pipeline variants: 965--1{,}002\,ms vs.\ 982\,ms
+                  baseline -- distributions fully overlap
+            \item \texttt{weak\_fields}: 708\,ms ($-$28\%)
+        \end{itemize}
+        \begin{block}{\small Pattern}
+            \small
+            Pipeline improvements bounded by the fraction they address.
+            \texttt{weak\_fields} benefits every phase by reducing the
+            object population.
+        \end{block}
+    \end{columns}
+\end{frame}
+
+\begin{frame}{Memory Trade-offs (Single-Object)}
+    \begin{columns}
+        \column{0.48\textwidth}
+        \small
+        \textbf{Auxiliary GC memory:}
+        \vspace{0.3em}
+        \begin{tabular}{lr}
+            \toprule
+            \textbf{Variant} & \textbf{MB} \\
+            \midrule
+            \texttt{none}    & 120 \\
+            \texttt{dyn}     & 308 \; ($\times$2.6) \\
+            \texttt{sep\_dyn}& 308 \; ($\times$2.6) \\
+            \texttt{cp\_dyn} & 1{,}268 \; ($\times$\textbf{10.6}) \\
+            \texttt{all}     & 884 \; ($\times$7.4) \\
+            \midrule
+            \texttt{wf}      & 446 \; ($\times$3.7) \\
+            \bottomrule
+        \end{tabular}
+
+        \column{0.52\textwidth}
+        \begin{itemize}
+            \item \texttt{cp\_dyn}: large entry struct
+                  (referent address + value pre-loaded)
+            \item \texttt{all} saves 30\% vs \texttt{cp\_dyn}:
+                  \texttt{sep} eliminates the reference-address field
+            \item \texttt{weak\_fields} Java heap: \textbf{806\,MB}
+                  vs \textbf{1{,}720\,MB} ($-$53\%) -- no wrappers
+        \end{itemize}
+    \end{columns}
+\end{frame}
+
+\begin{frame}{Structural vs.\ Algorithmic Advantage}
+    \begin{columns}
+        \column{0.55\textwidth}
+        \textbf{Pipeline optimisations}
+        \begin{itemize}
+            \item Accelerate processing of existing \texttt{WeakReference}
+                  objects
+            \item Improvements confined to non-strong processing phase
+        \end{itemize}
+        \vspace{0.4em}
+        \textbf{Weak fields}
+        \begin{itemize}
+            \item Eliminate \texttt{WeakReference} objects entirely
+            \item Fewer live objects $\Rightarrow$ less work in every phase:\\
+                  marking ($-$31\%), young-gen ($-$44\%)
+        \end{itemize}
+
+        \column{0.45\textwidth}
+        \begin{block}{Single-object benchmark}
+            \small
+            Concurrent mark:\\
+            \quad \texttt{none}: 2{,}575\,ms\\
+            \quad \texttt{wf}: 1{,}782\,ms ($-$31\%)\\[4pt]
+            Young-gen (Promote All):\\
+            \quad \texttt{none}: 3{,}201\,ms\\
+            \quad \texttt{wf}: 1{,}784\,ms ($-$44\%)
+        \end{block}
+    \end{columns}
+\end{frame}
+
+
+% ============================================================ %
+\section{Discussion \& Conclusion}
+% ============================================================ %
+
+\begin{frame}[shrink=5]{Comparison with Other Languages}
+    \small
+    \centering
+    \begin{tabular}{lll}
+        \toprule
+        \textbf{Language} & \textbf{Mechanism} & \textbf{Callback?} \\
+        \midrule
+        Java   & \texttt{WeakReference} + \texttt{ReferenceQueue} & Optional \\
+        Python & \texttt{weakref.ref} + callable                   & Optional \\
+        Go     & \texttt{weak.Pointer}                             & No \\
+        C++    & \texttt{std::weak\_ptr}                           & No \\
+        .NET   & \texttt{WeakReference<T>}                         & No \\
+        Lua    & Weak tables (field-level)                         & No \\
+        \bottomrule
+    \end{tabular}
+
+    \vspace{0.6em}
+    \begin{itemize}
+        \item Most languages treat weak reachability and lifecycle notification
+              as separate concerns
+        \item Java couples both into one object and one pipeline
+        \item \texttt{@weak} brings Java closer to Lua's field-level model --
+              weakness as a structural property of the field, not a wrapper
+    \end{itemize}
+\end{frame}
+
+\begin{frame}[shrink=8]{Conclusions}
+    \begin{block}{RQ1 -- Pipeline Optimisations}
+        \begin{itemize}
+            \item \texttt{cp\_dyn} and \texttt{all}: \textbf{81\%} reduction in
+                  non-strong processing time (superadditive interaction)
+            \item Major collection improvement: at most \textbf{8\%} --
+                  bounded by the 14.3\% fraction non-strong processing occupies
+        \end{itemize}
+    \end{block}
+    \vspace{0.3em}
+    \begin{block}{RQ2 -- Weak Fields}
+        \begin{itemize}
+            \item \textbf{41\%} major GC time reduction;
+                  \textbf{53\%} heap reduction
+            \item Structural advantage: fewer objects in every GC phase
+        \end{itemize}
+    \end{block}
+    \vspace{0.3em}
+    \begin{alertblock}{Overall Finding}
+        Weak-reference overhead is a \textbf{representation problem},
+        not a pipeline problem. Meaningful improvement requires rethinking
+        how weak semantics is encoded.
+    \end{alertblock}
+\end{frame}
+
+\begin{frame}{Future Work}
+    \begin{enumerate}
+        \item \textbf{Production workloads} -- Java Flight Recorder on real
+              applications with diverse reference patterns
+        \item \textbf{ReferenceHandler load} -- latency impact for queue-backed
+              references in mixed (queue-backed + queue-less) workloads
+        \item \textbf{Extend clear\_path} -- to \texttt{SoftReference},
+              \texttt{PhantomReference}, and queue-backed \texttt{WeakReference}
+        \item \textbf{Upstream integration} -- submit via JDK-8029205
+        \item \textbf{Harden \texttt{@weak}} -- test suite, formal correctness,
+              upstream submission
+    \end{enumerate}
+\end{frame}
+
+\begin{frame}[allowframebreaks]{References}
+    \hyperlink{start}{\beamerreturnbutton{Back to start}}
+    \vspace{0.3em}
+    \nocite{jep333-zgc}
+    \nocite{jep439-genzgc}
+    \nocite{osterlund23-genzgc-beyond}
+    \nocite{oracle-ref-javadoc}
+    \nocite{JDK-8029205}
+    \nocite{drepper07-memory}
+    \nocite{jones11-gc-handbook}
+    \nocite{lieberman81-realtime-gc}
+    \bibliographystyle{ieeetr}
+    \bibliography{../Report/References}
+\end{frame}
+
+\end{document}
