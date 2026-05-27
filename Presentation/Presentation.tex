@@ -99,6 +99,555 @@
 
 
 % ============================================================ %
+\section{Introduction \& Motivation}
+% ============================================================ %
+
+\begin{frame}{GC Pauses Are a Real Cost}
+    \begin{itemize}
+        \item Java manages memory automatically: you allocate with \texttt{new},
+              the garbage collector reclaims unreachable objects
+        \item GC pauses disrupt latency-sensitive workloads --
+              microservices, trading systems, real-time analytics
+        \item \textbf{ZGC}: achieves sub-millisecond stop-the-world pauses
+              regardless of heap size, by doing most GC work concurrently
+    \end{itemize}
+    \vspace{0.4em}
+    \begin{alertblock}{One bottleneck remains}
+        \small
+        \textbf{Weak reference processing} cost scales linearly with the number of
+        \texttt{WeakReference} objects. Large applications hold \emph{tens of millions} --
+        yet ZGC applies the same costly pipeline to all of them, even when most
+        do not need it.
+    \end{alertblock}
+\end{frame}
+
+\begin{frame}{Why WeakReferences Are Everywhere}
+    \begin{columns}
+        \column{0.55\textwidth}
+        \begin{itemize}
+            \item A \texttt{WeakReference<T>} lets you hold a reference to an
+                  object that the GC is \emph{still allowed} to collect
+            \item Used in: \texttt{WeakHashMap}, Guava Cache, Caffeine,
+                  many ORM frameworks, canonicalisation tables
+            \item Optional \texttt{ReferenceQueue}: GC notifies you when
+                  the referent is collected
+            \item \textbf{Most} \texttt{WeakReference}s are created \emph{without}
+                  a queue -- they only need weak reachability, not the callback
+        \end{itemize}
+        \column{0.45\textwidth}
+        \begin{exampleblock}{Common (no queue)}
+            \small\ttfamily
+            new WeakReference<>(obj)\\[4pt]
+            \small\rmfamily
+            Pure weak reachability.\\No notification needed.
+        \end{exampleblock}
+        \vspace{0.4em}
+        \begin{block}{Less common (with queue)}
+            \small\ttfamily
+            new WeakReference<>(obj, q)\\[4pt]
+            \small\rmfamily
+            GC notifies via \texttt{q} on collection.
+        \end{block}
+    \end{columns}
+\end{frame}
+
+\begin{frame}{Research Questions}
+    \begin{block}{RQ1 -- Pipeline Optimisations}
+        How do targeted modifications to ZGC's processing of \texttt{WeakReference}
+        objects \emph{without} a \texttt{ReferenceQueue} affect reference-processing
+        time, total GC cycle time, GC memory, and Java heap usage?
+    \end{block}
+    \vspace{0.8em}
+    \begin{block}{RQ2 -- Weak Fields}
+        How does expressing weak semantics through \emph{annotated object fields}
+        affect the same metrics compared to the optimised \texttt{WeakReference}
+        pipeline approach?
+    \end{block}
+\end{frame}
+
+
+% ============================================================ %
+\section{Background}
+% ============================================================ %
+
+\begin{frame}{Java Memory Management and GC}
+    \begin{columns}
+        \column{0.58\textwidth}
+        \begin{itemize}
+            \item All Java objects live on the \textbf{heap}; you allocate with
+                  \texttt{new} and the GC reclaims unreachable objects
+            \item An object is \emph{live} if reachable from a \textbf{GC root}:
+                  thread stacks, static fields, JNI references
+            \item GC cycle: \textbf{mark} live objects $\to$
+                  \textbf{process references} $\to$ \textbf{relocate}
+            \item \textbf{Generational}: young gen (minor cycles, frequent)
+                  + old gen (\textbf{major cycles}, infrequent)
+        \end{itemize}
+        \column{0.42\textwidth}
+        \begin{block}{Object liveness}
+            \small
+            GC Root\\
+            \quad $\blacktriangleright$ Object A \hfill \textcolor{codegreen}{\small live}\\
+            \quad\quad $\blacktriangleright$ Object B \hfill \textcolor{codegreen}{\small live}\\[4pt]
+            \textit{(unreachable)}\\
+            \quad $\blacktriangleright$ Object C \hfill \textcolor{codered}{\small collected}
+        \end{block}
+    \end{columns}
+\end{frame}
+
+\begin{frame}{Java Reference Types}
+    \begin{columns}
+        \column{0.52\textwidth}
+        \begin{itemize}
+            \item \textbf{Strong} (\texttt{Object o = new Foo()})\\
+                  object lives as long as \texttt{o} is in scope
+            \item \textbf{Weak} (\texttt{new WeakReference<>(obj)})\\
+                  GC \emph{may} collect the referent;
+                  \texttt{.get()} returns \texttt{null} afterwards
+            \item \textbf{Soft}: like weak but GC uses a last-resort
+                  heuristic (memory pressure)
+            \item \textbf{Phantom}: always returns \texttt{null};
+                  used for post-mortem resource cleanup
+        \end{itemize}
+        \column{0.48\textwidth}
+        \begin{block}{ReferenceQueue}
+            \small
+            An optional notification channel: the GC deposits
+            cleared \texttt{Reference} objects here.\\[4pt]
+            Useful for explicit cleanup -- but the
+            \emph{majority} of \texttt{WeakReference}s are
+            queue-less.
+        \end{block}
+    \end{columns}
+\end{frame}
+
+\begin{frame}{ZGC: Concurrent, Sub-Millisecond GC}
+    \begin{itemize}
+        \item Most marking and relocation happens \textbf{concurrently} with
+              the application -- stop-the-world pauses stay $<1$\,ms
+        \item \textbf{Coloured pointers}: metadata bits embedded in the
+              64-bit pointer itself (mark state, relocation status)
+        \item \textbf{Load barriers}: small code sequences injected at pointer
+              loads; let the GC update object state on-the-fly
+        \item Handles heaps from 8\,GB to 16\,TB with the same pause budget
+    \end{itemize}
+    \begin{block}{Generational ZGC (JDK 21+)}
+        \small
+        Young generation collected by minor cycles;
+        old generation by less frequent \textbf{major} cycles.
+        Reference processing runs during the major-cycle marking pause.
+    \end{block}
+\end{frame}
+
+\begin{frame}{Weak References in ZGC's Pipeline}
+    \begin{enumerate}
+        \item \textbf{Discovery} -- while marking, reference objects are appended
+              to per-worker \emph{intrusive linked lists} via a hidden
+              \texttt{discovered} field
+        \item \textbf{Processing} -- check each referent's liveness; if unreachable,
+              atomically clear the \texttt{referent} field (CAS + load barrier)
+        \item \textbf{Enqueue} -- cleared references added to the \emph{pending list};
+              the \texttt{ReferenceHandler} thread delivers them to their
+              \texttt{ReferenceQueue}
+    \end{enumerate}
+    \vspace{0.4em}
+    \begin{alertblock}{The cost of uniformity}
+        \small
+        Steps 1--3 apply to \emph{all} weak references -- including queue-less ones.
+        A queue-less reference traverses the full pipeline only to be silently dropped
+        at step~3, wasting linked-list traversal, CAS operations, and
+        \texttt{ReferenceHandler} wake-ups.
+    \end{alertblock}
+\end{frame}
+
+
+% ============================================================ %
+\section{Design \& Implementation}
+% ============================================================ %
+
+\begin{frame}{Four Mechanisms, Eight Variants}
+    \begin{columns}
+        \column{0.56\textwidth}
+        \small
+        Three \textbf{pipeline optimisations} targeting queue-less refs:
+        \begin{itemize}
+            \item \textbf{sep} -- split the discovered list at discovery time
+            \item \textbf{dyn} -- replace the linked list with a dynamic array
+            \item \textbf{clear\_path} -- specialised clear (no CAS)
+        \end{itemize}
+        \vspace{0.3em}
+        One \textbf{structural alternative}:
+        \begin{itemize}
+            \item \textbf{weak\_fields} -- \texttt{@weak} field annotation
+        \end{itemize}
+        \vspace{0.3em}
+        All $2^3 = 8$ pipeline combinations benchmarked independently.
+        \column{0.44\textwidth}
+        \small
+        \begin{tabular}{lccc}
+            \toprule
+            \textbf{Variant} & \textbf{cp} & \textbf{sep} & \textbf{dyn} \\
+            \midrule
+            \texttt{none}     & -- & -- & -- \\
+            \texttt{dyn}      & -- & -- & \checkmark \\
+            \texttt{sep}      & -- & \checkmark & -- \\
+            \texttt{sep\_dyn} & -- & \checkmark & \checkmark \\
+            \texttt{cp}       & \checkmark & -- & -- \\
+            \texttt{cp\_dyn}  & \checkmark & -- & \checkmark \\
+            \texttt{cp\_sep}  & \checkmark & \checkmark & -- \\
+            \texttt{all}      & \checkmark & \checkmark & \checkmark \\
+            \bottomrule
+        \end{tabular}
+    \end{columns}
+\end{frame}
+
+\begin{frame}[fragile, shrink=5]{Mechanism 1: Skip-Enqueue Separation (sep)}
+    \textbf{Idea:} At discovery time, route queue-less refs to a \emph{separate list}
+    that never enters the pending list or \texttt{ReferenceHandler}.
+    \begin{lstlisting}[language=C++, caption={Discovery split -- pseudocode}]
+bool discover_reference(oop ref, ReferenceType type) {
+    if (!should_discover(ref, type)) return false,
+    if (type == REF_WEAK && !has_reference_queue(ref)) {
+        // Queue-less: separate list, never enqueued
+        no_queue_list_per_worker.append(ref),
+    } else {
+        // Queue-backed and all other types: standard path
+        discovered_list_per_worker.append(ref),
+    }
+    mark_discovered(ref),  return true,
+}
+    \end{lstlisting}
+    \begin{itemize}
+        \item Per-worker lists -- no inter-thread contention during discovery
+        \item Separate processing loop that clears but never enqueues
+    \end{itemize}
+\end{frame}
+
+\begin{frame}[fragile, shrink=5]{Mechanism 2: Dynamic Array (dyn)}
+    \textbf{Idea:} Replace the intrusive linked list with a contiguous array
+    for cache-friendly traversal and pre-loaded referent data.
+    \begin{lstlisting}[language=C++, caption={Array-based processing -- pseudocode}]
+void process_no_queue_refs(ZWeakRefArray& arr) {
+    size_t kept = 0,
+    for (size_t i = 0, i < arr.length(), i++) {
+        const ZWeakRefData& d = arr.at(i),  // sequential: cache-friendly
+        d.mark_not_discovered(),
+        if (try_make_inactive(d)) { cleared++, }
+        else { kept++, }
+    }
+    arr.clear_and_reserve(kept),  // retain capacity for next cycle
+}
+    \end{lstlisting}
+    \begin{itemize}
+        \item Array grows on the C heap; amortised O(1) append during discovery
+        \item Each entry \emph{pre-loads} the referent address and value
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Mechanism 3: Specialised Clear Path (clear\_path)}
+    \textbf{Idea:} For old-generation queue-less refs, replace the CAS-based
+    clear with a plain store.
+    \vspace{0.5em}
+    \begin{columns}
+        \column{0.48\textwidth}
+        \begin{block}{Standard clear}
+            \small
+            1. Load barrier on referent\\
+            2. CAS: referent $\to$ coloured null
+        \end{block}
+        \column{0.48\textwidth}
+        \begin{block}{Specialised clear}
+            \small
+            1. Use pre-loaded value (no barrier)\\
+            2. Direct store (no CAS)
+        \end{block}
+    \end{columns}
+    \vspace{0.6em}
+    \begin{alertblock}{Why safe?}
+        During the relevant STW pause, no application thread can update the referent
+        of an old-generation queue-less reference -- only the GC can.
+        The CAS is therefore unnecessary.
+    \end{alertblock}
+\end{frame}
+
+\begin{frame}{Superadditive Interaction: dyn + clear\_path}
+    \begin{columns}
+        \column{0.52\textwidth}
+        \small
+        \begin{itemize}
+            \item \textbf{dyn alone}: $-$36\%
+                  \quad{\tiny(cache locality, but still CAS)}
+            \item \textbf{clear\_path alone}: $-$7\%
+                  \quad{\tiny(faster clear, still linked list)}
+            \item \textbf{dyn + clear\_path}: $\mathbf{-81\%}$
+        \end{itemize}
+        \vspace{0.4em}
+        \begin{alertblock}{Why superadditive?}
+            \small
+            \texttt{dyn} pre-loads referent data during discovery.
+            \texttt{clear\_path} \emph{uses} that data -- eliminating
+            the load barrier \emph{and} the pointer-chase simultaneously.
+        \end{alertblock}
+        \column{0.48\textwidth}
+        \includegraphics[width=\textwidth]{%
+            composite_old_phase_concurrent_process_non-strong_slurm-5118807_combined_gc_single.pdf}
+        \vspace{-0.5em}
+        \scriptsize Non-strong processing time (single-object benchmark)
+    \end{columns}
+\end{frame}
+
+\begin{frame}{Mechanism 4: Weak Fields (\texttt{@weak})}
+    \textbf{Idea:} Weakness as a \emph{field property} -- no
+    \texttt{WeakReference} wrapper object needed.
+    \vspace{0.3em}
+    \begin{block}{Usage}
+        \small
+        \texttt{import java.lang.ref.weak;} \quad
+        \texttt{class Holder \{ @weak Target ref; \}}
+    \end{block}
+    \vspace{0.4em}
+    \begin{itemize}
+        \item Annotation recognised by the class-file parser (ZGC-only;
+              changes across 27 files in compiler, interpreter, JIT, GC)
+        \item Fields discovered during old-generation marking; stored in
+              per-worker \texttt{ZWeakFieldArray}
+        \item Unreachable referent: field zeroed directly --
+              no pending list, no \texttt{ReferenceHandler}
+        \item \textbf{Key:} no wrapper objects allocated or promoted to old gen
+    \end{itemize}
+\end{frame}
+
+
+% ============================================================ %
+\section{Results \& Analysis}
+% ============================================================ %
+
+\begin{frame}{Benchmark Setup}
+    \begin{columns}
+        \column{0.5\textwidth}
+        \textbf{Single-object}
+        \begin{itemize}
+            \item 20\,M holder objects $\to$ one shared target
+            \item Target released; \texttt{System.gc()} triggered
+            \item Stress-tests reference-processing in isolation
+        \end{itemize}
+        \vspace{0.4em}
+        \textbf{Multi-object}
+        \begin{itemize}
+            \item 2\,M objects, random payloads, 5 GC rounds
+            \item 20\% of strong refs released per round
+            \item More realistic liveness and locality
+        \end{itemize}
+        \column{0.5\textwidth}
+        \begin{block}{Environment}
+            \small
+            UPPMAX supercomputer (SLURM)\\
+            48-core nodes, 100\,GB heap\\
+            \texttt{-XX:+UseZGC}, 250 iterations\\
+            4 instances pinned to isolated CPU sets
+        \end{block}
+        \vspace{0.3em}
+        \begin{exampleblock}{Metric}
+            \small
+            Major GC cycle time and per-phase timings
+            via \texttt{-Xlog:gc+stats}.
+            Reported as \textbf{median} over 250 iterations.
+        \end{exampleblock}
+    \end{columns}
+\end{frame}
+
+\begin{frame}[shrink=5]{Non-Strong Processing Time}
+    \begin{columns}
+        \column{0.45\textwidth}
+        \small
+        \begin{tabular}{lr}
+            \toprule
+            \textbf{Variant} & \textbf{Median (ms)} \\
+            \midrule
+            \texttt{none}      & 996.9 \\
+            \texttt{sep}       & 943.8 \; ($-$5\%) \\
+            \texttt{cp}        & 923.7 \; ($-$7\%) \\
+            \texttt{dyn}       & 639.1 \; ($-$36\%) \\
+            \texttt{sep\_dyn}  & 576.9 \; ($-$42\%) \\
+            \texttt{cp\_dyn}   & 187.9 \; ($-$\textbf{81\%}) \\
+            \texttt{all}       & 184.4 \; ($-$\textbf{81\%}) \\
+            \midrule
+            \texttt{wf}        & 484.6 \; ($-$51\%) \\
+            \bottomrule
+        \end{tabular}
+        \column{0.55\textwidth}
+        \includegraphics[width=\textwidth]{%
+            composite_old_phase_concurrent_process_non-strong_slurm-5118807_combined_gc_single.pdf}
+    \end{columns}
+\end{frame}
+
+\begin{frame}{Major Collection Time}
+    \begin{columns}
+        \column{0.5\textwidth}
+        \includegraphics[width=\textwidth]{%
+            composite_major_collection_major_collection_slurm-5118807_combined_gc_single.pdf}
+        \column{0.5\textwidth}
+        \small
+        \begin{tabular}{lr}
+            \toprule
+            \textbf{Variant} & \textbf{Median (ms)} \\
+            \midrule
+            \texttt{none} & 6{,}958 \\
+            \texttt{all}  & 6{,}377 \; ($-$8\%) \\
+            \midrule
+            \texttt{wf}   & 4{,}136 \; ($-$\textbf{41\%}) \\
+            \bottomrule
+        \end{tabular}
+        \vspace{0.5em}
+        \begin{alertblock}{The ceiling}
+            \small
+            Non-strong $=$ \textbf{14.3\%} of total major GC time.
+            Even an 81\% reduction there moves the total
+            by at most $\approx$11\%.
+        \end{alertblock}
+    \end{columns}
+\end{frame}
+
+\begin{frame}[shrink=5]{Multi-Object Benchmark and Memory}
+    \begin{columns}
+        \column{0.5\textwidth}
+        \includegraphics[width=0.9\textwidth]{%
+            composite_major_collection_major_collection_slurm-5118807_combined_gc_multi.pdf}
+        \vspace{-0.3em}
+        {\scriptsize Major GC time, multi-object benchmark}
+        \begin{itemize}
+            \small
+            \item Non-strong $=$ only \textbf{4.5\%} here
+            \item Pipeline variants $\approx$ baseline (965--1{,}002\,ms vs 982\,ms)
+            \item \texttt{wf}: 708\,ms ($-$28\%)
+        \end{itemize}
+        \column{0.5\textwidth}
+        \small
+        \textbf{Auxiliary GC memory (single-object):}
+        \vspace{0.2em}
+        \begin{tabular}{lr}
+            \toprule
+            \textbf{Variant} & \textbf{MB} \\
+            \midrule
+            \texttt{none}    & 120 \\
+            \texttt{dyn}     & 308 \; ($\times$2.6) \\
+            \texttt{cp\_dyn} & 1{,}268 \; ($\times$\textbf{10.6}) \\
+            \texttt{all}     & 884 \; ($\times$7.4) \\
+            \midrule
+            \texttt{wf}      & 446 \; ($\times$3.7) \\
+            \bottomrule
+        \end{tabular}
+        \vspace{0.3em}
+        \begin{block}{\small Java heap}
+            \small
+            \texttt{wf}: 806\,MB vs 1{,}720\,MB ($-$53\%) -- no wrappers
+        \end{block}
+    \end{columns}
+\end{frame}
+
+\begin{frame}{Structural vs.\ Algorithmic Advantage}
+    \begin{columns}
+        \column{0.55\textwidth}
+        \textbf{Pipeline optimisations}
+        \begin{itemize}
+            \item Accelerate processing of existing \texttt{WeakReference} objects
+            \item Gains \emph{confined} to the non-strong processing phase
+        \end{itemize}
+        \vspace{0.4em}
+        \textbf{Weak fields}
+        \begin{itemize}
+            \item Eliminate wrapper objects entirely
+            \item Fewer objects $\Rightarrow$ less work in \emph{every} GC phase:\\
+                  marking ($-$31\%), young-gen ($-$44\%)
+        \end{itemize}
+        \column{0.45\textwidth}
+        \begin{block}{Single-object benchmark}
+            \small
+            Concurrent mark:\\
+            \quad \texttt{none}: 2{,}575\,ms\\
+            \quad \texttt{wf}: 1{,}782\,ms ($-$31\%)\\[4pt]
+            Young-gen (Promote All):\\
+            \quad \texttt{none}: 3{,}201\,ms\\
+            \quad \texttt{wf}: 1{,}784\,ms ($-$44\%)
+        \end{block}
+    \end{columns}
+\end{frame}
+
+
+% ============================================================ %
+\section{Conclusions}
+% ============================================================ %
+
+\begin{frame}{Limitations}
+    \begin{itemize}
+        \item \textbf{Synthetic benchmarks}: single-object maximises ref-processing
+              load; real applications have varied reference patterns and lifetimes
+        \item \textbf{ZGC-specific}: all optimisations are ZGC-only; not applicable
+              to G1GC or other collectors
+        \item \textbf{One hardware platform}: UPPMAX supercomputer -- results
+              may differ on desktop, server, or cloud hardware
+        \item \textbf{\texttt{@weak} is a prototype}: changes span 27 files across
+              compiler, interpreter, JIT, and GC -- not production-ready
+    \end{itemize}
+\end{frame}
+
+\begin{frame}[shrink=5]{Conclusions}
+    \begin{block}{RQ1 -- Pipeline Optimisations}
+        \begin{itemize}
+            \item \texttt{cp\_dyn} and \texttt{all}: \textbf{81\%} reduction in
+                  non-strong processing time (superadditive interaction)
+            \item Major collection improvement: at most \textbf{8\%} --
+                  bounded by non-strong processing being only 14.3\% of total
+        \end{itemize}
+    \end{block}
+    \vspace{0.3em}
+    \begin{block}{RQ2 -- Weak Fields}
+        \begin{itemize}
+            \item \textbf{41\%} major GC time reduction; \textbf{53\%} heap reduction
+            \item Structural advantage: eliminating wrapper objects benefits every
+                  GC phase
+        \end{itemize}
+    \end{block}
+    \vspace{0.3em}
+    \begin{alertblock}{Overall Finding}
+        Weak-reference overhead is a \textbf{representation problem},
+        not a pipeline problem. Meaningful improvement requires rethinking
+        how weak semantics is encoded in the language.
+    \end{alertblock}
+\end{frame}
+
+{%
+\usebackgroundtemplate{\tikz\fill[uppsalared] (0,0) rectangle (\paperwidth,\paperheight);}%
+\setbeamertemplate{footline}{}
+\setbeamertemplate{headline}{}
+\begin{frame}[plain]
+    \vfill
+    \centering
+    {\color{white}\Large\bfseries Thank You}\\[0.8em]
+    {\color{white!70}\normalsize Questions?}\\[1.5em]
+    {\color{white!55}\small\contact}
+    \vfill
+\end{frame}
+}%
+
+\begin{frame}[allowframebreaks]{References}
+    \hyperlink{start}{\beamerreturnbutton{Back to start}}
+    \vspace{0.3em}
+    \nocite{jep333-zgc}
+    \nocite{jep439-genzgc}
+    \nocite{osterlund23-genzgc-beyond}
+    \nocite{oracle-ref-javadoc}
+    \nocite{JDK-8029205}
+    \nocite{drepper07-memory}
+    \nocite{jones11-gc-handbook}
+    \nocite{lieberman81-realtime-gc}
+    \bibliographystyle{ieeetr}
+    \bibliography{../Report/References}
+\end{frame}
+
+\end{document}
+
+% ============================================================ %
 \section{Background \& Motivation}
 % ============================================================ %
 
