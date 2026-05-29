@@ -204,9 +204,15 @@ vendor_prefix_has_lib() {
   local prefix="$1"
   shift
   local candidate
+  local multiarch_dir
+
+  multiarch_dir="$(gcc -print-multiarch 2>/dev/null || dpkg-architecture -qDEB_HOST_MULTIARCH 2>/dev/null || true)"
 
   for candidate in "$@"; do
     if [ -e "${prefix}/lib/${candidate}" ]; then
+      return 0
+    fi
+    if [ -n "${multiarch_dir}" ] && [ -e "${prefix}/lib/${multiarch_dir}/${candidate}" ]; then
       return 0
     fi
   done
@@ -257,6 +263,12 @@ ensure_alsa_prefix() {
     return 0
   fi
 
+  if is_valid_vendor_prefix /usr alsa libasound.so libasound.so.2; then
+    echo "Using system ALSA installation at /usr" >&2
+    printf '/usr\n'
+    return 0
+  fi
+
   require_command dnf
   require_command rpm2cpio
   require_command cpio
@@ -277,6 +289,12 @@ ensure_cups_prefix() {
 
   if is_valid_vendor_prefix "${CUPS_PREFIX}" cups libcups.so libcups.so.2; then
     printf '%s\n' "${CUPS_PREFIX}"
+    return 0
+  fi
+
+  if is_valid_vendor_prefix /usr cups libcups.so libcups.so.2; then
+    echo "Using system CUPS installation at /usr" >&2
+    printf '/usr\n'
     return 0
   fi
 
