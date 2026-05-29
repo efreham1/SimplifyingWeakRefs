@@ -10,7 +10,7 @@ Hello everyone, my name is Fredrik and this is my thesis defence. My thesis is t
 
 ## Agenda
 
-As we can see in the agenda, we'll start off with some important background information - this is hopefully where the gibberish title of this thesis actually starts making sense to everyone. After that, we will go into the motivation, establishing why the work I've done actually matters - kind of important. Then we will go into the design and implementation of my actual solution. After that, we will look at the evaluation - how I set up the benchmarks and tested everything. Then we will look at the results from those benchmarks and analyze those. And finally, to round it all out, we will look at the conclusions I've come to during my thesis and how they tie into the broader field. And after that, there will of course be time for some questions, which is why I ask you to hold onto your questions until the end.
+We'll go through background, motivation, design and implementation, then evaluation and results, and finally conclusions. Please hold any questions until the end.
 
 [change slide]
 
@@ -42,7 +42,7 @@ So how does this work? To understand that, we can take a look at this illustrati
 
 [change slide]
 
-For example, object A might contain a reference to object B. And the stack - which is in the rootset - might have a reference to object C. When we actually start garbage collecting we have to find everything that is alive, and alive in this case means reachable from the root set - because if it's reachable from the root set, that means the application can reach it, which means the application can use it.
+For example, object A might contain a reference to object B. And the stack - which is in the root set - might have a reference to object C. When we garbage collect, we find everything alive -- meaning reachable from the root set.
 
 [change slide]
 
@@ -84,7 +84,7 @@ Looking at weak references in a graph is fine - it's clear whether something is 
 
 In Java, weak references are implemented as separate objects. The graph I showed earlier was actually a simplification - this is how it really looks. As we can see, there is a new object in the graph. That is the `WeakReference` object. C has a strong reference to it, and the `WeakReference` object itself holds the actual weak reference pointing to B.
 
-This might seem counterintuitive - why do we need this extra object? But there is a good reason. When programming with weak references, there are often scenarios where you want to know when a weak reference becomes inactive, meaning the object it pointed to has been garbage collected. How this works in Java is that, as you can see in the code here, when you create a `WeakReference` you can optionally pass in a `ReferenceQueue`. You can then poll that queue to ask "have any new references been added?" So, once a weak reference is cleared by the garbage collector, that `WeakReference` object gets added to this queue and the application can then retrieve it by polling the queue and then, for example, clean up a cache or do whatever is appropriate.
+This might seem counterintuitive - why do we need this extra object? But there is a good reason. When programming with weak references, there are often scenarios where you want to know when a weak reference becomes inactive, meaning the object it pointed to has been garbage collected. How this works in Java is that, as you can see in the code here, when you create a `WeakReference` you can optionally pass in a `ReferenceQueue`. When a weak reference is cleared by the garbage collector, that `WeakReference` object gets added to this queue so the application can react -- for example, to clean up a cache.
 
 You can also create a `WeakReference` without a `ReferenceQueue` if you just want the conditional reachability we discussed earlier - also known as weak semantics. So that's how weak references implemented, now let's look at how ZGC actually processes them.
 
@@ -116,9 +116,9 @@ This is why this thesis investigates whether optimisations to reference processi
 
 [change slide]
 
-My first research question is: *"How do specific modifications to ZGC's processing of `WeakReference` objects without a `ReferenceQueue` affect the wall-clock time of reference processing, the total GC cycle time, the GC memory footprint, and Java heap usage?"* So here we are looking at the effect of specific optimisations to the existing `WeakReference` structure.
+RQ1 asks how specific pipeline modifications to ZGC's processing of queue-less `WeakReference` objects affect four key metrics: reference-processing time, total GC cycle time, GC memory footprint, and Java heap usage.
 
-This is in contrast to the second research question: *"How does expressing weak semantics through annotated object fields affect reference processing time, GC cycle time, GC memory footprint, and Java heap usage compared to the optimised `WeakReference`-based approach of Research Question 1?"* Here we are looking at a completely different approach to implementing weak semantics - through annotated object fields rather than wrapper objects.
+RQ2 asks how expressing weak semantics through annotated object fields affects those same metrics compared to the optimised `WeakReference` approach -- so a completely different representation, not just an optimised pipeline.
 
 [change slide]
 
@@ -170,7 +170,7 @@ The idea behind Research Question 2 is to allow one object to hold a weak refere
 
 This opens up quite a few implementation challenges. How do we discover these fields? or How do we clear them in a thread-safe way? What I did in this thesis was a proof-of-concept implementation - I got it working with my benchmarks, but it is not production-ready.
 
-Discovery works as follows: during the marking phase, whenever we encounter an object that has an `@weak`-annotated field, we record that field's address in - you guessed it - a dynamic array of discovered weak fields. Once the entire object graph has been marked, we process this array the same way as normal weak references: check if the referent is alive, and if not, write null.
+Discovery mirrors the normal pipeline: annotated fields found during marking go into a dynamic array, which is then processed after marking completes.
 
 One important difference from weak references however: we cannot use the optimised clear path here. For a `WeakReference`, the only thing an application thread can write to the referent field is null, via `WeakReference.clear()`. But an `@weak`-annotated field is a regular object field - an application thread can write anything to it at any time. So we must keep the CAS to avoid a data race.
 
@@ -220,11 +220,11 @@ An interesting thing to notice is that this is actually super-additive. If you l
 
 The skip-enqueue separation on its own, however, shows almost no effect on this metric - just 5% in the single-object benchmark and nothing measurable in the multi-object benchmark. This is expected, because this metric only captures GC-internal work. The reference handler thread's load is not measured here, so the benefit of routing queue-less references away from it doesn't show up.
 
+For weak fields, the picture is also interesting. It achieves a 51% reduction - clearly better than the baseline, but not as good as clear_path_dyn or all. And its performance is closely comparable to the `sep_dyn` variant - which makes sense, because weak fields can only use those two pipeline optimisations for the reasons we discussed earlier.
+
 [change slide]
 
-For the multi-object benchmark the pattern is the same, with `clear_path_dyn` and `all` both achieving about a 57% reduction.
-
-For weak fields, the picture is also interesting. It achieves a 51% reduction in the single-object benchmark and 19% in the multi-object benchmark - clearly better than the baseline, but not as good as the best `WeakReference` variants. And its performance is closely comparable to the `sep_dyn` variant - which makes sense, because weak fields can't use the optimised clear path for the reason we discussed earlier.
+In the multi-object benchmark the same pattern holds -- -57% for the best variants. Weak fields sit at 19%, again comparable to `sep_dyn`.
 
 [change slide]
 
