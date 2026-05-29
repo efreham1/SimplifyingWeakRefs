@@ -1,0 +1,1242 @@
+% !TEX program = xelatex
+% !TEX root = Presentation.tex
+%%% Thesis Defence Presentation
+%%% Optimising Weak Reference Processing in OpenJDK's ZGC
+%%% Master's Thesis, Uppsala University, 2026
+%%% Author: Fredrik Hammarberg
+
+\documentclass[aspectratio=169]{beamer}
+
+\usepackage[english]{babel}
+\usepackage{hyperref}
+\usepackage{graphicx}
+\usepackage{listings}
+\usepackage{caption}
+\usepackage{amsmath}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{fontspec}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, shapes.geometric, positioning, fit, backgrounds, calc, decorations.pathreplacing}
+\setmainfont{TeX Gyre Termes}
+\setsansfont{TeX Gyre Heros}
+\setmonofont[HyphenChar=45]{TeX Gyre Cursor}
+
+\usepackage{UU_beamer} % Uppsala University beamer style
+
+% Fix page counter: use frame number (not overlay-page number) / total frames
+\makeatletter
+\setbeamertemplate{footline}{%
+    \begin{beamercolorbox}[colsep=1.5pt]{upper separation line foot}
+    \end{beamercolorbox}
+    \begin{beamercolorbox}[ht=2.4ex,dp=1ex,leftskip=0.4cm,rightskip=0.4cm]{title in head/foot}%
+        \leavevmode{\usebeamerfont{author in head/foot}\color{white!70}\insertshortauthor}%
+        \hfill%
+        {\usebeamerfont{title in head/foot}\color{white}\insertshorttitle}%
+        \hfill%
+        {\usebeamerfont{frame number}\color{white!70}%
+         \insertframenumber~\frameofframes~\inserttotalframenumber}%
+    \end{beamercolorbox}%
+    \begin{beamercolorbox}[colsep=1.5pt]{lower separation line foot}
+    \end{beamercolorbox}%
+}
+\makeatother
+
+% Modern bullet points
+\setbeamertemplate{itemize item}{%
+    {\raisebox{.2ex}{\scriptsize\color{uppsalared}$\blacktriangleright$}}}
+\setbeamertemplate{itemize subitem}{%
+    {\raisebox{.2ex}{\scriptsize\color{uppsalared!65}$\triangleright$}}}
+\setbeamertemplate{itemize subsubitem}{%
+    {\raisebox{.2ex}{\tiny\color{uppsalared!45}$-$}}}
+
+% Subtle alert block (lighter than the default deep red fill)
+\setbeamercolor{block title alerted}{bg=uppsalared!85,fg=white}
+\setbeamercolor{block body alerted}{bg=uppsalared!8,fg=black}
+
+% ------ COLOUR DEFINITIONS ------ %
+\definecolor{codered}{rgb}{0.6,0,0}
+\definecolor{codeblue}{rgb}{0,0,0.8}
+\definecolor{codegreen}{rgb}{0,0.5,0}
+\definecolor{almostwhite}{gray}{0.55}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{zgcblue}{RGB}{20,70,150}
+\definecolor{alivegrn}{RGB}{20,120,50}
+\definecolor{weakblue}{RGB}{30,30,170}
+
+% ------ TIKZ STYLES ------ %
+\tikzset{
+  obj/.style={circle, draw=black, thick, minimum size=0.9cm,
+              inner sep=1pt, font=\small\bfseries},
+  objC/.style={obj, fill=green!22, draw=alivegrn},
+  rset/.style={rectangle, draw=black!70, thick, fill=yellow!20,
+               minimum width=1.3cm, minimum height=0.75cm,
+               font=\scriptsize\bfseries, align=center, rounded corners=2pt},
+  refbox/.style={rectangle, draw=weakblue!70, thick, fill=weakblue!8,
+                 minimum width=1.6cm, minimum height=0.65cm,
+                 font=\scriptsize\bfseries, rounded corners=2pt, text centered},
+  pipenode/.style={rectangle, rounded corners=3pt, draw=black!70, thick,
+                   fill=blue!8, minimum width=2.5cm, minimum height=0.72cm,
+                   font=\scriptsize\bfseries, align=center},
+  listnode/.style={rectangle, draw=black!60, thick, fill=white,
+                   minimum width=1.2cm, minimum height=0.55cm,
+                   font=\tiny, text centered},
+  arraynode/.style={rectangle, draw=black!60, thick, fill=blue!10,
+                    minimum width=1.0cm, minimum height=0.55cm,
+                    font=\tiny, text centered},
+  srrow/.style={-{Stealth[length=5pt]}, thick, black},
+  wrrow/.style={-{Stealth[length=5pt]}, thick, dashed, weakblue},
+  parrow/.style={-{Stealth[length=7pt]}, very thick, black!65},
+}
+
+\lstset{
+    basicstyle=\ttfamily\scriptsize,
+    keywordstyle=\bfseries\color{codeblue},
+    stringstyle=\color{codepurple},
+    commentstyle=\color{codegreen},
+    numbers=none,
+    frame=single,
+    rulecolor=\color{uppsalared!40},
+    backgroundcolor=\color{black!4},
+    xleftmargin=5pt,
+    xrightmargin=3pt,
+    aboveskip=3pt,
+    belowskip=2pt,
+    breaklines=true,
+    showstringspaces=false,
+    morekeywords={zaddress, ZWeakRefData, ZWeakRefArray, ReferenceType,
+                  REF_WEAK, oop, bool, size_t, void, const, weak}
+}
+
+% ------------- PRESENTATION METADATA --------------- %
+\newcommand{\fullconference}{Master's Thesis Defence -- Uppsala University}
+\newcommand{\shortconference}{Master's Thesis}
+\newcommand{\contact}{\textit{fredrik.hammarberg00@outlook.com}}
+
+\author[F.\ Hammarberg]{\href{}{Fredrik Hammarberg}}
+\institute[MSc CIE, UU]{%
+    \href{}{MSc Computer and Information Engineering, Uppsala University}
+    \\ \smallskip \contact}
+\title[Optimising Weak References in ZGC]{%
+    Optimising Weak Reference Processing\\in OpenJDK's ZGC}
+\subtitle[\shortconference]{Master's Thesis in Computer Science}
+\date[May 2026]{\small May 2026 \\ \fullconference \\[6pt]
+    \includegraphics[scale=0.40]{style/uu_logo.pdf}}
+
+\graphicspath{{../images/}}
+\setbeamertemplate{navigation symbols}{}
+
+\begin{document}
+
+% =============================================================== %
+% TITLE
+% =============================================================== %
+{
+\setbeamertemplate{footline}{}
+\setbeamertemplate{headline}{}
+\begin{frame}[shrink=12]\label{start}
+    \titlepage
+\end{frame}
+}
+
+% =============================================================== %
+% AGENDA
+% =============================================================== %
+\begin{frame}{Agenda}
+    \tableofcontents[sectionstyle=show,
+                     subsectionstyle=show/shaded/hide,
+                     subsubsectionstyle=show/shaded/hide]
+\end{frame}
+
+
+% =============================================================== %
+\section{Background}
+% =============================================================== %
+
+% -------------------------------------------------------------------
+% Java and the JVM
+% -------------------------------------------------------------------
+\begin{frame}{Java and the JVM}
+    \begin{columns}[T]
+        \column{0.55\textwidth}
+        \begin{itemize}
+            \item One of the most used programming languages in the world
+            \item Write once, compile once -- runs on \emph{any} machine via the \textbf{JVM}
+            \item \textbf{HotSpot JVM} is the reference implementation (Oracle / OpenJDK)
+        \end{itemize}
+        \column{0.45\textwidth}
+        \centering
+        \begin{tikzpicture}[scale=0.82]
+            \useasboundingbox (-0.3,-0.1) rectangle (5.9,5.0);
+
+            % --- Write once, run anywhere ---
+            \node[font=\scriptsize\bfseries, black!55] at (2.0,4.75)
+                {Write once, run anywhere};
+
+            % Source file
+            \node[draw=black!35, rounded corners=3pt, fill=yellow!12,
+                  minimum width=1.4cm, minimum height=0.75cm,
+                  font=\tiny\bfseries, align=center]
+                (src) at (0.28,3.8) {Main\\\ttfamily .java};
+
+            % Bytecode
+            \node[draw=black!35, rounded corners=3pt, fill=orange!10,
+                  minimum width=1.4cm, minimum height=0.75cm,
+                  font=\tiny\bfseries, align=center]
+                (bc) at (2.9,3.8) {byte-\\code};
+
+            % javac arrow
+            \draw[->, thick, black!45] (src.east) -- (bc.west);
+            \node[font=\tiny, black!55, above=1pt] at (1.55,3.8) {\ttfamily javac};
+
+            % JVM fan-out to three platforms
+            \node[draw=none, fill=none, text width=1.2cm,
+                  font=\tiny, black!65, inner sep=1pt, align=left, anchor=west] (linux)   at (4.7,4.65) {Linux};
+            \node[draw=none, fill=none, text width=1.2cm,
+                  font=\tiny, black!65, inner sep=1pt, align=left, anchor=west] (macos)   at (4.7,3.8)  {macOS};
+            \node[draw=none, fill=none, text width=1.2cm,
+                  font=\tiny, black!65, inner sep=1pt, align=left, anchor=west] (windows) at (4.7,2.95) {Windows};
+            \draw[->, thick, zgcblue!65] (bc.east) -- (linux.west);
+            \draw[->, thick, zgcblue!65] (bc.east) -- (macos.west);
+            \draw[->, thick, zgcblue!65] (bc.east) -- (windows.west);
+            \node[font=\tiny\bfseries, zgcblue!75, left=1pt] at (4.5,3.0)
+                {JVM};
+        \end{tikzpicture}
+    \end{columns}
+\end{frame}
+
+% -------------------------------------------------------------------
+% Garbage Collection (concept introduction)
+% -------------------------------------------------------------------
+\begin{frame}{Garbage Collection}
+    \begin{columns}[T]
+        \column{0.55\textwidth}
+        \begin{itemize}
+            \item Java has \textbf{automatic memory management} $\to$ no \texttt{free()} or \texttt{delete}
+            \item The GC periodically finds objects the application can no longer reach and reclaims their memory
+        \end{itemize}
+        \begin{block}{ZGC}
+            \small
+            \begin{itemize}
+                \item \textbf{Concurrent}: runs \emph{alongside} the application $\to$ very short stop-the-world pauses
+                \item \textbf{Relocating}: moves live objects to new compact regions. Old memory reused
+            \end{itemize}
+        \end{block}
+
+        \column{0.45\textwidth}
+        \centering
+        \vspace{0.8em}
+        \begin{tikzpicture}[scale=0.85]
+            \useasboundingbox (-0.3,0.5) rectangle (5.2,4.5);
+
+            \node[font=\scriptsize\bfseries, black!55] at (2.45,4.3)
+                {ZGC runs concurrently};
+
+            % Application thread bar
+            \fill[zgcblue!15, rounded corners=3pt]
+                (0.0,3.0) rectangle (4.8,3.65);
+            \draw[zgcblue!50, rounded corners=3pt, thick]
+                (0.0,3.0) rectangle (4.8,3.65);
+            \node[font=\scriptsize\bfseries, zgcblue!80] at (2.4,3.33)
+                {Application};
+
+            % ZGC thread bar
+            \fill[alivegrn!18, rounded corners=3pt]
+                (0.0,2.0) rectangle (4.8,2.65);
+            \draw[alivegrn!55, rounded corners=3pt, thick]
+                (0.0,2.0) rectangle (4.8,2.65);
+            \node[font=\scriptsize\bfseries, alivegrn!80] at (2.4,2.33)
+                {ZGC};
+
+            % Time arrow
+            \draw[->, thick, black!40] (-0.1,1.5) -- (5.0,1.5);
+            \node[font=\tiny, black!45] at (4.7,1.25) {time};
+
+            % Double-headed arrow showing parallel
+            \draw[<->, thick, black!35] (5.05,2.0) -- (5.05,3.65);
+            \node[font=\tiny, black!45, rotate=270] at (5.25,2.83)
+                {parallel};
+        \end{tikzpicture}
+    \end{columns}
+\end{frame}
+
+% -------------------------------------------------------------------
+% Garbage Collection (4-overlay animated walkthrough)
+% -------------------------------------------------------------------
+\begin{frame}{Garbage Collection}
+    \begin{columns}[T]
+        \column{0.57\textwidth}
+        \centering
+        \begin{tikzpicture}[scale=0.88]
+            \useasboundingbox (-2.2,-0.3) rectangle (6.0,5.6);
+            % Heap box (always)
+            \draw[thick, rounded corners=4pt, fill=gray!4]
+                (0,0) rectangle (5.8,5.2);
+            \node[font=\scriptsize\bfseries, black!45, above right=1pt] at (0,5.2) {Process Heap};
+            % Root set (always, left of heap)
+            \node[rset] (roots) at (-1.8,3.0) {Root\\Set};
+            % Named circle nodes for edge-to-edge arrows (always present)
+            \node[obj, fill=white] (A) at (1.5,4.2) {A};
+            \node[obj, fill=white] (B) at (3.8,4.2) {B};
+            \node[obj, fill=white] (C) at (2.7,2.0) {C};
+            % Overlay 2-3: strong references
+            \only<2-3>{
+                \draw[srrow] (roots.east) -- (C);
+                \draw[srrow] (A) -- (B);
+            }
+            % Overlay 3: colour fills + status labels
+            \only<3>{
+                \fill[red!22] (A) circle (0.43cm);
+                \draw[thick, codered] (A) circle (0.43cm);
+                \node[font=\small\bfseries] at (A) {A};
+                \fill[red!22] (B) circle (0.43cm);
+                \draw[thick, codered] (B) circle (0.43cm);
+                \node[font=\small\bfseries] at (B) {B};
+                \fill[green!25] (C) circle (0.43cm);
+                \draw[thick, alivegrn] (C) circle (0.43cm);
+                \node[font=\small\bfseries] at (C) {C};
+                \draw[srrow, codered!70] (A) -- (B);
+                \draw[srrow] (roots.east) -- (C);
+                \node[font=\tiny\bfseries, codered, above=14pt] at (A) {dead};
+                \node[font=\tiny\bfseries, codered, above=14pt] at (B) {dead};
+                \node[font=\tiny\bfseries, alivegrn, above=14pt] at (C) {alive};
+            }
+            % Overlay 4: relocation -- gray old region, C relocated to right
+            \only<4>{
+                \fill[gray!30, rounded corners=3pt]
+                    (0.1,0.1) rectangle (4.6,5.1);
+                \node[font=\tiny\bfseries, gray!55, below right=1pt] at (0.0,5.1) {old region};
+                % A and B greyed out (dead, in old region)
+                \node[obj, fill=gray!20, draw=black!25, text=black!30] at (1.5,4.2) {A};
+                \node[obj, fill=gray!20, draw=black!25, text=black!30] at (3.8,4.2) {B};
+                \node[obj, fill=gray!20, draw=black!25, text=black!30] at (2.7,2.0) {C};
+                \draw[srrow, gray!20] (A) -- (B);
+                \node[objC] (Cnew) at (5.2,2.0) {C};
+                \node[font=\tiny\itshape, zgcblue, below=3pt] at (Cnew.south) {relocated};
+                \draw[srrow, zgcblue, thick] (roots.east) to[bend left=12] (Cnew);
+            }
+        \end{tikzpicture}
+
+        \column{0.43\textwidth}
+        \small
+        \begin{itemize}
+            \item<1-> Objects live on the \textbf{heap}, the root set is always alive
+            \item<2-> GC \textbf{marks}: follows all references reachable from roots
+            \item<3-> \textcolor{codered}{A and B} are unreachable $\to$ marked as \textbf{dead}.
+                      \textcolor{alivegrn}{C} is reachable $\to$ marked as \textbf{alive}
+            \item<4-> GC \textbf{relocates} C to a new region; old memory freed
+        \end{itemize}
+    \end{columns}
+\end{frame}
+
+% -------------------------------------------------------------------
+% Weak References (concept introduction)
+% -------------------------------------------------------------------
+\begin{frame}{Weak References}
+    \begin{columns}[T]
+        \column{0.52\textwidth}
+        \small
+        \begin{itemize}
+            \item Strong references keep objects alive. If you can reach it, it won't be collected
+            \item But sometimes you want to \textbf{observe} an object \emph{only while it is still alive}
+            \item If you hold a strong ref just to check whether it's alive, you keep it alive forever, defeating the purpose
+        \end{itemize}
+        \vspace{0.4em}
+        \begin{alertblock}{The problem}
+            \small
+            You want to hold a reference that \textbf{does not} prevent garbage collection but still lets you read the object if it hasn't been collected yet.
+        \end{alertblock}
+
+        \column{0.48\textwidth}
+        \centering
+        \begin{tikzpicture}[scale=0.88]
+            \useasboundingbox (-2.2,-0.3) rectangle (6.0,5.6);
+            \draw[thick, rounded corners=4pt, fill=gray!4]
+                (0,0) rectangle (5.8,5.2);
+            \node[font=\scriptsize\bfseries, black!45, above right=1pt] at (0,5.2) {Process Heap};
+            \node[rset] (roots) at (-1.8,3.0) {Root\\Set};
+            \node[obj, fill=white] (A) at (1.5,4.2) {A};
+            \node[obj, fill=white] (B) at (3.8,4.2) {B};
+            \node[obj, fill=white] (C) at (2.7,2.0) {C};
+            \draw[srrow] (roots.east) -- (C);
+            \draw[srrow] (A) -- (B);
+            \draw[srrow] (C) -- (B);
+            \node[font=\tiny, black!50, text width=2.8cm, text centered]
+                at (2.7,0.5) {C wants to access B -- but holding a strong ref keeps B alive};
+        \end{tikzpicture}
+    \end{columns}
+\end{frame}
+
+% -------------------------------------------------------------------
+% Weak References (3-overlay graph walkthrough)
+% -------------------------------------------------------------------
+\begin{frame}{Weak References}
+    \begin{columns}[T]
+        \column{0.57\textwidth}
+        \centering
+        \begin{tikzpicture}[scale=0.88]
+            \useasboundingbox (-2.2,-0.3) rectangle (6.0,5.6);
+            % Same base layout as GC slide
+            \draw[thick, rounded corners=4pt, fill=gray!4]
+                (0,0) rectangle (5.8,5.2);
+            \node[font=\scriptsize\bfseries, black!45, above right=1pt] at (0,5.2) {Process Heap};
+            \node[rset] (roots) at (-1.8,3.0) {Root\\Set};
+            \node[obj, fill=white] (A) at (1.5,4.2) {A};
+            \node[obj, fill=white] (B) at (3.8,4.2) {B};
+            \node[obj, fill=white] (C) at (2.7,2.0) {C};
+
+            % === Overlay 1: no strong path to B via roots ===
+            \only<1>{
+                \draw[srrow] (roots.east) -- (C);
+                \draw[srrow] (A) -- (B);
+                \draw[wrrow] (C) -- node[above right, font=\tiny, weakblue]{weak} (B);
+            }
+
+            % === Overlay 2: B is collected; weak ref nulled ===
+            \only<2>{
+                \draw[srrow] (roots.east) -- (C);
+                \draw[srrow, gray!45] (A) -- (B);
+                \fill[gray!25] (A) circle (0.43cm);
+                \draw[thick, black!40] (A) circle (0.43cm);
+                \node[font=\small\bfseries, black!50] at (A) {A};
+                \fill[red!22] (B) circle (0.43cm);
+                \draw[thick, codered] (B) circle (0.43cm);
+                \node[font=\small\bfseries] at (B) {B};
+                \draw[wrrow, gray!40] (C) -- (B);
+                \node[font=\large, codered] at (3.26,3.1) {\texttimes};
+                \node[font=\tiny\bfseries, codered, right=14pt] at (B) {collected};
+            }
+
+            % === Overlay 3: root→A added; B reachable ===
+            \only<3>{
+                \draw[srrow] (roots.east) -- (C);
+                \draw[srrow] (roots.east) to[bend left=20] (A);
+                \draw[srrow] (A) -- (B);
+                \fill[green!22] (A) circle (0.43cm);
+                \draw[thick, alivegrn] (A) circle (0.43cm);
+                \node[font=\small\bfseries] at (A) {A};
+                \fill[green!22] (B) circle (0.43cm);
+                \draw[thick, alivegrn] (B) circle (0.43cm);
+                \node[font=\small\bfseries] at (B) {B};
+                \fill[green!22] (C) circle (0.43cm);
+                \draw[thick, alivegrn] (C) circle (0.43cm);
+                \node[font=\small\bfseries] at (C) {C};
+                \draw[wrrow, codegreen!80, very thick] (C) -- (B);
+                \node[font=\large, codegreen] at (3.35,3.13) {\checkmark};
+                \node[font=\tiny\bfseries, codegreen, right=14pt] at (B) {alive};
+            }
+        \end{tikzpicture}
+
+        \column{0.43\textwidth}
+        \small
+        \begin{itemize}
+            \item<1-> A \textbf{weak reference} does not keep an object alive since it does not count as reachability for GC purposes
+            \item<2-> If B has no \emph{strong} path from roots: GC collects B; weak ref becomes \texttt{null}
+            \item<3-> Add strong ref between root and A: B reachable through A $\to$\\
+                      The weak ref from C to B is \textbf{valid}
+        \end{itemize}
+    \end{columns}
+\end{frame}
+
+% -------------------------------------------------------------------
+% WeakReference wrapper object
+% -------------------------------------------------------------------
+\begin{frame}[fragile]{The \texttt{WeakReference} Wrapper Object}
+    \begin{columns}[T]
+        \column{0.52\textwidth}
+        \centering
+        \begin{tikzpicture}[scale=0.88]
+            \useasboundingbox (-2.2,-0.3) rectangle (6.0,5.6);
+            % Same base as GC/WeakRef slides
+            \draw[thick, rounded corners=4pt, fill=gray!4]
+                (0,0) rectangle (5.8,5.2);
+            \node[font=\scriptsize\bfseries, black!45, above right=1pt] at (0,5.2) {Process Heap};
+            \node[rset] (roots) at (-1.8,3.0) {Root\\Set};
+            % C holds the WeakReference; B is the referent (same positions as other slides)
+            \node[obj, fill=white] (A) at (2.0,4.4) {A};
+            \node[obj, fill=white] (C) at (2.0,1.5) {C};
+            \node[obj, fill=white] (B) at (4.2,4.4) {B};
+            % WeakReference wrapper object (between C and B)
+            \node[refbox] (WR) at (4.0,2.5) {\texttt{WeakRef}};
+            \node[font=\tiny, black!45, below=1pt] at (WR.south) {wrapper obj};
+            % Connections
+            \draw[srrow] (roots.east) -- (C);
+            \draw[srrow] (C) -- (WR);
+            \draw[wrrow] (WR) -- (B);
+            \draw[srrow] (A) -- (B);
+            \draw[srrow] (roots.east) to[bend left=20] (A);
+            % Legend
+            \node[font=\tiny, black!55] at (2.1,0.5) {%
+                \tikz[baseline]{\draw[srrow,black!60](0,0pt)--(0.5cm,0pt);} strong\quad
+                \tikz[baseline]{\draw[wrrow,opacity=0.8](0,0pt)--(0.5cm,0pt);} weak};
+        \end{tikzpicture}
+
+        \column{0.48\textwidth}
+        \small
+        \begin{itemize}
+            \item The wrapper object exists to support the \texttt{ReferenceQueue} callback
+            \item When the GC collects B, the \texttt{WeakReference} is enqueued so the application can react
+        \end{itemize}
+        \vspace{0.35em}
+        \begin{lstlisting}[language=Java]
+// With notification queue
+new WeakReference<>(obj, queue)
+
+// No queue
+new WeakReference<>(obj)
+        \end{lstlisting}
+    \end{columns}
+\end{frame}
+
+% -------------------------------------------------------------------
+% Reference processing pipeline
+% -------------------------------------------------------------------
+\begin{frame}{Reference Processing Pipeline}
+    \begin{columns}[T]
+        \column{0.58\textwidth}
+        \centering
+        \vspace{0.2em}
+        \begin{tikzpicture}[scale=0.80, node distance=0.22cm]
+            \node[pipenode, fill=blue!10, minimum width=5.0cm] (disc)
+                at (2.5,4.2) {1.\ Discovery Phase};
+            \node[font=\scriptsize, text width=4.8cm, text centered,
+                  below=0.05cm of disc]
+                (discd) {Mark phase: \texttt{WeakReference}s appended
+                         to a \emph{discovered list}};
+            \node[pipenode, fill=yellow!15, minimum width=5.0cm,
+                  below=0.35cm of discd] (proc) {2.\ Processing Phase};
+            \node[font=\scriptsize, text width=4.8cm, text centered,
+                  below=0.05cm of proc]
+                (procd) {Referent alive? \textrightarrow\ keep\quad
+                         Referent dead? \textrightarrow\ clear it};
+            \node[pipenode, fill=red!8, minimum width=5.0cm,
+                  below=0.35cm of procd] (enq) {3.\ Enqueue Phase};
+            \node[font=\scriptsize, text width=4.8cm, text centered,
+                  below=0.05cm of enq]
+                {ReferenceHandler thread delivers each cleared ref
+                 to its \texttt{ReferenceQueue}};
+        \end{tikzpicture}
+
+        \column{0.40\textwidth}
+        \small
+        \begin{itemize}
+            \item During marking: found \texttt{WeakReference}s go onto a linked list
+            \item After marking: check liveness per ref, clear dead ones
+            \item Cleared refs handed to the \texttt{ReferenceHandler} thread for queue delivery
+            \item Queue-less refs travel through all three phases -- silently dropped at step~3
+        \end{itemize}
+    \end{columns}
+\end{frame}
+
+
+% =============================================================== %
+\section{Motivation}
+% =============================================================== %
+
+% -------------------------------------------------------------------
+% The problem
+% -------------------------------------------------------------------
+\begin{frame}{The Problem with Queue-less Weak References}
+    \begin{columns}[T]
+        \column{0.60\textwidth}
+        \begin{itemize}
+            \item GC performance directly impacts application performance
+            \item ZGC was designed for high performance -- every unnecessary operation matters
+        \end{itemize}
+        \vspace{0.4em}
+        \begin{alertblock}{The issue}
+            \small
+            When a \texttt{WeakReference} \emph{without} a \texttt{ReferenceQueue} is
+            cleared, it is still handed to the \texttt{ReferenceHandler} thread --
+            which then silently drops it, since there is no queue.\\[4pt]
+            \textbf{Unnecessary work for every single queue-less weak reference.}
+        \end{alertblock}
+        \column{0.38\textwidth}
+        \centering
+        \begin{tikzpicture}[scale=1.0]
+            \node[pipenode, minimum width=3.8cm] (all) at (1.9,5.0) {All WeakRefs};
+            \node[pipenode, fill=yellow!15, minimum width=3.8cm] (proc) at (1.9,3.75) {Process};
+            \node[pipenode, fill=red!10, minimum width=3.8cm] (enq) at (1.9,2.5) {Enqueue};
+            \node[pipenode, fill=red!10, minimum width=3.8cm] (rh) at (1.9,1.25) {ReferenceHandler};
+            \node[pipenode, fill=red!10, minimum width=3.8cm] (gone) at (1.9,0.0) {Silently dropped};
+            \draw[parrow] (all)--(proc);
+            \draw[parrow] (proc)--(enq);
+            \draw[parrow] (enq)--(rh);
+            \draw[parrow, codered] (rh)--(gone);
+            \draw[decorate, decoration={brace, amplitude=8pt, raise=2pt}, codered, thick]
+                (enq.north east) -- (gone.south east)
+                node[midway, right=9pt, font=\tiny\bfseries, codered, align=left] {unnecessary};
+        \end{tikzpicture}
+    \end{columns}
+\end{frame}
+
+% -------------------------------------------------------------------
+% Research Questions
+% -------------------------------------------------------------------
+\begin{frame}{Research Questions}
+    \begin{block}{RQ1 -- Pipeline Optimisations}
+        \small
+        How do specific modifications to ZGC's processing of \texttt{WeakReference}
+        objects \emph{without} a \texttt{ReferenceQueue} affect reference-processing
+        time, total GC cycle time, GC memory footprint, and Java heap usage?
+    \end{block}
+    \vspace{0.6em}
+    \begin{block}{RQ2 -- Weak Fields}
+        \small
+        How does expressing weak semantics through annotated object fields affect
+        reference processing time, GC cycle time, GC memory footprint, and Java heap
+        usage compared to the optimised \texttt{WeakReference}-based approach of RQ1?
+    \end{block}
+    \vspace{0.5em}
+    \begin{columns}[T]
+        \column{0.48\textwidth}
+        \small\textbf{RQ1:} optimise the \emph{existing} pipeline without changing
+        how weak refs are represented
+        \column{0.48\textwidth}
+        \small\textbf{RQ2:} eliminate the \texttt{WeakReference} wrapper object
+        entirely
+    \end{columns}
+\end{frame}
+
+
+% =============================================================== %
+\section{Design \& Implementation}
+% =============================================================== %
+
+% -------------------------------------------------------------------
+% Opt 1: Skip Enqueue Path (2-overlay before/after)
+% -------------------------------------------------------------------
+\begin{frame}{Optimisation 1: Skip Enqueue Path}
+    \begin{columns}[T]
+        \column{0.48\textwidth}
+        \centering
+        \begin{tikzpicture}[scale=1.0]
+
+            % === BEFORE (overlay 1) ===
+            \only<1>{
+                \node[pipenode, minimum width=4.2cm] (b1) at (2.1,5.0) {All WeakRefs};
+                \node[pipenode, fill=blue!10, minimum width=4.2cm] (b2) at (2.1,3.75) {Discovered list};
+                \node[pipenode, fill=yellow!15, minimum width=4.2cm] (b3) at (2.1,2.5) {Process};
+                \node[pipenode, fill=red!10, minimum width=4.2cm] (b4) at (2.1,1.25) {Enqueue};
+                \node[pipenode, fill=red!10, minimum width=4.2cm] (b5) at (2.1,0.0) {ReferenceHandler};
+                \draw[parrow] (b1)--(b2);
+                \draw[parrow] (b2)--(b3);
+                \draw[parrow] (b3)--(b4);
+                \draw[parrow, codered] (b4)--(b5);
+                \node[font=\tiny\bfseries, codered, right=2pt] at (b4.east) {always};
+            }
+
+            % === AFTER (overlay 2) ===
+            \only<2>{
+                \node[pipenode, minimum width=4.2cm] (all) at (2.1,5.0) {All WeakRefs};
+                \node[font=\scriptsize\bfseries, uppsalared] at (4.5,4.15) {split at discovery};
+                % Left: with queue
+                \node[pipenode, fill=blue!10, minimum width=1.9cm] (wq)      at (0.95,3.3) {with queue};
+                \node[pipenode, fill=yellow!15, minimum width=1.9cm] (wqproc) at (0.95,2.2) {process};
+                \node[pipenode, fill=red!10, minimum width=1.9cm] (wqenq)    at (0.95,1.1) {enqueue};
+                \node[pipenode, fill=red!10, minimum width=1.9cm] (wqrh)    at (0.95,0.0) {RefHandler};
+                \draw[parrow] (all.south) to[out=250,in=90] (wq.north);
+                \draw[parrow] (wq)--(wqproc);
+                \draw[parrow] (wqproc)--(wqenq);
+                \draw[parrow] (wqenq)--(wqrh);
+                % Right: no queue
+                \node[pipenode, fill=blue!10, minimum width=1.9cm] (nq)      at (3.25,3.3) {no queue};
+                \node[pipenode, fill=yellow!15, minimum width=1.9cm] (nqproc) at (3.25,2.2) {process};
+                \node[pipenode, fill=green!14, draw=alivegrn, minimum width=1.9cm] (done) at (3.25,1.1) {done \checkmark};
+                \draw[parrow] (all.south) to[out=290,in=90] (nq.north);
+                \draw[parrow] (nq)--(nqproc);
+                \draw[parrow, alivegrn] (nqproc)--(done);
+                \node[font=\tiny\bfseries, codered, right=2pt] at (done.east) {skip!};
+            }
+        \end{tikzpicture}
+
+        \column{0.52\textwidth}
+        \small
+        \only<1>{
+        \begin{itemize}
+            \item Every weak ref goes through the full pipeline
+            \item Queue-less refs still hit the \texttt{ReferenceHandler} -- which drops them
+            \item Pure waste for weak references without a queue
+        \end{itemize}
+        }
+        \only<2>{
+        \begin{itemize}
+            \item At discovery: check the \texttt{ReferenceQueue} field
+            \item Route queue-less refs to a \emph{separate} discovered list
+            \item No-queue pipeline: process (check + clear) -- then \textbf{stop}
+            \item With-queue: full existing behaviour
+        \end{itemize}
+        \vspace{0.3em}
+        \begin{alertblock}{\small Why two lists instead of a branch?}
+            \scriptsize
+            A branch requires a memory load per ref to check the queue
+            field. Two specialised loops avoid that per-reference cost.
+        \end{alertblock}
+        }
+    \end{columns}
+\end{frame}
+
+% -------------------------------------------------------------------
+% Opt 2: Dynamic Array
+% -------------------------------------------------------------------
+\begin{frame}{Optimisation 2: Dynamic Array Discovered List}
+    \begin{columns}[T]
+        \column{0.54\textwidth}
+        \centering
+        \begin{tikzpicture}[scale=0.78]
+            \useasboundingbox (-0.5,0.5) rectangle (6.5,5.5);
+
+            % Linked list (left)
+            \node[font=\small\bfseries, codered] at (1.2,5.2) {Linked List};
+            \node[listnode, minimum width=1.0cm] (n1) at (0.0,4.4) {ref};
+            \node[listnode, minimum width=1.0cm] (n2) at (1.8,2.2) {ref};
+            \node[listnode, minimum width=1.0cm] (n3) at (0.4,0.0) {ref};
+            \draw[->,thick, codered] (n1.south) to[out=280,in=130] node[above right, font=\tiny\bfseries, codered]{MISS} (n2.north);
+            \draw[->,thick, codered] (n2.south) to[out=250,in=60] node[above left, font=\tiny\bfseries, codered]{MISS} (n3.north);
+            \draw[codered, dashed, rounded corners=2pt] (-0.6,4.1) rectangle (0.6,4.7);
+            \draw[codered, dashed, rounded corners=2pt] (1.2,1.9) rectangle (2.4,2.5);
+            \draw[codered, dashed, rounded corners=2pt] (-0.2,-0.3) rectangle (1.0,0.3);
+            \node[font=\tiny, black!50, text width=2.2cm, text centered]
+                at (1.0,-1.2) {each pointer\\jumps elsewhere};
+
+            % Dynamic array (right)
+            \draw[black!25, dashed] (2.8,0.8) -- (2.8,5.4);
+            \node[font=\small\bfseries, codegreen] at (4.9,5.2) {Dynamic Array};
+            \foreach \x/\i in {3.4/1, 4.0/2, 4.6/3, 5.2/4, 5.8/5} {
+                \node[arraynode, minimum width=0.55cm] at (\x,3.8) {r\i};
+            }
+            \draw[codegreen, thick, rounded corners=2pt] (3.1,3.55) rectangle (6.1,4.05);
+            \node[font=\tiny\bfseries, codegreen] at (4.6,4.4) {one cache line};
+            \node[font=\tiny\bfseries, codegreen] at (4.6,3.2) {HIT\ \checkmark\ \checkmark\ \checkmark};
+            \draw[->,very thick, zgcblue] (3.4,2.8) -- (5.8,2.8);
+            \node[font=\tiny, zgcblue] at (4.6,2.5) {sequential scan};
+            \node[draw=black!30, rounded corners=2pt, fill=yellow!10,
+                  font=\tiny, text width=2.3cm, text centered]
+                at (4.6,1.7) {Contiguous array\\(grows dynamically)};
+        \end{tikzpicture}
+
+        \column{0.46\textwidth}
+        \small
+        \begin{itemize}
+            \item Linked list: every next-node pointer is a \textbf{cache miss}
+            \item Nodes scattered across memory -- poor spatial locality
+            \item Array: one cache load fills several consecutive entries
+            \item Each append is $\mathcal{O}(1)$ amortised cost 
+        \end{itemize}
+        \vspace{0.4em}
+        \begin{alertblock}{\small Trade-off}
+            \small Higher auxiliary GC memory for array-based variants -- explored in the Results section.
+        \end{alertblock}
+    \end{columns}
+\end{frame}
+
+% -------------------------------------------------------------------
+% Opt 3: Optimised Clear Path
+% -------------------------------------------------------------------
+\begin{frame}{Optimisation 3: Optimised Clear Path}
+    \begin{columns}[T]
+        \column{0.50\textwidth}
+        \centering
+        \vspace{0.4em}
+
+        \only<1>{%
+        \begin{tikzpicture}[scale=0.88]
+            \useasboundingbox (-0.2,0.0) rectangle (5.5,5.2);
+
+            % GC thread (left)
+            \node[font=\scriptsize\bfseries, black!55] at (0.9,5.0) {GC thread};
+            \node[pipenode, fill=blue!10, minimum width=2.0cm, minimum height=0.7cm]
+                (gc) at (0.9,4.2) {clear referent};
+
+            % App thread (right)
+            \node[font=\scriptsize\bfseries, black!55] at (4.1,5.0) {App thread};
+            \node[pipenode, fill=orange!12, minimum width=2.0cm, minimum height=0.7cm]
+                (app) at (4.1,4.2) {modifying};
+
+            % Referent field
+            \node[draw=black!40, rounded corners=3pt, fill=yellow!10,
+                  minimum width=1.4cm, minimum height=0.6cm,
+                  font=\scriptsize\bfseries] (ref) at (2.5,2.8) {referent};
+
+            % Single bent arrows with labels
+            \draw[->, thick, black!55] (gc.south) to[out=270,in=150] node[font=\tiny, black!60, left=2pt] {CAS(\textit{obj} $\to$ \texttt{null})} (ref.north west);
+            \draw[->, thick, black!50] (app.south) to[out=270,in=30] (ref.north east);
+
+            % Divider
+            \draw[black!20, dashed] (-0.1,2.2) -- (5.3,2.2);
+
+            % CAS explanation box
+            \node[draw=black!25, rounded corners=3pt, fill=blue!5,
+                  font=\scriptsize, text width=4.5cm, align=left, inner sep=5pt]
+                at (2.5,0.5) {%
+                \textbf{Compare-And-Swap (CAS):}\\[2pt]
+                \quad \texttt{if (*field == expected)}\\
+                \quad\quad \texttt{*field = new\_val;} \hfill {\color{black!45}// atomic}\\[3pt]
+                Guarantees only one writer wins the race.};
+        \end{tikzpicture}
+        }%
+
+        \only<2>{%
+        \begin{tikzpicture}[scale=0.88]
+            \useasboundingbox (-0.2,0.0) rectangle (5.5,5.2);
+
+            % GC thread (left)
+            \node[font=\scriptsize\bfseries, black!55] at (0.9,5.0) {GC thread};
+            \node[pipenode, fill=blue!10, minimum width=2.0cm, minimum height=0.7cm]
+                (gc) at (0.9,4.2) {clear referent};
+
+            % App thread (right)
+            \node[font=\scriptsize\bfseries, black!55] at (4.1,5.0) {App thread};
+            \node[pipenode, fill=orange!12, minimum width=2.0cm, minimum height=0.7cm]
+                (app) at (4.1,4.2) {\ttfamily WR.clear()};
+
+            % Referent field
+            \node[draw=black!40, rounded corners=3pt, fill=yellow!10,
+                  minimum width=1.4cm, minimum height=0.6cm,
+                  font=\scriptsize\bfseries] (ref) at (2.5,2.8) {referent};
+
+            % Single bent arrows with labels
+            \draw[->, thick, black!40] (gc.south) to[out=270,in=150] node[font=\tiny, black!50, left=2pt] {writes \texttt{null}} (ref.north west);
+            \draw[->, thick, black!40] (app.south) to[out=270,in=30] node[font=\tiny, black!50, right=2pt] {writes \texttt{null}} (ref.north east);
+
+            % Insight
+            \node[draw=black!25, rounded corners=3pt, fill=green!8,
+                  font=\tiny, text width=4.5cm, text centered, inner sep=4pt]
+                at (2.5,1.8) {Both always write \texttt{null}\\
+                              $\Rightarrow$ race has no effect on outcome};
+
+            % Divider
+            \draw[black!20, dashed] (-0.1,1.2) -- (5.3,1.2);
+
+            % Before / After
+            \node[pipenode, fill=red!10, draw=codered!50, minimum width=1.9cm]
+                (before) at (1.1,0.5) {CAS};
+            \node[font=\tiny, black!45, below=1pt] at (before.south) {(atomic)};
+            \node[pipenode, fill=green!10, draw=alivegrn!50, minimum width=1.9cm]
+                (after) at (4.0,0.5) {plain store};
+
+            \draw[->, very thick, alivegrn] (before) -- (after);
+
+            \node[font=\tiny, black!45, below=1pt] at (after.south) {(cheaper)};
+        \end{tikzpicture}
+        }%
+
+        \column{0.50\textwidth}
+        \small
+
+        \only<1>{%
+        \begin{itemize}
+            \item Clearing a referent = writing \texttt{null} to the referent field
+            \item The GC does this with a \textbf{CAS} -- an atomic instruction that only writes if the current value matches an expected value
+            \item Needed because the ZGC runs concurrently with the application -- both may access the referent field at the same time without explicit synchronisation.
+        \end{itemize}
+        }%
+
+        \only<2>{%
+        \begin{itemize}
+            \item \textbf{Key observation}: the only thing an app thread can write to a \texttt{WeakReference}'s referent field is \texttt{null} (via \texttt{WeakReference.clear()})
+            \item If a race occurs, both sides write \texttt{null} -- the result is identical either way
+            \item $\Rightarrow$ The CAS is unnecessary; a \textbf{plain store} is safe
+        \end{itemize}
+        }%
+    \end{columns}
+\end{frame}
+
+% -------------------------------------------------------------------
+% RQ2: Weak Fields
+% -------------------------------------------------------------------
+\begin{frame}[fragile]{Research Question 2: Weak Fields (\texttt{@weak})}
+    \begin{columns}[T]
+        \column{0.50\textwidth}
+        \centering
+        \vspace{0.3em}
+        \begin{tikzpicture}[scale=0.90]
+            \node[font=\small\bfseries, codered] at (2.0,4.8) {\texttt{WeakReference} implementation};
+            \node[obj, fill=blue!10] (H1) at (0.0,3.8) {H};
+            \node[refbox] (WR) at (2.0,3.8) {\texttt{WeakRef}};
+            \node[obj, fill=gray!12] (T1) at (4.0,3.8) {T};
+            \draw[srrow] (H1)--(WR);
+            \draw[wrrow] (WR)--(T1);
+            \node[font=\tiny, black!45, below=1pt] at (WR.south) {wrapper obj};
+
+            \node[font=\small\bfseries, codegreen] at (2.0,1.7) {\texttt{@weak} field implementation};
+            \node[obj, fill=blue!10] (H2) at (0.0,0.7) {H};
+            \node[obj, fill=gray!12] (T2) at (4.0,0.7) {T};
+            \draw[wrrow, codegreen!80, very thick] (H2) --
+                node[above,font=\tiny\bfseries,codegreen]{\texttt{@weak} field} (T2);
+            \node[font=\tiny\bfseries, codered, below=4pt] at (2.0,0.3) {no wrapper object};
+        \end{tikzpicture}
+
+        \column{0.50\textwidth}
+        \small
+        \begin{itemize}
+            \item A field annotated \texttt{@weak} is treated as a weak reference by ZGC -- no wrapper object needed
+            \item Discovered during marking, stored in a dynamic array of weak fields
+            \item Cleared the same way -- but \textbf{cannot} use the optimised clear path (a regular field can be written to with any value, not just \texttt{null})
+        \end{itemize}
+        \vspace{0.2em}
+        \begin{lstlisting}[language=Java]
+class HolderClass {
+    @weak TargetClass ref;
+}
+        \end{lstlisting}
+    \end{columns}
+\end{frame}
+
+
+% =============================================================== %
+\section{Evaluation}
+% =============================================================== %
+
+% -------------------------------------------------------------------
+% Benchmark Design
+% -------------------------------------------------------------------
+\begin{frame}{Benchmark Design}
+    \begin{columns}[T]
+        \column{0.50\textwidth}
+        \textbf{Single-Object Benchmark}
+        \vspace{0.2em}
+        \centering
+        \begin{tikzpicture}[scale=0.78]
+            \draw[thick, fill=blue!5] (-0.3,0.2) rectangle (0.3,4.0);
+            \node[font=\tiny\bfseries] at (0,4.25) {Array};
+            \foreach \y/\i in {3.5/1, 2.8/2, 2.1/3, 0.6/n} {
+                \node[listnode, minimum width=0.8cm, fill=blue!10] (h\i) at (1.5,\y) {H\i};
+                \draw[->,thin,black!50] (0.3,\y) -- (h\i.west);
+            }
+            \node[font=\small] at (1.5,1.35) {$\vdots$};
+            \node[obj, fill=gray!12, minimum size=0.85cm] (pay) at (3.5,2.1) {T};
+            \node[font=\tiny\bfseries, above=2pt] at (pay.north) {shared target};
+            \foreach \y in {3.5, 2.8, 2.1, 0.6} {
+                \draw[wrrow, opacity=0.55] (2.0,\y) -- (pay);
+            }
+            \node[font=\tiny, black!55, left=2pt] at (-0.3,2.1) {20M};
+        \end{tikzpicture}
+
+        \column{0.50\textwidth}
+        \textbf{Multi-Object Benchmark}
+        \vspace{0.2em}
+        \centering
+        \begin{tikzpicture}[scale=0.78]
+            \draw[thick, fill=blue!5] (-0.3,0.2) rectangle (0.3,4.0);
+            \node[font=\tiny\bfseries] at (0,4.25) {Array};
+            \foreach \y/\i in {3.5/1, 2.8/2, 2.1/3, 0.6/n} {
+                \node[listnode, minimum width=0.8cm, fill=blue!10] (hh\i) at (1.5,\y) {H\i};
+                \draw[->,thin,black!50] (0.3,\y) -- (hh\i.west);
+            }
+            \node[font=\small] at (1.5,1.35) {$\vdots$};
+            \foreach \y/\i in {3.5/1, 2.8/2, 2.1/3, 0.6/n} {
+                \node[obj, fill=gray!12, minimum size=0.7cm, font=\tiny]
+                    (pp\i) at (3.3,\y) {T\i};
+                \draw[wrrow, opacity=0.55] (hh\i.east) -- (pp\i.west);
+            }
+            \node[font=\small] at (3.3,1.35) {$\vdots$};
+            \node[font=\tiny, black!55, left=2pt] at (-0.3,2.1) {2M};
+        \end{tikzpicture}
+    \end{columns}
+    \vspace{0.15em}
+    \small
+    \begin{itemize}
+        \item \textbf{Single}: 20M holders, one shared payload -- all 20M refs processed in one GC cycle
+        \item \textbf{Multi}: 2M holders, individual payloads, 5 gradual rounds -- more realistic
+        \item Both: no \texttt{ReferenceQueue}; both have a \texttt{@weak} field counterpart
+    \end{itemize}
+\end{frame}
+
+% -------------------------------------------------------------------
+% Variants and Execution Environment
+% -------------------------------------------------------------------
+\begin{frame}{Variants and Execution}
+    \begin{columns}[T]
+        \column{0.52\textwidth}
+        \small
+        \begin{tabular}{lccc}
+            \toprule
+            \textbf{Variant} & \textbf{clr} & \textbf{sep} & \textbf{dyn} \\
+            \midrule
+            \texttt{none}              & -- & -- & -- \\
+            \texttt{dyn\_only}         & -- & -- & $\checkmark$ \\
+            \texttt{sep\_only}         & -- & $\checkmark$ & -- \\
+            \texttt{sep\_dyn}          & -- & $\checkmark$ & $\checkmark$ \\
+            \texttt{clear\_path\_only} & $\checkmark$ & -- & -- \\
+            \texttt{clear\_path\_dyn}  & $\checkmark$ & -- & $\checkmark$ \\
+            \texttt{clear\_path\_sep}  & $\checkmark$ & $\checkmark$ & -- \\
+            \texttt{all}               & $\checkmark$ & $\checkmark$ & $\checkmark$ \\
+            \midrule
+            \texttt{weak\_fields}      & -- & -- & -- \\
+            \bottomrule
+        \end{tabular}
+        \vspace{0.2em}
+        \begin{itemize}
+            \small\item All $2^3 = 8$ pipeline combinations plus \texttt{weak\_fields}
+        \end{itemize}
+
+        \column{0.48\textwidth}
+        \begin{block}{Execution Environment}
+            \small
+            \textbf{UPPMAX} supercomputer (Pelle)\\[3pt]
+            AMD EPYC 9454P (Zen~4)\\
+            48 physical cores, 768\,GiB RAM\\[4pt]
+            4 parallel instances per run\\
+            Each: 10 JVM cores + 2 aux cores\\[4pt]
+            100\,GB heap \quad \texttt{-XX:+UseZGC}\\
+            250 iterations (+1 warmup discarded)
+        \end{block}
+        \vspace{0.3em}
+        \begin{block}{\small Reporting}
+            \small
+            \textbf{Median} over 250 iterations.\\
+            Violin + median percentage-difference histogram.
+        \end{block}
+    \end{columns}
+\end{frame}
+
+
+% =============================================================== %
+\section{Results}
+% =============================================================== %
+
+% -------------------------------------------------------------------
+% Non-strong processing -- single
+% -------------------------------------------------------------------
+\begin{frame}{Non-Strong Processing Time}
+    \begin{columns}[T]
+        \column{0.58\textwidth}
+        \centering
+        \includegraphics[width=0.90\textwidth]{%
+            composite_old_phase_concurrent_process_non-strong_slurm-5118807_combined_gc_single.pdf}
+        \vspace{-0.35em}
+        {\scriptsize Single-object benchmark}
+
+        \column{0.42\textwidth}
+        \small
+        \begin{tabular}{lr}
+            \toprule
+            \textbf{Variant} & \textbf{Reduction} \\
+            \midrule
+            \texttt{sep\_only}         & $-5$\% \\
+            \texttt{clear\_path\_only} & $-7$\% \\
+            \texttt{dyn\_only}         & $-36$\% \\
+            \texttt{clear\_path\_dyn}  & $\mathbf{-81}$\% \\
+            \texttt{all}               & $\mathbf{-81}$\% \\
+            \midrule
+            \texttt{weak\_fields}      & $-51$\% \\
+            \bottomrule
+        \end{tabular}
+        \vspace{0.5em}
+        \begin{alertblock}{\small Super-additive interaction}
+            \small
+            clear\_path alone: $-7$\%\\
+            dyn alone: $-36$\%\\
+            \textbf{Together: $-81$\%}\\[3pt]
+            Each removes a different bottleneck.
+        \end{alertblock}
+    \end{columns}
+\end{frame}
+
+% -------------------------------------------------------------------
+% Non-strong processing -- multi + weak_fields context
+% -------------------------------------------------------------------
+\begin{frame}{Non-Strong Processing -- Multi-Object \& \texttt{weak\_fields}}
+    \begin{columns}[T]
+        \column{0.58\textwidth}
+        \centering
+        \includegraphics[width=0.90\textwidth]{%
+            composite_old_phase_concurrent_process_non-strong_slurm-5118807_combined_gc_multi.pdf}
+        \vspace{-0.35em}
+        {\scriptsize Multi-object benchmark}
+
+        \column{0.42\textwidth}
+        \small
+        \begin{itemize}
+            \item Multi-object: same pattern -- \texttt{clear\_path\_dyn} and \texttt{all} at $-57$\%
+            \item \texttt{sep\_only}: 0\% -- the ReferenceHandler overhead is not captured by this metric
+            \item \texttt{weak\_fields}: $-51$\% (single), $-19$\% (multi)
+            \item Comparable to \texttt{sep\_dyn} -- because \texttt{@weak} fields cannot use the optimised clear path
+        \end{itemize}
+    \end{columns}
+\end{frame}
+
+% -------------------------------------------------------------------
+% Major collection time
+% -------------------------------------------------------------------
+\begin{frame}{Major Collection Time}
+    \begin{columns}[T]
+        \column{0.50\textwidth}
+        \includegraphics[width=\textwidth]{%
+            composite_major_collection_major_collection_slurm-5118807_combined_gc_single.pdf}
+        \vspace{-0.25em}
+        {\scriptsize Single-object benchmark}
+        \vspace{0.2em}
+        \small
+        \begin{itemize}
+            \item Non-strong $=$ \textbf{14.3\%} of major GC (baseline)
+            \item \texttt{all}: $-8$\% -- broad, overlapping distributions
+            \item \texttt{weak\_fields}: $\mathbf{-41}$\% -- clear and unambiguous
+        \end{itemize}
+
+        \column{0.50\textwidth}
+        \includegraphics[width=\textwidth]{%
+            composite_major_collection_major_collection_slurm-5118807_combined_gc_multi.pdf}
+        \vspace{-0.25em}
+        {\scriptsize Multi-object benchmark}
+        \vspace{0.2em}
+        \small
+        \begin{itemize}
+            \item Non-strong $=$ only \textbf{4.5\%} here
+            \item Pipeline variants indistinguishable from baseline
+            \item \texttt{weak\_fields}: $\mathbf{-28}$\% -- still clear
+        \end{itemize}
+    \end{columns}
+\end{frame}
+
+% -------------------------------------------------------------------
+% Memory Usage
+% -------------------------------------------------------------------
+\begin{frame}{Memory Usage}
+    \begin{columns}[T]
+        \column{0.50\textwidth}
+        \includegraphics[width=\textwidth]{%
+            memory_hist_aux_slurm-5118807_combined_gc_single.pdf}
+        \vspace{-0.25em}
+        {\scriptsize Auxiliary GC memory -- single-object benchmark}
+        \vspace{0.2em}
+        \small
+        \begin{itemize}
+            \item \texttt{clear\_path\_dyn}: $\times10$ aux memory (1268\,MB vs 120\,MB)
+            \item \texttt{all}: $\times7$ (sep reduces bytes per entry vs dyn alone)
+        \end{itemize}
+
+        \column{0.50\textwidth}
+        \includegraphics[width=\textwidth]{%
+            memory_hist_java_heap_slurm-5118807_combined_gc_single.pdf}
+        \vspace{-0.25em}
+        {\scriptsize Java heap -- single-object benchmark}
+        \vspace{0.2em}
+        \small
+        \begin{itemize}
+            \item All \texttt{WeakReference} variants: heap essentially identical
+            \item \texttt{weak\_fields}: $\mathbf{-53}$\% heap (single), $-5$\% (multi) -- no wrapper objects to allocate and promote
+        \end{itemize}
+    \end{columns}
+\end{frame}
+
+
+% =============================================================== %
+\section{Conclusions}
+% =============================================================== %
+
+% -------------------------------------------------------------------
+% Answering the Research Questions
+% -------------------------------------------------------------------
+\begin{frame}{Conclusions}
+    \begin{block}{RQ1 -- Pipeline Optimisations}
+        \begin{itemize}
+            \item \textbf{81\%} reduction in non-strong processing time (\texttt{clear\_path\_dyn} / \texttt{all})
+            \item Translates to only \textbf{8\%} in total major collection time
+            \item Hard ceiling: non-strong is 14.3\% of major GC time (single) and 4.5\% (multi)
+        \end{itemize}
+    \end{block}
+    \vspace{0.3em}
+    \begin{block}{RQ2 -- Weak Fields}
+        \begin{itemize}
+            \item \textbf{41\%} major GC time reduction (single), \textbf{28\%} (multi)
+            \item \textbf{53\%} heap reduction (single) -- no wrapper objects
+            \item Structural advantage: fewer objects means less work across \emph{every} GC phase
+        \end{itemize}
+    \end{block}
+\end{frame}
+
+% -------------------------------------------------------------------
+% Key Takeaway
+% -------------------------------------------------------------------
+\begin{frame}{Key Takeaway}
+    \begin{columns}[T]
+        \column{0.38\textwidth}
+        \centering
+        \vspace{0.6em}
+        \begin{tikzpicture}[scale=0.82]
+            % Y-axis
+            \draw[->, thick, black!60] (0,-0.1) -- (0,4.2);
+            \node[font=\tiny, rotate=90, left=0.4cm] at (0,3.0) {major GC reduction (\%)};
+            % X-axis baseline
+            \draw[thick, black!50] (-0.15,0) -- (3.8,0);
+            % Ceiling line at 14.3% = 0.65
+            \draw[dashed, codered, thick] (-0.1,0.65) -- (3.8,0.65);
+            \node[font=\tiny\bfseries, codered, right=1pt] at (3.8,0.65) {14.3\%};
+            \node[font=\tiny, codered] at (1.7,0.82) {ceiling};
+            % Bar: all at 8% = 0.36
+            \fill[codered!50] (0.4,0) rectangle (1.2,0.36);
+            \draw[thick, codered!80] (0.4,0) rectangle (1.2,0.36);
+            \node[font=\tiny\bfseries, below=2pt] at (0.8,-0.02) {\texttt{all}};
+            \node[font=\tiny\bfseries, codered, above=2pt] at (0.8,0.12) {$-8$\%};
+            % Bar: weak_fields at 41% = 1.87
+            \fill[alivegrn!50] (2.2,0) rectangle (3.2,1.87);
+            \draw[thick, alivegrn!80] (2.2,0) rectangle (3.2,1.87);
+            \node[font=\tiny\bfseries, below=2pt] at (2.7,-0.02) {\texttt{wf}};
+            \node[font=\tiny\bfseries, alivegrn, above=2pt] at (2.7,1.63) {$-41$\%};
+            % Arrow showing weak_fields breaks through ceiling
+            \draw[->, very thick, alivegrn!70, opacity=0.7]
+                (2.7,0.65) -- (2.7,1.87);
+        \end{tikzpicture}
+
+        \column{0.60\textwidth}
+        \begin{alertblock}{Optimise the pipeline (\texttt{all})}
+            \small
+            $-81$\% non-strong, but only $-8$\% total GC\\
+            \textbf{Hard ceiling:} non-strong is only 14\% of major GC
+        \end{alertblock}
+        \vspace{0.4em}
+        \begin{alertblock}{Change the representation (\texttt{weak\_fields})}
+            \small
+            $-41$\% total GC, $-53$\% Java heap\\
+            Fewer objects $\to$ less work in \emph{every} GC phase
+        \end{alertblock}
+        \vspace{0.4em}
+        \begin{block}{\centering \small The bottleneck is the \emph{representation}}
+            \small\centering
+            Rethink how weak semantics is represented --\\
+            not just how to process the wrappers faster.
+        \end{block}
+    \end{columns}
+\end{frame}
+
+
+% =============================================================== %
+% THANK YOU
+% =============================================================== %
+{%
+\usebackgroundtemplate{\tikz\fill[uppsalared] (0,0) rectangle (\paperwidth,\paperheight);}%
+\setbeamertemplate{footline}{}
+\setbeamertemplate{headline}{}
+\begin{frame}[plain]
+    \vfill
+    \centering
+    {\color{white}\Large\bfseries Thank You}\\[0.8em]
+    {\color{white!75}\normalsize Questions?}\\[1.5em]
+    {\color{white!60}\small\contact}
+    \vfill
+\end{frame}
+}%
+
+% =============================================================== %
+% REFERENCES
+% =============================================================== %
+\begin{frame}[allowframebreaks]{References}
+    \hyperlink{start}{\beamerreturnbutton{Back to start}}
+    \vspace{0.3em}
+    \nocite{jep333-zgc}
+    \nocite{jep439-genzgc}
+    \nocite{osterlund23-genzgc-beyond}
+    \nocite{oracle-ref-javadoc}
+    \nocite{JDK-8029205}
+    \nocite{drepper07-memory}
+    \nocite{jones11-gc-handbook}
+    \nocite{lieberman81-realtime-gc}
+    \nocite{hammarberg2026-zenodo}
+    \bibliographystyle{ieeetr}
+    \bibliography{../Report/References}
+\end{frame}
+
+\end{document}

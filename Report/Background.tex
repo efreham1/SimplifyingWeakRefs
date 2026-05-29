@@ -97,7 +97,7 @@ Each \texttt{Reference} object maintains several fields that track its state~\ci
     \item \texttt{referent field}   The referenced object. The \ac{GCr} may clear this field (set it to \texttt{null}) when the referent becomes eligible for collection according to the reference's type.
     \item \texttt{queue field}   The \texttt{ReferenceQueue} this reference is registered with. If the reference was not created with a queue, this field points to the sentinel object \texttt{ReferenceQueue.NULL\_QUEUE}.
     \item \texttt{next field}   Used as a link pointer when the reference is enqueued in a \texttt{ReferenceQueue}.
-    \item \texttt{discovered field}   A field with dual purpose: during \ac{GC} marking, it serves as a link in the \ac{GCr}'s internal \emph{discovered list}, after processing, it is reused as a link in the VM's \emph{pending list} that feeds the \texttt{ReferenceHandler} thread. Due to its first use, the \ac{GCr} can detect whether a reference has already been discovered by checking if this field is \texttt{null}.
+    \item \texttt{discovered field}   A field with dual purpose: during \ac{GC} marking, it serves as a link in the \ac{GCr}'s internal \emph{discovered list}; after processing, it is reused as a link in the VM's \emph{pending list} that feeds the \texttt{ReferenceHandler} thread. Because the field is used as a link in the discovered list, the \ac{GCr} can detect whether a reference has already been discovered by checking whether this field is \texttt{null}.
 \end{itemize}
 
 A reference object transitions through the following states during its lifetime~\cite{oracle-ref-javadoc,openjdk-reference-java}:
@@ -156,7 +156,7 @@ public WeakReference(T referent, ReferenceQueue<? super T> q) {
 
 When a \texttt{WeakReference} is created with a \texttt{ReferenceQueue}, the application can be notified when the referent is collected. When created \emph{without} a queue, the reference serves only as a conditional pointer: the application can call \texttt{get()} to check whether the referent is still alive, but receives no notification upon clearing.
 
-The \texttt{ReferenceQueue} is implemented as a synchronized singly-linked list using the \texttt{next} field of the \texttt{Reference} objects. It provides \texttt{poll()} for non-blocking retrieval and \texttt{remove()} for blocking retrieval with an optional timeout~\cite{openjdk-referencequeue-java}. This is the mechanism by which applications can react to the collection of referents, for example to clean up associated resources.
+The \texttt{ReferenceQueue} is implemented as a synchronised singly-linked list using the \texttt{next} field of the \texttt{Reference} objects. It provides \texttt{poll()} for non-blocking retrieval and \texttt{remove()} for blocking retrieval with an optional timeout~\cite{openjdk-referencequeue-java}. This is the mechanism by which applications can react to the collection of referents, for example to clean up associated resources.
 
 A key insight for this thesis is that Java explicitly supports queue-less weak references through the one-argument \texttt{WeakReference} constructor~\cite{openjdk-weakreference-java}. For workloads that only need liveness probing via \texttt{get()}, queue registration is unnecessary. In such cases, the VM still performs enqueue-path preparation work in the default pipeline, which motivated JDK-8029205 and the optimisation work in this thesis~\cite{JDK-8029205,openjdk-reference-java,openjdk-zreferenceprocessor-cpp}.
 
@@ -223,7 +223,7 @@ For \ac{ZGC}, when \texttt{WeakReference.get()} is executed the \texttt{referent
 Store barriers are similarly decorator-driven. A normal store carries the decorator \texttt{ON\_STRONG\_OOP\_REF} which triggers \ac{ZGC}'s store barrier, which records the old value in the store-barrier buffer (needed for the \ac{SATB} marking semantics and for maintaining remembered sets in the generational case).
 
 
-\section{Reference Processing Pipeline in \ac{ZGC}}
+\section{Reference Processing Pipeline in ZGC}
 \label{sec:bg-refproc}
 
 Reference processing is the mechanism by which the \ac{GCr} handles \texttt{Reference} objects discovered during marking. The pipeline has three stages: \emph{discovery}, \emph{processing}, and \emph{enqueueing}. In \ac{ZGC}, the first two stages run concurrently with the application during the marking phase, while the enqueue stage involves handing off references to the Java-level \texttt{ReferenceHandler} thread~\cite{openjdk-zreferenceprocessor-cpp,openjdk-reference-java}. An overview of this data flow is shown in \cref{fig:zgc-ref-pipeline}.
@@ -268,7 +268,7 @@ The discovery decision depends on several factors:
     \item \textbf{Generational considerations.} In \ac{ZGC}, only references residing in the old generation are discovered, young-generation references are always treated as strong~\cite{jep439-genzgc,openjdk-zreferenceprocessor-cpp}. This is because reference processing introduces additional delay and uncertainty to the duration of the young-generation collection. By treating young references as strong, \ac{ZGC} can complete young collections more predictably, which decreases the risk of the application running out of memory during a long young collection. 
 \end{enumerate}
 
-Once a reference is selected for discovery, it is recorded on a \emph{discovered list}. In \ac{ZGC}, each \ac{GC} worker thread maintains its own discovered-list head, so discovery is implemented as a cheap, non-atomic prepend to a per-worker list~\cite{openjdk-zreferenceprocessor-cpp}. This avoids \ac{CAS} contention found in shared processors where multiple threads update the same discovered head~\cite{openjdk-referenceprocessor-cpp}.
+Once a reference is selected for discovery, it is recorded on a \emph{discovered list}. In \ac{ZGC}, each \ac{GC} worker thread maintains its own discovered-list head, so discovery is implemented as a cheap, non-atomic prepend to a per-worker list~\cite{openjdk-zreferenceprocessor-cpp}. This avoids the \ac{CAS} contention that would arise if multiple threads updated the same shared discovered-list head~\cite{openjdk-referenceprocessor-cpp}.
 
 \subsection{Processing}
 \label{subsec:bg-refproc-processing}

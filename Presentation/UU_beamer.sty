@@ -1,0 +1,102 @@
+\ProvidesClass{uu_beamer}[Uppsala University Presentation Template v2.0, by Diletta Goglia, Dec 2023]
+
+\RequirePackage{tikz}
+
+\mode<presentation>
+
+\newif\ifbeamer@secheader
+\beamer@secheaderfalse
+\renewcommand\tablename{Table}
+\renewcommand\figurename{Figure}
+\ProcessOptionsBeamer
+
+\useoutertheme[footline=authorinstitutetitle,
+    subsection=false]{smoothbars}
+\makeatletter 
+\newcommand{\frameofframes}{/}
+\newcommand{\setframeofframes}[1]{\renewcommand{\frameofframes}{#1}}
+
+% -------------- FOOTLINE (single slim row) ------------ %
+\setbeamertemplate{footline}{%
+    \begin{beamercolorbox}[colsep=1.5pt]{upper separation line foot}
+    \end{beamercolorbox}
+    \begin{beamercolorbox}[ht=2.4ex,dp=1ex,leftskip=0.4cm,rightskip=0.4cm]{title in head/foot}%
+        \leavevmode{\usebeamerfont{author in head/foot}\color{white!70}\insertshortauthor}%
+        \hfill%
+        {\usebeamerfont{title in head/foot}\color{white}\insertshorttitle}%
+        \hfill%
+        {\usebeamerfont{frame number}\color{white!70}%
+         \insertpagenumber~\frameofframes~\inserttotalframenumber}%
+    \end{beamercolorbox}%
+    \begin{beamercolorbox}[colsep=1.5pt]{lower separation line foot}
+    \end{beamercolorbox}%
+}
+\makeatother
+
+\useinnertheme{circles}
+
+\xdefinecolor{uppsalared}{RGB}{151,31,48}
+\setbeamercolor{footline}{bg=uppsalared}
+\setbeamercolor{frametitle}{bg=uppsalared,fg=white}
+\setbeamercolor{title}{bg=uppsalared}
+\setbeamerfont{frametitle}{size=\large,series=\bfseries}
+\setbeamertemplate{bibliography item}[text]
+\setbeamertemplate{caption}[numbered]
+
+\setbeamercolor{palette primary}{use=structure,fg=white,bg=structure.fg}
+\setbeamercolor{palette secondary}{use=structure,fg=white,bg=structure.fg!75!black}
+\setbeamercolor{palette tertiary}{use=structure,fg=white,bg=structure.fg!50!black}
+\setbeamercolor{palette quaternary}{fg=white,bg=structure.fg!50!black}
+\setbeamercolor{titlelike}{parent=palette primary}
+
+\setbeamercolor{block title}{bg=uppsalared,fg=white}
+\setbeamercolor{block title example}{bg=uppsalared!22,fg=uppsalared!80!black}
+\setbeamercolor{block body}{bg=uppsalared!7,fg=black}
+\setbeamercolor{block body example}{bg=uppsalared!4,fg=black}
+\setbeamertemplate{blocks}[rounded]
+
+\setbeamercolor{fine separation line}{}
+\setbeamercolor{item projected}{fg=white}
+\setbeamercolor{palette sidebar primary}{use=normal text,fg=normal text.fg}
+\setbeamercolor{palette sidebar quaternary}{use=structure,fg=structure.fg}
+\setbeamercolor{palette sidebar secondary}{use=structure,fg=structure.fg}
+\setbeamercolor{palette sidebar tertiary}{use=normal text,fg=normal text.fg}
+\setbeamercolor{section in sidebar}{fg=brown}
+\setbeamercolor{section in sidebar shaded}{fg=grey}
+\setbeamercolor{separation line}{}
+\setbeamercolor{sidebar}{bg=uppsalared}
+\setbeamercolor{sidebar}{parent=palette primary}
+\setbeamercolor{structure}{fg=uppsalared}
+\setbeamercolor{subsection in sidebar}{fg=brown}
+\setbeamercolor{subsection in sidebar shaded}{fg=grey}
+
+% ------- SECTION-BREAK SLIDE (full red background) -------- %
+\AtBeginSection[]{%
+    {%
+    \usebackgroundtemplate{%
+        \tikz\fill[uppsalared] (0,0) rectangle (\paperwidth,\paperheight);}%
+    \setbeamertemplate{footline}{}
+    \setbeamertemplate{headline}{}
+    \begin{frame}[plain]
+        \vfill
+        \centering
+        {\color{white}\usebeamerfont{title}\insertsectionhead\par}
+        \vspace{0.6em}
+        {\color{white!55}\rule{4cm}{0.4pt}\par}
+        \vfill
+    \end{frame}
+    }%
+}
+
+% --------- BACKGROUND UU LOGO B&W ----------- %
+\usebackgroundtemplate{
+    \begin{tikzpicture}[overlay,remember picture]
+        % Background picture
+        \node[at=(current page.north east),anchor=north east,inner sep=0pt,outer sep=0pt] {
+            \includegraphics[keepaspectratio,height=0.28\paperheight]{style/uu_logo_bg.pdf}};
+    \end{tikzpicture}
+}
+
+
+\mode
+<all>

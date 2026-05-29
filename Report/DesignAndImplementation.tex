@@ -98,7 +98,7 @@ For weak references without a \texttt{ReferenceQueue}, each of these operations 
 \begin{enumerate}
     \item When combined with the dynamic array optimisation, the referent field address and its value can be pre-loaded during discovery and stored in the array entry. This avoids redundant memory loads during processing. Pre-loading is safe because the only concurrent application-level operations on a \texttt{Reference}'s referent are clearing and enqueueing, both of which set the referent field to null rather than to a new non-null value~\cite{openjdk-reference-java,openjdk-zreferenceprocessor-cpp}.
     \item The reference type is known to be \texttt{REF\_WEAK} at the call site, eliminating the need for a virtual call to determine the type.
-    \item The only concurrent modification to the referent field is an application thread setting it to null~\cite{openjdk-reference-java,openjdk-zbarrier-cpp,openjdk-zreferenceprocessor-cpp}. This means no thread can set the field to a new non-null value which means that the \ac{CAS} operation for clearing the referent can be replaced with a simple store of a coloured null pointer.
+    \item The only concurrent modification to the referent field is an application thread setting it to null~\cite{openjdk-reference-java,openjdk-zbarrier-cpp,openjdk-zreferenceprocessor-cpp}. This means no thread can set the field to a new non-null value, which means that the \ac{CAS} operation for clearing the referent can be replaced with a simple store of a coloured null pointer.
 \end{enumerate}
 
 These simplifications reduce both instruction count and memory-access overhead for each weak reference without a \texttt{ReferenceQueue} during processing, which should in turn reduce reference-processing time and \ac{GC} cycle time.

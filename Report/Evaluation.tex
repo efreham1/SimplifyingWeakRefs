@@ -127,11 +127,11 @@ Memory & 768\,GiB \\
 \subsection{Measurement Methodology}
 \label{subsec:eval-method}
 
-Each benchmark was run for a total of 250 iterations. Jobs were submitted via \ac{SLURM} and allocated one node running in exclusive mode. Iterations were split across 4 parallel instances. Each instance was pinned via \texttt{taskset} to a set of 10 \ac{JVM} cores and 2 auxiliary cores (12 cores per instance), preventing interference between concurrently running instances. Each instance ran its share of the 250 iterations preceded by 1 warm-up iteration whose results were discarded. The warm-up executed the full benchmark workload for every variant. Within each measurement iteration, all nine optimisation variants were run in sequence with a 10-second cooldown between each. This interleaved ordering mitigates systematic drift in system conditions affecting one configuration more than others.
+Each benchmark was run for a total of 250 iterations. Jobs were submitted via \ac{SLURM} and allocated one node running in exclusive mode. Iterations were split across 4 parallel instances. Each instance was pinned via \texttt{taskset} to a set of 10 \ac{JVM} cores and 2 auxiliary cores (12 cores per instance), preventing interference between concurrently running instances. Each instance ran its share of the 250 iterations preceded by 1 warm-up iteration whose results were discarded. The warm-up executed the full benchmark workload for every variant. Within each measurement iteration, all nine optimisation variants were run in sequence with a 10-second cooldown between each variant. This interleaved ordering mitigates systematic drift in system conditions affecting one configuration more than others.
 
 During each run, a memory monitoring script samples memory metrics from the process at high frequency. See \cref{tab:memory-monitoring-metrics} for the memory metrics collected.
 
-In addition to the continuous memory samples, \ac{GC} statistics are parsed from the log files of each run. For each \ac{GC} metric, the parser extracts the total average and total maximum values reported by \ac{ZGC} per run. The single-object benchmark concentrates its entire weak-reference load into a single collection cycle, so the per-run \emph{maximum} is the relevant statistic. The multi-object benchmark spreads work across several cycles, so the per-run \emph{average} is used instead. \Cref{tab:gc-log-metrics} lists the \ac{GC} log metrics collected. The rest of the \ac{GC} log metrics were also collected but are not the focus of this evaluation, they are however available in the published dataset~\cite{hammarberg2026-zenodo}.
+In addition to the continuous memory samples, \ac{GC} statistics are parsed from the log files of each run. For each \ac{GC} metric, the parser extracts the total average and total maximum values reported by \ac{ZGC} per run. The single-object benchmark concentrates its entire weak-reference load into a single collection cycle, so the per-run \emph{maximum} is the relevant statistic. The multi-object benchmark spreads work across several cycles, so the per-run \emph{average} is used instead. \Cref{tab:gc-log-metrics} lists the \ac{GC} log metrics collected. The rest of the \ac{GC} log metrics were also collected but are not the focus of this evaluation. They are, however, available in the published dataset~\cite{hammarberg2026-zenodo}.
 
 \begin{table}[t]
 \centering
@@ -161,7 +161,7 @@ Old Generation & ms & Total time spent in old-generation collection work. \\
 Old Phase: Concurrent Mark & ms & Time spent in old-generation concurrent marking. \\
 Old Phase: Concurrent Process Non-Strong & ms & Time spent processing non-strong references in the old generation. \\
 Old Phase: Concurrent Relocate & ms & Time spent in old-generation concurrent relocation. \\
-Young Generation (Promote All) & ms & Total time in young-generation collection. Because the benchmarks use \texttt{System.gc()} every young-generation collection is a Promote All, which evacuates all surviving objects directly to the old generation. \\
+Young Generation (Promote All) & ms & Total time in young-generation collection. Because the benchmarks use \texttt{System.gc()}, every young-generation collection is a Promote All, which evacuates all surviving objects directly to the old generation. \\
 Young Phase: Concurrent Mark & ms & Time spent in young-generation concurrent marking. \\
 Young Phase: Concurrent Relocate & ms & Time spent in young-generation concurrent relocation. \\
 \bottomrule

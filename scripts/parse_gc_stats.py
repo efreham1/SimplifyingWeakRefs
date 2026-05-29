@@ -735,6 +735,221 @@ def plot_memory_median_diff_histograms(
     print(f"Wrote {output_file}")
 
 
+def plot_memory_composite_per_metric(
+    traces_by_variant: dict[str, dict[str, list[dict[str, Any]]]],
+    variants: list[str],
+    benchmark_name: str,
+    run_label: str,
+    output_dir: Path,
+    baseline_variant: str,
+) -> None:
+    """One composite violin+diff-hist figure per memory metric (one PDF each).
+
+    Output filenames: ``memory_composite_{metric_key}_{run_label}.pdf``
+    Mirrors the style of ``plot_composite_gc`` so the presentation can show each
+    memory type independently.
+    """
+    output_dir.mkdir(parents=True, exist_ok=True)
+    benchmark_label = "Single-Object Benchmark" if benchmark_name == "single" else "Multi-Object Benchmark"
+    baseline_display = DISPLAY_NAMES.get(baseline_variant, baseline_variant)
+
+    for metric_key, info in MEMORY_METRICS.items():
+        unit = str(info["unit"])
+        title = str(info["title"])
+
+        # ---- Violin data (all variants that have traces) ----
+        violin_labels: list[str] = []
+        violin_data: list[list[float]] = []
+        for variant in variants:
+            runs = traces_by_variant.get(variant, {}).get(metric_key, [])
+            max_values = [float(run["max"]) for run in runs if "max" in run]
+            if max_values:
+                violin_labels.append(DISPLAY_NAMES.get(variant, variant))
+                violin_data.append(max_values)
+
+        if not violin_data:
+            continue
+
+        # ---- Baseline for diff-hist ----
+        baseline_runs = traces_by_variant.get(baseline_variant, {}).get(metric_key, [])
+        baseline_maxima = [float(run["max"]) for run in baseline_runs if "max" in run]
+        if not baseline_maxima:
+            continue
+        baseline_median = float(np.median(baseline_maxima))
+
+        # ---- Diff-hist data (all variants, baseline shown as 0) ----
+        hist_labels: list[str] = []
+        hist_diffs: list[float] = []
+        for variant in variants:
+            runs = traces_by_variant.get(variant, {}).get(metric_key, [])
+            max_values = [float(run["max"]) for run in runs if "max" in run]
+            if not max_values and variant != baseline_variant:
+                continue
+            lbl = DISPLAY_NAMES.get(variant, variant)
+            hist_labels.append(lbl)
+            if variant == baseline_variant:
+                hist_diffs.append(0.0)
+            else:
+                hist_diffs.append(compute_percent_diff(float(np.median(max_values)), baseline_median))
+
+        if len(hist_labels) < 2:
+            continue
+
+        # Shared palette keyed by display label
+        palette = {lbl: plt.cm.tab10(i / max(len(violin_labels) - 1, 1)) for i, lbl in enumerate(violin_labels)}
+
+        fig, (ax_violin, ax_hist) = plt.subplots(
+            2, 1, figsize=(9, 2 * PANEL_H), sharex=False, constrained_layout=True,
+        )
+
+        # ---- Violin panel ----
+        violin = ax_violin.violinplot(violin_data, showmeans=True, showmedians=True, widths=0.85)
+        for body, lbl in zip(violin["bodies"], violin_labels):
+            body.set_facecolor(palette.get(lbl, "grey"))
+            body.set_edgecolor("black")
+            body.set_alpha(0.75)
+        for key in ["cbars", "cmins", "cmaxes"]:
+            if key in violin:
+                violin[key].set_color("black")
+                violin[key].set_linewidth(1.0)
+        if "cmedians" in violin:
+            violin["cmedians"].set_color("black")
+            violin["cmedians"].set_linewidth(2.0)
+            violin["cmedians"].set_linestyle("-")
+        if "cmeans" in violin:
+            violin["cmeans"].set_color("black")
+            violin["cmeans"].set_linewidth(1.5)
+            violin["cmeans"].set_linestyle("--")
+
+        ax_violin.set_xticks(range(1, len(violin_labels) + 1))
+        ax_violin.set_xticklabels([], visible=False)
+        ax_violin.tick_params(axis="x", bottom=False)
+        v_bot, v_top = ax_violin.get_ylim()
+        v_pad = (v_top - v_bot) * 0.05
+        ax_violin.set_ylim(bottom=v_bot - v_pad, top=v_top + v_pad)
+        _add_yaxis_break(ax_violin)
+        ax_violin.set_ylabel(f"Peak per run ({unit})")
+        ax_violin.grid(True, axis="y", alpha=0.3)
+
+        legend_handles = [
+            Line2D([0], [0], color="black", linewidth=2.0, linestyle="-", label="Median"),
+            Line2D([0], [0], color="black", linewidth=1.5, linestyle="--", label="Mean"),
+        ]
+        ax_violin.legend(handles=legend_handles, loc="upper right", framealpha=0.8)
+
+        # ---- Diff-hist panel ----
+        bar_colors = [palette.get(lbl, "grey") for lbl in hist_labels]
+        bars = ax_hist.bar(
+            hist_labels, hist_diffs,
+            color=bar_colors, edgecolor="black", linewidth=0.8, alpha=0.85,
+        )
+        ax_hist.axhline(0.0, color="black", linewidth=1.0, linestyle="--")
+        ax_hist.set_ylabel(f"Median diff vs {baseline_display} (%)")
+        ax_hist.tick_params(axis="x", labelrotation=15)
+        ax_hist.grid(True, axis="y", alpha=0.3)
+
+        y_range = max(abs(d) for d in hist_diffs) if hist_diffs else 1.0
+        offset = y_range * 0.03 or 0.3
+        for bar, diff in zip(bars, hist_diffs):
+            label_text = f"{diff:+.1f}%"
+            y_pos = bar.get_height() + (offset if diff >= 0 else -offset)
+            va = "bottom" if diff >= 0 else "top"
+            ax_hist.text(
+                bar.get_x() + bar.get_width() / 2.0,
+                y_pos, label_text, ha="center", va=va, fontsize=8,
+            )
+        h_min, h_max = ax_hist.get_ylim()
+        h_pad = (h_max - h_min) * 0.15
+        ax_hist.set_ylim(h_min - h_pad, h_max + h_pad)
+
+        fig.suptitle(f"{title} — {benchmark_label}", fontsize=12, fontweight="bold")
+
+        out = output_dir / f"memory_composite_{metric_key}_{run_label}.pdf"
+        plt.savefig(out, bbox_inches="tight")
+        plt.close(fig)
+        print(f"Wrote {out}")
+
+
+def plot_memory_hist_per_metric(
+    traces_by_variant: dict[str, dict[str, list[dict[str, Any]]]],
+    variants: list[str],
+    benchmark_name: str,
+    run_label: str,
+    output_dir: Path,
+    baseline_variant: str,
+) -> None:
+    """Diff-histogram-only figure per memory metric (one PDF each).
+
+    Output filenames: ``memory_hist_{metric_key}_{run_label}.pdf``
+    Used by the presentation to show compact memory comparisons.
+    """
+    output_dir.mkdir(parents=True, exist_ok=True)
+    benchmark_label = "Single-Object Benchmark" if benchmark_name == "single" else "Multi-Object Benchmark"
+    baseline_display = DISPLAY_NAMES.get(baseline_variant, baseline_variant)
+
+    for metric_key, info in MEMORY_METRICS.items():
+        title = str(info["title"])
+
+        baseline_runs = traces_by_variant.get(baseline_variant, {}).get(metric_key, [])
+        baseline_maxima = [float(run["max"]) for run in baseline_runs if "max" in run]
+        if not baseline_maxima:
+            continue
+        baseline_median = float(np.median(baseline_maxima))
+
+        hist_labels: list[str] = []
+        hist_diffs: list[float] = []
+        for variant in variants:
+            runs = traces_by_variant.get(variant, {}).get(metric_key, [])
+            max_values = [float(run["max"]) for run in runs if "max" in run]
+            if not max_values and variant != baseline_variant:
+                continue
+            lbl = DISPLAY_NAMES.get(variant, variant)
+            hist_labels.append(lbl)
+            if variant == baseline_variant:
+                hist_diffs.append(0.0)
+            else:
+                hist_diffs.append(compute_percent_diff(float(np.median(max_values)), baseline_median))
+
+        if len(hist_labels) < 2:
+            continue
+
+        palette = {lbl: plt.cm.tab10(i / max(len(hist_labels) - 1, 1)) for i, lbl in enumerate(hist_labels)}
+
+        fig, ax = plt.subplots(1, 1, figsize=(9, PANEL_H), constrained_layout=True)
+
+        bar_colors = [palette.get(lbl, "grey") for lbl in hist_labels]
+        bars = ax.bar(
+            hist_labels, hist_diffs,
+            color=bar_colors, edgecolor="black", linewidth=0.8, alpha=0.85,
+        )
+        ax.axhline(0.0, color="black", linewidth=1.0, linestyle="--")
+        ax.set_ylabel(f"Median diff vs {baseline_display} (%)")
+        ax.tick_params(axis="x", labelrotation=15)
+        ax.grid(True, axis="y", alpha=0.3)
+
+        y_range = max(abs(d) for d in hist_diffs) if hist_diffs else 1.0
+        offset = y_range * 0.03 or 0.3
+        for bar, diff in zip(bars, hist_diffs):
+            label_text = f"{diff:+.1f}%"
+            y_pos = bar.get_height() + (offset if diff >= 0 else -offset)
+            va = "bottom" if diff >= 0 else "top"
+            ax.text(
+                bar.get_x() + bar.get_width() / 2.0,
+                y_pos, label_text, ha="center", va=va, fontsize=8,
+            )
+
+        h_min, h_max = ax.get_ylim()
+        h_pad = (h_max - h_min) * 0.15
+        ax.set_ylim(h_min - h_pad, h_max + h_pad)
+
+        ax.set_title(f"{title} — {benchmark_label}", fontsize=12, fontweight="bold")
+
+        out = output_dir / f"memory_hist_{metric_key}_{run_label}.pdf"
+        plt.savefig(out, bbox_inches="tight")
+        plt.close(fig)
+        print(f"Wrote {out}")
+
+
 def compute_percent_diff(value: float, baseline_value: float) -> float:
     if baseline_value == 0.0:
         return 0.0
@@ -998,6 +1213,12 @@ def generate_for_benchmark(
 
     print(f"Generating memory median percentage-difference histograms for '{benchmark_name}'...")
     plot_memory_median_diff_histograms(traces_by_variant, present, run_label, output_dir, baseline_variant, benchmark_name)
+
+    print(f"Generating per-metric memory composite plots for '{benchmark_name}'...")
+    plot_memory_composite_per_metric(traces_by_variant, present, benchmark_name, run_label, output_dir, baseline_variant)
+
+    print(f"Generating per-metric memory histogram plots for '{benchmark_name}'...")
+    plot_memory_hist_per_metric(traces_by_variant, present, benchmark_name, run_label, output_dir, baseline_variant)
 
     return 0, variants_metrics, traces_by_variant, present, run_label
 
