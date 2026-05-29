@@ -4,7 +4,7 @@
 
 OK, so everyone's feeling ready? Perfect. Then I'll go ahead.
 
-Hello everyone, my name is Fredrik and this is my thesis defence. My thesis is titled Optimising Weak References in ZGC, and to some of you that likely sounds like a load of gibberish. But my hope is that by the end of this presentation it will no longer sound like gibberish, and you'll also understand what my thesis has been about and the results I've actually gotten. So without further ado, I think we can just jump right into it.
+Hello everyone, my name is Fredrik and this is my thesis defence. My thesis is titled Optimising Weak Reference Processing in the JVM Z Garbage Collector, and to some of you that may sound like a load of gibberish. But my hope is that by the end of this presentation it will no longer sound like gibberish, and you'll also understand what my thesis has been about and the results I've actually gotten. So without further ado, I think we can just jump right into it.
 
 [change slide]
 
@@ -104,7 +104,7 @@ And that is the entire pipeline: discovery, to processing, and finally to enqueu
 
 ## Motivation
 
-Alright, with that background out of the way, the thesis subtitle should hopefully make some sense now: "Optimising Weak Reference Processing in OpenJDK's ZGC". But just because it makes sense doesn't mean it's obvious why it matters. So let's talk about the motivation.
+Alright, with that background out of the way, the thesis title should hopefully make some sense now: "Optimising Weak Reference Processing in the JVM Z Garbage Collector". But just because it makes sense doesn't mean it's obvious why it matters. So let's talk about the motivation.
 
 [change slide]
 
