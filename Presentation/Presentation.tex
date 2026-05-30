@@ -163,7 +163,7 @@
         \begin{itemize}
             \item One of the most used programming languages in the world
             \item Write once, compile once -- runs on \emph{any} machine via the \textbf{JVM}
-            \item \textbf{HotSpot JVM} is the reference implementation (Oracle / OpenJDK)
+            \item \textbf{HotSpot JVM} is the most popular implementation (Oracle / OpenJDK)
         \end{itemize}
         \column{0.45\textwidth}
         \centering
@@ -273,7 +273,7 @@
             % Heap box (always)
             \draw[thick, rounded corners=4pt, fill=gray!4]
                 (0,0) rectangle (5.8,5.2);
-            \node[font=\scriptsize\bfseries, black!45, above right=1pt] at (0,5.2) {Process Heap};
+            \node[font=\scriptsize\bfseries, black!45, above right=1pt] at (0,5.2) {Java Heap};
             % Root set (always, left of heap)
             \node[rset] (roots) at (-1.8,3.0) {Root\\Set};
             % Named circle nodes for edge-to-edge arrows (always present)
@@ -325,7 +325,7 @@
             \item<2-> GC \textbf{marks}: follows all references reachable from roots
             \item<3-> \textcolor{codered}{A and B} are unreachable $\to$ marked as \textbf{dead}.
                       \textcolor{alivegrn}{C} is reachable $\to$ marked as \textbf{alive}
-            \item<4-> GC \textbf{relocates} C to a new region; old memory freed
+            \item<4-> GC \textbf{relocates} C to a new region; old memory reused for future allocations
         \end{itemize}
     \end{columns}
 \end{frame}
@@ -340,7 +340,7 @@
         \begin{itemize}
             \item Strong references keep objects alive. If you can reach it, it won't be collected
             \item But sometimes you want to \textbf{observe} an object \emph{only while it is still alive}
-            \item If you hold a strong ref just to check whether it's alive, you keep it alive forever, defeating the purpose
+            \item But if you hold a strong reference to the object, you keep it alive forever, defeating the purpose
         \end{itemize}
         \vspace{0.4em}
         \begin{alertblock}{The problem}
@@ -354,7 +354,7 @@
             \useasboundingbox (-2.2,-0.3) rectangle (6.0,5.6);
             \draw[thick, rounded corners=4pt, fill=gray!4]
                 (0,0) rectangle (5.8,5.2);
-            \node[font=\scriptsize\bfseries, black!45, above right=1pt] at (0,5.2) {Process Heap};
+            \node[font=\scriptsize\bfseries, black!45, above right=1pt] at (0,5.2) {Java Heap};
             \node[rset] (roots) at (-1.8,3.0) {Root\\Set};
             \node[obj, fill=white] (A) at (1.5,4.2) {A};
             \node[obj, fill=white] (B) at (3.8,4.2) {B};
@@ -380,7 +380,7 @@
             % Same base layout as GC slide
             \draw[thick, rounded corners=4pt, fill=gray!4]
                 (0,0) rectangle (5.8,5.2);
-            \node[font=\scriptsize\bfseries, black!45, above right=1pt] at (0,5.2) {Process Heap};
+            \node[font=\scriptsize\bfseries, black!45, above right=1pt] at (0,5.2) {Java Heap};
             \node[rset] (roots) at (-1.8,3.0) {Root\\Set};
             \node[obj, fill=white] (A) at (1.5,4.2) {A};
             \node[obj, fill=white] (B) at (3.8,4.2) {B};
@@ -440,9 +440,9 @@
 \end{frame}
 
 % -------------------------------------------------------------------
-% WeakReference wrapper object
+% WeakReference object
 % -------------------------------------------------------------------
-\begin{frame}[fragile]{The \texttt{WeakReference} Wrapper Object}
+\begin{frame}[fragile]{The \texttt{WeakReference} Object}
     \begin{columns}[T]
         \column{0.52\textwidth}
         \centering
@@ -451,15 +451,15 @@
             % Same base as GC/WeakRef slides
             \draw[thick, rounded corners=4pt, fill=gray!4]
                 (0,0) rectangle (5.8,5.2);
-            \node[font=\scriptsize\bfseries, black!45, above right=1pt] at (0,5.2) {Process Heap};
+            \node[font=\scriptsize\bfseries, black!45, above right=1pt] at (0,5.2) {Java Heap};
             \node[rset] (roots) at (-1.8,3.0) {Root\\Set};
             % C holds the WeakReference; B is the referent (same positions as other slides)
             \node[obj, fill=white] (A) at (2.0,4.4) {A};
             \node[obj, fill=white] (C) at (2.0,1.5) {C};
             \node[obj, fill=white] (B) at (4.2,4.4) {B};
-            % WeakReference wrapper object (between C and B)
+            % WeakReference object (between C and B)
             \node[refbox] (WR) at (4.0,2.5) {\texttt{WeakRef}};
-            \node[font=\tiny, black!45, below=1pt] at (WR.south) {wrapper obj};
+            \node[font=\tiny, black!45, below=1pt, align=center] at (WR.south) {\texttt{WeakReference}\\object};
             % Connections
             \draw[srrow] (roots.east) -- (C);
             \draw[srrow] (C) -- (WR);
@@ -475,7 +475,7 @@
         \column{0.48\textwidth}
         \small
         \begin{itemize}
-            \item The wrapper object exists to support the \texttt{ReferenceQueue} callback
+            \item The \texttt{WeakReference} object exists to support the \texttt{ReferenceQueue} callback
             \item When the GC collects B, the \texttt{WeakReference} is enqueued so the application can react
         \end{itemize}
         \vspace{0.35em}
@@ -524,7 +524,6 @@ new WeakReference<>(obj)
             \item During marking: found \texttt{WeakReference}s go onto a linked list
             \item After marking: check liveness per ref, clear dead ones
             \item Cleared refs handed to the \texttt{ReferenceHandler} thread for queue delivery
-            \item Queue-less refs travel through all three phases -- silently dropped at step~3
         \end{itemize}
     \end{columns}
 \end{frame}
@@ -594,7 +593,7 @@ new WeakReference<>(obj)
         \small\textbf{RQ1:} optimise the \emph{existing} pipeline without changing
         how weak refs are represented
         \column{0.48\textwidth}
-        \small\textbf{RQ2:} eliminate the \texttt{WeakReference} wrapper object
+        \small\textbf{RQ2:} eliminate the \texttt{WeakReference} object
         entirely
     \end{columns}
 \end{frame}
@@ -719,10 +718,10 @@ new WeakReference<>(obj)
         \column{0.46\textwidth}
         \small
         \begin{itemize}
-            \item Linked list: every next-node pointer is a \textbf{cache miss}
-            \item Nodes scattered across memory -- poor spatial locality
-            \item Array: one cache load fills several consecutive entries
-            \item Each append is $\mathcal{O}(1)$ amortised cost 
+            \item Linked list: Nodes scattered across memory -- no spatial locality
+            \item Every node's next-pointer is likely a \textbf{cache miss}
+            \item Dynamic Array: one cache load fills several consecutive entries
+            \item Dynamically grow the array as needed
         \end{itemize}
         \vspace{0.4em}
         \begin{alertblock}{\small Trade-off}
@@ -858,20 +857,20 @@ new WeakReference<>(obj)
             \node[obj, fill=gray!12] (T1) at (4.0,3.8) {T};
             \draw[srrow] (H1)--(WR);
             \draw[wrrow] (WR)--(T1);
-            \node[font=\tiny, black!45, below=1pt] at (WR.south) {wrapper obj};
+            \node[font=\tiny, black!45, below=1pt] at (WR.south) {\texttt{WeakReference} object};
 
             \node[font=\small\bfseries, codegreen] at (2.0,1.7) {\texttt{@weak} field implementation};
             \node[obj, fill=blue!10] (H2) at (0.0,0.7) {H};
             \node[obj, fill=gray!12] (T2) at (4.0,0.7) {T};
             \draw[wrrow, codegreen!80, very thick] (H2) --
                 node[above,font=\tiny\bfseries,codegreen]{\texttt{@weak} field} (T2);
-            \node[font=\tiny\bfseries, codered, below=4pt] at (2.0,0.3) {no wrapper object};
+            \node[font=\tiny\bfseries, codered, below=4pt] at (2.0,0.3) {no \texttt{WeakReference} object};
         \end{tikzpicture}
 
         \column{0.50\textwidth}
         \small
         \begin{itemize}
-            \item A field annotated \texttt{@weak} is treated as a weak reference by ZGC -- no wrapper object needed
+            \item A field annotated \texttt{@weak} is treated as a weak reference by ZGC -- no \texttt{WeakReference} object needed
             \item Discovered during marking, stored in a dynamic array of weak fields
             \item Cleared the same way -- but \textbf{cannot} use the optimised clear path (a regular field can be written to with any value, not just \texttt{null})
         \end{itemize}
@@ -886,7 +885,7 @@ class HolderClass {
 
 
 % =============================================================== %
-\section{Evaluation}
+\section{Evaluation Method}
 % =============================================================== %
 
 % -------------------------------------------------------------------
@@ -955,21 +954,21 @@ class HolderClass {
             \toprule
             \textbf{Variant} & \textbf{clr} & \textbf{sep} & \textbf{dyn} \\
             \midrule
-            \texttt{none}              & -- & -- & -- \\
-            \texttt{dyn\_only}         & -- & -- & $\checkmark$ \\
-            \texttt{sep\_only}         & -- & $\checkmark$ & -- \\
-            \texttt{sep\_dyn}          & -- & $\checkmark$ & $\checkmark$ \\
-            \texttt{clear\_path\_only} & $\checkmark$ & -- & -- \\
-            \texttt{clear\_path\_dyn}  & $\checkmark$ & -- & $\checkmark$ \\
-            \texttt{clear\_path\_sep}  & $\checkmark$ & $\checkmark$ & -- \\
-            \texttt{all}               & $\checkmark$ & $\checkmark$ & $\checkmark$ \\
+            None              & -- & -- & -- \\
+            Dyn         & -- & -- & $\checkmark$ \\
+            Sep         & -- & $\checkmark$ & -- \\
+            Sep + Dyn          & -- & $\checkmark$ & $\checkmark$ \\
+            Clear Path & $\checkmark$ & -- & -- \\
+            Clear Path + Dyn  & $\checkmark$ & -- & $\checkmark$ \\
+            Clear Path + Sep  & $\checkmark$ & $\checkmark$ & -- \\
+            All               & $\checkmark$ & $\checkmark$ & $\checkmark$ \\
             \midrule
-            \texttt{weak\_fields}      & -- & -- & -- \\
+            Weak Fields      & -- & $\checkmark$ & $\checkmark$ \\
             \bottomrule
         \end{tabular}
         \vspace{0.2em}
         \begin{itemize}
-            \small\item All $2^3 = 8$ pipeline combinations plus \texttt{weak\_fields}
+            \small\item All $2^3$ = 8 pipeline combinations plus Weak Fields
         \end{itemize}
 
         \column{0.48\textwidth}
@@ -986,8 +985,7 @@ class HolderClass {
         \vspace{0.3em}
         \begin{block}{\small Reporting}
             \small
-            \textbf{Median} over 250 iterations.\\
-            Violin + median percentage-difference histogram.
+            Violin + \textbf{median} histogram over the 250 iterations.
         \end{block}
     \end{columns}
 \end{frame}
@@ -1000,14 +998,13 @@ class HolderClass {
 % -------------------------------------------------------------------
 % Non-strong processing -- single
 % -------------------------------------------------------------------
-\begin{frame}{Non-Strong Processing Time}
+\begin{frame}{Non-Strong Processing Time -- Single-Object Benchmark}
     \begin{columns}[T]
         \column{0.58\textwidth}
         \centering
-        \includegraphics[width=0.90\textwidth]{%
+        \vspace{-0.9em}
+        \includegraphics[width=\textwidth]{%
             composite_old_phase_concurrent_process_non-strong_slurm-5118807_combined_gc_single.pdf}
-        \vspace{-0.35em}
-        {\scriptsize Single-object benchmark}
 
         \column{0.42\textwidth}
         \small
@@ -1015,45 +1012,44 @@ class HolderClass {
             \toprule
             \textbf{Variant} & \textbf{Reduction} \\
             \midrule
-            \texttt{sep\_only}         & $-5$\% \\
-            \texttt{clear\_path\_only} & $-7$\% \\
-            \texttt{dyn\_only}         & $-36$\% \\
-            \texttt{clear\_path\_dyn}  & $\mathbf{-81}$\% \\
-            \texttt{all}               & $\mathbf{-81}$\% \\
+            Sep         & $-5\%$ \\
+            Clear Path & $-7\%$ \\
+            Dyn         & $-36\%$ \\
+            Clear Path + Dyn  & $\mathbf{-81\%}$ \\
+            All               & $\mathbf{-81\%}$ \\
             \midrule
-            \texttt{weak\_fields}      & $-51$\% \\
+            Weak Fields      & $-51\%$ \\
             \bottomrule
         \end{tabular}
         \vspace{0.5em}
         \begin{alertblock}{\small Super-additive interaction}
             \small
-            clear\_path alone: $-7$\%\\
-            dyn alone: $-36$\%\\
-            \textbf{Together: $-81$\%}\\[3pt]
+            clear\_path alone: -7\%\\
+            dyn alone: -36\%\\
+            \textbf{Together: -81\%}\\[3pt]
             Each removes a different bottleneck.
         \end{alertblock}
+        \vspace{0.3em}
+        {\scriptsize Weak Fields $\approx$ Sep + Dyn -- cannot use the clear path}
     \end{columns}
 \end{frame}
 
 % -------------------------------------------------------------------
 % Non-strong processing -- multi + weak_fields context
 % -------------------------------------------------------------------
-\begin{frame}{Non-Strong Processing -- Multi-Object \& \texttt{weak\_fields}}
+\begin{frame}{Non-Strong Processing -- Multi-Object Benchmark}
     \begin{columns}[T]
         \column{0.58\textwidth}
         \centering
-        \includegraphics[width=0.90\textwidth]{%
+        \vspace{-0.9em}
+        \includegraphics[width=\textwidth]{%
             composite_old_phase_concurrent_process_non-strong_slurm-5118807_combined_gc_multi.pdf}
-        \vspace{-0.35em}
-        {\scriptsize Multi-object benchmark}
 
         \column{0.42\textwidth}
         \small
         \begin{itemize}
-            \item Multi-object: same pattern -- \texttt{clear\_path\_dyn} and \texttt{all} at $-57$\%
-            \item \texttt{sep\_only}: 0\% -- the ReferenceHandler overhead is not captured by this metric
-            \item \texttt{weak\_fields}: $-51$\% (single), $-19$\% (multi)
-            \item Comparable to \texttt{sep\_dyn} -- because \texttt{@weak} fields cannot use the optimised clear path
+            \item Same pattern: Clear Path + Dyn and All at -57\%
+            \item Weak Fields: -19\% -- again comparable to Sep + Dyn
         \end{itemize}
     \end{columns}
 \end{frame}
@@ -1066,28 +1062,9 @@ class HolderClass {
         \column{0.50\textwidth}
         \includegraphics[width=\textwidth]{%
             composite_major_collection_major_collection_slurm-5118807_combined_gc_single.pdf}
-        \vspace{-0.25em}
-        {\scriptsize Single-object benchmark}
-        \vspace{0.2em}
-        \small
-        \begin{itemize}
-            \item Non-strong $=$ \textbf{14.3\%} of major GC (baseline)
-            \item \texttt{all}: $-8$\% -- broad, overlapping distributions
-            \item \texttt{weak\_fields}: $\mathbf{-41}$\% -- clear and unambiguous
-        \end{itemize}
-
         \column{0.50\textwidth}
         \includegraphics[width=\textwidth]{%
             composite_major_collection_major_collection_slurm-5118807_combined_gc_multi.pdf}
-        \vspace{-0.25em}
-        {\scriptsize Multi-object benchmark}
-        \vspace{0.2em}
-        \small
-        \begin{itemize}
-            \item Non-strong $=$ only \textbf{4.5\%} here
-            \item Pipeline variants indistinguishable from baseline
-            \item \texttt{weak\_fields}: $\mathbf{-28}$\% -- still clear
-        \end{itemize}
     \end{columns}
 \end{frame}
 
@@ -1099,25 +1076,19 @@ class HolderClass {
         \column{0.50\textwidth}
         \includegraphics[width=\textwidth]{%
             memory_hist_aux_slurm-5118807_combined_gc_single.pdf}
-        \vspace{-0.25em}
-        {\scriptsize Auxiliary GC memory -- single-object benchmark}
-        \vspace{0.2em}
         \small
         \begin{itemize}
-            \item \texttt{clear\_path\_dyn}: $\times10$ aux memory (1268\,MB vs 120\,MB)
-            \item \texttt{all}: $\times7$ (sep reduces bytes per entry vs dyn alone)
+            \item Clear Path + Dyn: $\times10$ aux memory (1268\,MB vs 120\,MB)
+            \item All: $\times7$ (sep reduces bytes per entry vs dyn alone)
         \end{itemize}
 
         \column{0.50\textwidth}
         \includegraphics[width=\textwidth]{%
             memory_hist_java_heap_slurm-5118807_combined_gc_single.pdf}
-        \vspace{-0.25em}
-        {\scriptsize Java heap -- single-object benchmark}
-        \vspace{0.2em}
         \small
         \begin{itemize}
-            \item All \texttt{WeakReference} variants: heap essentially identical
-            \item \texttt{weak\_fields}: $\mathbf{-53}$\% heap (single), $-5$\% (multi) -- no wrapper objects to allocate and promote
+            \item All \texttt{WeakReference} variants: heap size identical
+            \item Weak Fields: \textbf{-53\%} heap (single), -5\% (multi), no \texttt{WeakReference} objects to allocate
         \end{itemize}
     \end{columns}
 \end{frame}
@@ -1133,7 +1104,7 @@ class HolderClass {
 \begin{frame}{Conclusions}
     \begin{block}{RQ1 -- Pipeline Optimisations}
         \begin{itemize}
-            \item \textbf{81\%} reduction in non-strong processing time (\texttt{clear\_path\_dyn} / \texttt{all})
+            \item \textbf{81\%} reduction in non-strong processing time (Clear Path + Dyn / All)
             \item Translates to only \textbf{8\%} in total major collection time
             \item Hard ceiling: non-strong is 14.3\% of major GC time (single) and 4.5\% (multi)
         \end{itemize}
@@ -1142,7 +1113,7 @@ class HolderClass {
     \begin{block}{RQ2 -- Weak Fields}
         \begin{itemize}
             \item \textbf{41\%} major GC time reduction (single), \textbf{28\%} (multi)
-            \item \textbf{53\%} heap reduction (single) -- no wrapper objects
+            \item \textbf{53\%} heap reduction (single) -- no \texttt{WeakReference} objects
             \item Structural advantage: fewer objects means less work across \emph{every} GC phase
         \end{itemize}
     \end{block}
@@ -1159,45 +1130,45 @@ class HolderClass {
         \begin{tikzpicture}[scale=0.82]
             % Y-axis
             \draw[->, thick, black!60] (0,-0.1) -- (0,4.2);
-            \node[font=\tiny, rotate=90, left=0.4cm] at (0,3.0) {major GC reduction (\%)};
+            \node[font=\tiny, rotate=90, left=0.4cm] at (0,3.0) {major GC reduction ($\%$)};
             % X-axis baseline
             \draw[thick, black!50] (-0.15,0) -- (3.8,0);
             % Ceiling line at 14.3% = 0.65
-            \draw[dashed, codered, thick] (-0.1,0.65) -- (3.8,0.65);
-            \node[font=\tiny\bfseries, codered, right=1pt] at (3.8,0.65) {14.3\%};
+            \draw[dashed, codered, thick] (0.0,0.65) -- (3.8,0.65);
+            \node[font=\tiny\bfseries, codered, right=1pt] at (3.8,0.67) {$14.3\%$};
             \node[font=\tiny, codered] at (1.7,0.82) {ceiling};
             % Bar: all at 8% = 0.36
             \fill[codered!50] (0.4,0) rectangle (1.2,0.36);
             \draw[thick, codered!80] (0.4,0) rectangle (1.2,0.36);
-            \node[font=\tiny\bfseries, below=2pt] at (0.8,-0.02) {\texttt{all}};
-            \node[font=\tiny\bfseries, codered, above=2pt] at (0.8,0.12) {$-8$\%};
+            \node[font=\tiny\bfseries, below=2pt, align=center] at (0.8,-0.02) {Pipeline \\ Optimisations};
+            \node[font=\tiny\bfseries, codered, above=2pt] at (0.8,0.17) {$8\%$};
             % Bar: weak_fields at 41% = 1.87
             \fill[alivegrn!50] (2.2,0) rectangle (3.2,1.87);
             \draw[thick, alivegrn!80] (2.2,0) rectangle (3.2,1.87);
-            \node[font=\tiny\bfseries, below=2pt] at (2.7,-0.02) {\texttt{wf}};
-            \node[font=\tiny\bfseries, alivegrn, above=2pt] at (2.7,1.63) {$-41$\%};
+            \node[font=\tiny\bfseries, below=2pt] at (2.7,-0.02) {Weak Fields};
+            \node[font=\tiny\bfseries, alivegrn, above=2pt] at (2.7,1.68) {$41\%$};
             % Arrow showing weak_fields breaks through ceiling
             \draw[->, very thick, alivegrn!70, opacity=0.7]
                 (2.7,0.65) -- (2.7,1.87);
         \end{tikzpicture}
 
         \column{0.60\textwidth}
-        \begin{alertblock}{Optimise the pipeline (\texttt{all})}
+        \begin{alertblock}{Optimise the pipeline (All)}
             \small
-            $-81$\% non-strong, but only $-8$\% total GC\\
-            \textbf{Hard ceiling:} non-strong is only 14\% of major GC
+            -81\% non-strong, but only -8\% total GC\\
+            \textbf{Hard ceiling:} non-strong is just 14\% of total GC
         \end{alertblock}
         \vspace{0.4em}
-        \begin{alertblock}{Change the representation (\texttt{weak\_fields})}
+        \begin{alertblock}{Change the representation (Weak Fields)}
             \small
-            $-41$\% total GC, $-53$\% Java heap\\
+            -41\% total GC (single)\\
             Fewer objects $\to$ less work in \emph{every} GC phase
         \end{alertblock}
         \vspace{0.4em}
         \begin{block}{\centering \small The bottleneck is the \emph{representation}}
             \small\centering
             Rethink how weak semantics is represented --\\
-            not just how to process the wrappers faster.
+            not just how to process \texttt{WeakReference}s faster.
         \end{block}
     \end{columns}
 \end{frame}
