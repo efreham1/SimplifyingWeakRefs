@@ -2,9 +2,7 @@
 
 ## Opening
 
-OK, so everyone's feeling ready? Perfect. Then I'll go ahead.
-
-Hello everyone, my name is Fredrik and this is my thesis defence. My thesis is titled Optimising Weak Reference Processing in the JVM Z Garbage Collector, and to some of you that may not make much sense at all. But my hope is that by the end of this presentation the title will make sense, you'll understand what my thesis has been about, the results I've gotten, and the conclusions I've drawn from those results. So without further ado, I think we can just jump right into it.
+Hello everyone, my name is Fredrik and this is my thesis defence. My thesis is titled Optimising Weak Reference Processing in the JVM Z Garbage Collector, and to some of you that may not make much sense at all. But my hope is that by the end of this presentation that title will make sense, and you'll also understand what my thesis has been about, the results I've gotten, and the conclusions I've come to. So without further ado, I think we can just jump right into it.
 
 [change slide]
 
@@ -30,7 +28,7 @@ How this is achieved is through something called a JVM, or Java Virtual Machine.
 
 ### Garbage Collection
 
-Another neat thing about Java is that you don't actually have to manage memory like you do in languages such as C or C++, which some of you might be familiar with. Instead, it's an automatically managed memory system. How this is achieved in HotSpot is through a garbage collector.
+Another neat thing about Java is that you don't actually have to manage memory like you do in languages such as C or C++. Instead, it's an automatically managed memory system. How this is achieved in HotSpot is through something called a garbage collector, or a GC.
 
 The garbage collector goes through and finds what memory the application is no longer using, and then returns that memory to the operating system. One thing to note here is that HotSpot actually has several implementations of garbage collectors and that the user can choose which one to use when executing a Java program. One of these garbage collectors is called ZGC, which is the one I did my implementation in, and the one I will be talking about for the rest of this presentation.
 
@@ -90,13 +88,15 @@ You can also create a `WeakReference` without a `ReferenceQueue` if you just wan
 
 #### Reference processing pipeline
 
-When ZGC does a GC cycle - i.e. going through all the objects and deciding what to relocate and what to not - it also searches for weak references. And since it finds weak references before knowing which objects are dead and which are alive it can't decide what to do with the weak references. So instead, it adds each discovered weak reference to a discovered list.
+ZGC's reference processing pipeline consists of three distinct phases: discovery, processing, and finally enqueueing.
 
-Once the entire object graph has been marked, we take this discovered list and start processing it. For each `WeakReference` in the list, we check whether its referent - the object it points to - is alive. If it is, we leave it alone. But if the referent is dead, we null out the field in the `WeakReference` holding the address of the referent and then add the `WeakReference` object to a pending list, to handle enqueuing later.
+In discovery, when ZGC is marking the object graph - i.e. going through all the objects and deciding what to relocate and what to not - it also searches for weak references. And since it finds weak references before knowing which objects are dead and which are alive it can't yet decide what to do with the weak references. So instead, it adds each discovered weak reference to a discovered list.
 
-Once the entire discovered list is processed, the pending list is handed to the reference handler thread in HotSpot, which is responsible for placing each reference into its correct `ReferenceQueue` - since there might be multiple queues in a single application. Once that is done, it's up to the application to poll its queues.
+Once the entire object graph has been marked, we take this discovered list and start processing it. For each `WeakReference` in the list, we check whether its referent - the object it points to - is alive. If it is, we leave it alone. But if the referent is dead, we null out the field in the `WeakReference` holding the address of the referent and then add the `WeakReference` object to a pending list, to handle enqueuing in the next phase.
 
-So there we have it, the entire reference processing pipeline: discovery, processing, and finally enqueueing. And with that we should have all the background we need to understand the rest of the presentation. Let's try it out on the thesis title "Optimising Weak Reference Processing in the JVM Z Garbage Collector", does that make some more sense now? I hope so a at least, but just because it makes sense doesn't mean it's obvious why it matters. So let's talk about
+And once the entire discovered list is processed, the pending list is handed to the reference handler thread in HotSpot, which is responsible for placing each reference into its correct `ReferenceQueue` - since there might be multiple queues in a single application. Once that is done, it's left to the application to poll those queues.
+
+So there we have it, ZGC's reference processing pipeline. And with that we should also have all the background we need to understand the rest of the presentation. Let's try it out on the thesis title "Optimising Weak Reference Processing in the JVM Z Garbage Collector", does that make some more sense now? I hope so at least, but just because it makes sense doesn't mean it's obvious why it matters. So let's talk about
 
 [change slide]
 
@@ -114,9 +114,9 @@ This is why this thesis investigates whether optimisations to reference processi
 
 [change slide]
 
-Research question 1 asks how specific pipeline modifications to ZGC's processing of queue-less `WeakReference` objects affect four key metrics: reference-processing time, total GC cycle time, GC memory footprint, and Java heap usage.
+Research question 1 asks how do specific modifications to ZGC's processing of `WeakReference` objects without a `ReferenceQueue` affect reference-processing time, total GC cycle time, GC memory footprint, and Java heap usage?
 
-Research question 2 asks how expressing weak semantics through annotated object fields affects those same metrics compared to the optimised `WeakReference` approach -- so a completely different representation, not just an optimised pipeline.
+Research question 2 asks how does expressing weak semantics through annotated object fields affect reference processing time, GC cycle time, GC memory footprint, and Java heap usage compared to the optimised `WeakReference`-based approach of RQ1? -- so a completely different representation, not just an optimised pipeline.
 
 [change slide]
 
@@ -134,7 +134,7 @@ The first optimisation addresses exactly what was pointed out in the bug report.
 
 My optimisation splits the discovered list into two separate lists during the discovery phase: one for `WeakReference` objects that have a `ReferenceQueue`, and one for those that don't. When we then go to process them, we run two separate processing pipelines. The no-queue pipeline just checks whether the referent is alive and clears the field if it's not - and then stops. The with-queue pipeline does the same, but also performs the enqueueing step we discussed earlier.
 
-The reason for splitting into two lists rather than simply branching on a condition inside a single pipeline is that the branch condition requires a memory load, and even with modern processors with good branch prediction and speculative execution, this adds meaningful overhead.
+The reason for splitting into two lists rather than simply branching on a condition inside a single pipeline is that, that branch condition would require a memory load, and even with modern processors with good branch prediction and speculative execution, this adds meaningful overhead.
 
 [change slide]
 
@@ -142,21 +142,21 @@ The reason for splitting into two lists rather than simply branching on a condit
 
 The second optimisation addresses the data structure of the discovered list. Currently it's a linked list, and iterating through a linked list is terrible for performance. When you load a node from memory, the CPU loads the entire cache line around it - but the node's next-pointer likely points somewhere else in memory, so that next node isn't in the cache. Which means we then have to wait for another memory load before we can even start loading the one after that.
 
-My optimisation replaces the linked list with a dynamic array. As shown in the illustration, when we load one entry from the array, the CPU loads the surrounding cache line, which then contains many consecutive entries - so we effectively get the next several entries for free. The reason for using a dynamic array rather than a plain array is that we don't know up front how many weak references we'll discover during marking, so we can't just allocate a big enough array at the start.
+My optimisation replaces the linked list with a dynamic array. As shown in the illustration, when we load one entry from the array, the CPU loads the surrounding cache line, which then contains many consecutive entries - so we effectively get the next several entries for free. The reason for using a dynamic array rather than a static array is that we don't know up front how many weak references we'll discover during marking, so we can't just allocate a big enough array at the start.
 
-This optimisation sadly comes with a trade-off. The dynamic array needs additional memory compared to the linked list. This will be apparent in the results later on.
+This optimisation does, sadly comes with a trade-off. The dynamic array needs additional memory compared to the linked list. This will be apparent in the results later on.
 
 [change slide]
 
 ### Optimisation 3: Optimised Clear Path
 
-The third optimisation is about the clearing step - that is, writing null to the referent field to mark the weak reference as inactive. Currently this is done using a compare-and-swap, or CAS. A CAS is an atomic operation: when the CPU executes it, it guarantees that the read-check-write sequence happens atomically, with no other thread able to interleave, as shown in this pseudo-code. The reason a CAS is used here is that an application thread could write to the referent field concurrently with the GC, and without any synchronisation, that would result in a data race, which of course is bad.
+The third optimisation is about the clearing step - that is, writing null to the referent field to mark the weak reference as inactive. Currently this is done using a compare-and-swap, or CAS. A CAS is an atomic operation: when the CPU executes it, it guarantees that the read-check-write sequence happens atomically, with no other thread able to interleave, this is shown in this pseudo-code. The reason a CAS is used here is that an application thread could write to the referent field concurrently with the GC, and without any synchronisation, that would result in a data race, which of course is bad.
 
 [change slide]
 
-However, there is one key observation: the only thing an application thread can do to the referent field of a `WeakReference` is call `WeakReference.clear()`, which writes null. So if a data race does occur, both sides are writing null, meaning the result is the same regardless of the order. Which leads us to my 3rd and final optimisation, replacing the CAS with a plain write, removing a costly atomic operation.
+Or is it? There is one key observation: the only thing an application thread can do to the referent field of a `WeakReference` is call `WeakReference.clear()`, which writes null. So if a data race does occur, both sides are writing null, meaning the result is the same regardless of the order. Which leads us to my 3rd and final optimisation, replacing the CAS with a plain write, removing a costly atomic operation.
 
-So that's the three optimisations I implemented for Research Question 1. Now let's look at Research Question 2, which isn't about optimising the pipeline, but about changing the representation of weak semantics in Java altogether.
+So that's the three optimisations I implemented for Research Question 1. Now let's look at Research Question 2, which isn't about optimising the pipeline, but about changing Java's representation of weak semantics.
 
 [change slide]
 
@@ -164,13 +164,13 @@ So that's the three optimisations I implemented for Research Question 1. Now let
 
 Recall that weak references in Java are implemented as separate objects. The main reason that these object exists is to support the `ReferenceQueue` callback mechanism. But for weak references without a `ReferenceQueue`, there is no callback - so why do we need the additional object at all? The answer is: we don't.
 
-The idea behind Research Question 2 is to allow one object to hold a weak reference to another directly, via an annotated field, as shown in the diagram. Writing `@weak` before a field declaration - as shown in the code example - tells ZGC to treat that field as a weak reference, without any `WeakReference` object.
+The idea behind Research Question 2 is to allow one object to hold a weak reference to another directly, just as shown in the diagram. This is achieved through field annotation, so by writing `@weak` before a field declaration - as shown in the code example - HotSpot and ZGC will treat that field as a weak reference, without any `WeakReference` object.
 
-This opens up quite a few implementation challenges. How do we discover these fields? and How do we clear them in a thread-safe way?
+This opens up quite a few implementation challenges. For example: How do we discover these fields? and How do we clear them in a thread-safe way?
 
-Both these challenges are thankfully quite easy to solve. Discovery can mirror the optimised pipeline: annotated fields found during marking go into a dynamic array.
+Both of those challenges are thankfully quite easy to solve. Discovery can mirror the optimised pipeline: annotated fields found during marking go into a dynamic array.
 
-And processing can also mirror the optimised pipeline just with one important difference: we cannot use the optimised clear path. For a `WeakReference`, the only thing an application thread can write to the referent field is null, via `WeakReference.clear()`. But an `@weak`-annotated field is a regular object field - an application thread can write anything to it at any time. So we must keep the CAS to avoid the data race.
+And processing can also mirror the optimised pipeline just with one important difference: we cannot use the optimised clear path. Since an `@weak`-annotated field is a regular object field - an application thread can write anything to it at any time. So a data race here is in fact bad so we therefore need to keep the CAS in the clearing step for weak fields.
 
 There was a lot more work involved in making this all function correctly, but in the interest of time I won't go into it here.
 
@@ -178,15 +178,17 @@ There was a lot more work involved in making this all function correctly, but in
 
 ## Evaluation
 
-So now we know what my thesis is about, why it matters, and what I actually built. The next question is: does any of it actually work? Are these optimisations faster, or are they just pointless? To find out just that, I developed two benchmarks.
+So now we know what my thesis is about, why it matters, and what I actually built. The next question is: does any of it actually work? Are these optimisations faster, or are they just pointless? To find out just that, I developed two benchmarks - a single-object benchmark and a multi-object benchmark.
 
 [change slide]
 
 ### Benchmark Design
 
-The single-object benchmark is straightforward. As you can see in the illustration, there is one shared target object, and a large number of weak references or weak fields all pointing to it - 20 million, to be precise. This target object also has a single strong reference pointing to it and right before a GC cycle this reference is removed. This results in all of those weak references - or weak fields - being discovered and processed in that single GC cycle. This maximises the per-cycle reference-processing load and maximises the impact of the processing pipeline on the total GC duration.
+The single-object benchmark is straightforward. As you can see in the illustration, there is one shared target object, and a large number of weak references or weak fields all pointing to it - 20 million, to be precise. This target object also has a single strong reference pointing to it and right before a GC cycle this reference is removed. This results in all of those weak references - or weak fields - being discovered and processed in that single GC cycle. This maximises the per-cycle reference-processing load and therefore also maximises the impact of the processing pipeline on the total GC duration.
 
-The multi-object benchmark is a slightly more realistic workload. As you can see in the illustration, we still have the array, holder objects, and weak references - but instead of a single shared target, each of the 2 million holders has its own individual target object. And unlike in the single-object benchmark, we don't release all strong references at once. Instead, the benchmark proceeds through five rounds: in each round, 20% of the strong references are released, making those objects eligible for collection, and then a GC cycle is triggered. This gradual release means that weak references - or weak fields - are processed across multiple GC cycles rather than in a single burst.
+[change slide]
+
+The multi-object benchmark is a slightly more realistic workload. As you can see in the illustration, we still have the array, holder objects, and weak references - but instead of a single shared target, each of the 2 million holders has its own individual target object. And unlike in the single-object benchmark, we don't release all strong references at once. Instead, the benchmark proceeds through five rounds: in each round, 20% of the strong references are released, making the corresponding weak references - or weak fields - eligible for processing when a GC cycle is triggered. This gradual release means that weak references - or weak fields - are processed across multiple GC cycles rather than in a single burst.
 
 In both benchmarks, none of the weak references are backed by a `ReferenceQueue` in order to mirror the weak-fields counterpart as well as possible.
 
@@ -196,9 +198,9 @@ In both benchmarks, none of the weak references are backed by a `ReferenceQueue`
 
 These benchmarks were run with nine variants of ZGC. As we can see in this table, this covers all eight combinations of the three optimisations - the baseline with none of them, each individually, each pair, and all three together - plus the `weak_fields` variant. This allows me to isolate the individual and combined effects of each optimisation.
 
-The benchmarks were executed on UPPMAX's supercomputer cluster Pelle, on a single node with 48 cores and 768 GiB of RAM. Four benchmark instances was run in parallel, each pinned to 10 JVM cores and 2 auxiliary cores to prevent interference. And each of them using a 100 GB heap.
+The benchmarks were executed on UPPMAX's supercomputer cluster Pelle, on a single node with 48 cores and 768 GiB of RAM. Four benchmark instances was run in parallel, each pinned to 10 JVM cores and 2 auxiliary cores to prevent any interference. And each JVM used a 100 GB heap.
 
-Each variant was run for 1 warmup iteration and 250 measured iterations. These 250 measurements are presented as composite plots: a violin plot showing the full distribution of them, and a histogram comparing the median percentage-difference of all variants to the unmodified baseline.
+Each variant was run for 1 warmup iteration and 250 measured iterations. These 250 measurements are presented as composite plots: a violin plot showing the full distribution of them, and a histogram of median percentage-difference of all variants compared to the unmodified baseline.
 
 [change slide]
 
@@ -210,15 +212,15 @@ Let's start by looking at results for the most directly targeted metric.
 
 ### Non-Strong Processing Time
 
-The "Concurrent Process Non-Strong" metric which is the wall-clock time ZGC spends on its reference-processing phase. This is the phase all three pipeline optimisations directly target, and the results here are the clearest.
+The "Concurrent Process Non-Strong" metric which is the wall-clock time ZGC spends on its reference-processing pipeline. This is the metric all three pipeline optimisations directly target, and the results here are the clearest.
 
-As you can see, the combination of the optimised clear path and the dynamic array reduces median non-strong processing time by about 81% in the single-object benchmark - from roughly 1000 ms down to around 187 ms. Adding the separating skip-enqueue on top gives essentially the same result: 184 ms. So in the single-object benchmark, the variant with all three optimisations is basically tied with the variant with just optimisations 2 and 3.
+As you can see, the combination of the optimised clear path and the dynamic array reduces median non-strong processing time by about 81% in the single-object benchmark - from roughly 1000 ms down to around 190 ms. Adding the separating skip-enqueue on top gives essentially the same result. So in the single-object benchmark, the variant with all three optimisations is basically tied with the variant with just optimisations 2 and 3.
 
 An interesting thing to notice is that this is actually super-additive. If you look at the optimised clear path alone, it only achieves a 7% reduction. And the dynamic array alone achieves a 36% reduction. But together they achieve 81% - far more than their sum. The reason is that they remove different bottlenecks of differing sizes. The linked list is the biggest bottleneck, but when we remove it, the CAS becomes the biggest bottleneck - so removing that on top of the linked list gives a much bigger improvement than removing it alone.
 
 Another noteworthy observation is that the separating skip-enqueue optimisation shows almost no effect on this metric - just 5% in the single-object benchmark. This is however, somewhat expected since this metric only captures GC-internal work. The reference handler thread's load is not measured here, so the benefit of routing queue-less references away from it doesn't show up.
 
-For weak fields, the picture is also interesting. It achieves a 51% reduction - clearly better than the baseline, but not as good as clear_path_dyn or all. And its performance is closely comparable to the `sep_dyn` variant - which makes sense, because weak fields can only use those two pipeline optimisations for the reasons we discussed earlier.
+For weak fields, the picture is also interesting. It achieves a 51% reduction - clearly better than the baseline, but not as good as clear_path_dyn or all. And its performance is closely comparable to the `sep_dyn` variant - which makes sense, because weak fields only uses those two pipeline optimisations for the reasons we discussed earlier.
 
 [change slide]
 
@@ -232,17 +234,17 @@ Now let's look at what actually matters to end users: the total major collection
 
 Here the story is very different. For all the `WeakReference` variants, the distributions are broad and heavily overlapping. The best variants, `clear_path_dyn` and `all`, sit about 8% below the baseline in the single-object benchmark - but with distributions that still overlap substantially with each other and with the baseline. In the multi-object benchmark, the differences essentially disappear into the noise entirely.
 
-For `weak_fields`, however, the picture is clear and unambiguous. In the single-object benchmark it reduces median major collection time by about 41% relative to the baseline, and in the multi-object benchmark by about 28%. Its distribution is also much tighter, with significantly less variability than any `WeakReference` variant.
+For `weak_fields`, however, the picture is clear and unambiguous. In the single-object benchmark it reduces median major collection time by about 41% relative to the baseline, and in the multi-object benchmark by about 28%. Its distribution is also much tighter, with significantly less variability than any of the `WeakReference` variants.
 
 [change slide]
 
 ### Memory Usage
 
-Finally, let's take a look at memory.
+Finally, let's take a look at memory usage.
 
 All variants that use the dynamic array incur noticeably higher auxiliary GC memory. The `clear_path_dyn` variant is the worst, at about 10 times the baseline auxiliary memory in the single-object benchmark. Adding the separating skip-enqueue - which is what `all` does on top of `clear_path_dyn` - reduces this by about 30%, because the separation eliminates the need to store the reference address in each array entry. Even so, `all` still uses about 7 times the baseline auxiliary memory in the single-object benchmark.
 
-For Java heap usage, all `WeakReference` variants are identical since the optimisations don't change what objects are allocated on the heap. But `weak_fields` reduces heap usage by 53% in the single-object benchmark and 5% in the multi-object benchmark, simply because it eliminates the `WeakReference` objects.
+For Java heap usage, all `WeakReference` variants are identical since the optimisations don't change what objects are allocated on the heap. But `weak_fields` reduces heap usage by 53% in the single-object benchmark and 5% in the multi-object benchmark, simply because it eliminates those `WeakReference` objects.
 
 [change slide]
 
@@ -252,13 +254,13 @@ Alright, so what do all of these results actually tell us? First of all let me a
 
 [change slide]
 
-For Research Question 1: the best pipeline optimisations achieve an 81% reduction in non-strong processing time, which is significant. But this translates to only an 8% reduction in total major collection time, even in a benchmark specifically constructed to maximise the fraction of GC time spent on reference processing. That fraction, by the way, is 14.3% of major collection time in the single-object baseline - and only 4.5% in the multi-object baseline. So even if you could eliminate reference processing entirely, the best you could hope for is a 14% improvement in a benchmark that only does reference processing. In a realistic application, the gain would be far smaller.
+For Research Question 1: the best pipeline optimisations achieve an 81% reduction in non-strong processing time, which is significant. But this translates to only an 8% reduction in total major collection time, even in a benchmark specifically constructed to maximise the fraction of GC time spent on reference processing. That fraction, by the way, is 14% of major collection time in the single-object baseline - and only 5% in the multi-object baseline. So even if you could eliminate reference processing entirely, the best you could hope for is a 14% improvement in a benchmark that only does reference processing. In any realistic application, the gain would be far smaller.
 
-For Research Question 2: weak fields achieve a 41% and 28% reduction in major collection time, far exceeding the 8% from the pipeline variants. It also reduces Java heap usage by 53% in the single-object benchmark and 5% in the multi-object benchmark. Something that's worth noting however, is that these improvements doesn't come from faster reference processing - in fact, weak fields' non-strong processing time isn't even the best of any variant. It comes from something much more fundamental: by eliminating the `WeakReference` objects, the weak fields variant reduces the amount of work the GC has to do across every phase of every collection cycle - marking, relocating, everything.
+For Research Question 2: weak fields achieve a 41% and 28% reduction in major collection time, far exceeding the 8% from the pipeline variants. It also reduces Java heap usage by 53% in the single-object benchmark and 5% in the multi-object benchmark. These improvements doesn't come from faster reference processing - in fact, weak fields' non-strong processing time is worse than the best `WeakReference` variants. It instead comes from something much more fundamental: by eliminating the `WeakReference` objects, the weak fields variant reduces the amount of work the GC has to do across every phase of every collection cycle - marking, relocating, everything.
 
 [change slide]
 
-So the key takeaway is this: optimising the reference processing pipeline is valuable, but it faces a hard ceiling set by the fraction of time spent on reference processing - 14.3% for the single object benchmark. Weak fields, on the other hand, achieve a 41% reduction in major collection time, and this is thanks to the removal of the `WeakReference` objects from the GC-load. Which means, the real bottleneck is the representation not the pipeline. So in order to unlock meaningful improvement, the way weak semantics are represented in Java needs to change.
+So the key takeaway is this: optimising the reference processing pipeline is valuable, but it faces a hard ceiling set by the fraction of time spent on reference processing. Weak fields, on the other hand, breaks through this ceiling thanks to the removal of the `WeakReference` objects from the GC-load. Which means, the real bottleneck is the representation not the processing pipeline. So in order to unlock meaningful improvement, the way weak semantics are represented in Java needs to change.
 
 [change slide]
 
