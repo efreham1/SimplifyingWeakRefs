@@ -1008,9 +1008,9 @@ def write_latex_summary_stats_tables(
         lines: list[str] = []
         lines.append(r"\begin{longtable}{l rrr rrr}")
         lines.append(
-            rf"\caption[{metric_label} summary statistics]{{Summary statistics for {metric_label} across all variants. "
+            rf"\caption[{metric_label} summary statistics]{{Summary statistics for \textbf{{{metric_label}}} across all variants. "
             rf"Values in ms; single-object benchmark uses per-run maxima, "
-            rf"multi-object uses per-run averages ($n=100$ per variant).}}"
+            rf"multi-object uses per-run averages ($n=250$ per variant).}}"
             rf"\label{{tab:stats-{metric_slug}}} \\"
         )
         lines.append(r"\toprule")
@@ -1059,8 +1059,8 @@ def write_latex_summary_stats_tables(
         lines.append(r"\begin{longtable}{l rrr rrr}")
         short = str(mem_info["short"])
         lines.append(
-            rf"\caption[{short}]{{Summary statistics for {title} per-run maximum across all variants. "
-            rf"Values in {unit} ($n=100$ per variant).}}"
+            rf"\caption[{short}]{{Summary statistics for \textbf{{{title}}} per-run maximum across all variants. "
+            rf"Values in {unit} ($n=250$ per variant).}}"
             rf"\label{{tab:stats-memory-{slug}}} \\"
         )
         lines.append(r"\toprule")
