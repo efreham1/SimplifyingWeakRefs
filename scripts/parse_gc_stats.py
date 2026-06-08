@@ -95,7 +95,7 @@ LATEX_VARIANT_NAMES: dict[str, str] = {
 MEMORY_METRICS = {
     "aux": {
         "column": "gc_committed_kb",
-        "title": "Aux Memory",
+        "title": "Auxiliary GC Memory",
         "short": "Auxiliary GC memory summary statistics",
         "unit": "MB",
     },
