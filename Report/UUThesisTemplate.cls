@@ -23,11 +23,11 @@
 \providecommand{\UU@setsfivepaper}{
 	\setlength{\paperheight}{242mm} 
 	\setlength{\paperwidth}{165mm}
-	\setlength{\hoffset}{-1in}
-	\setlength{\voffset}{-1in}
-	\setlength{\topmargin}{8,8mm} 
-	\setlength{\oddsidemargin}{22,5mm}
-	\setlength{\evensidemargin}{22,5mm}
+	\setlength{\hoffset}{0pt}
+	\setlength{\voffset}{0pt}
+	\setlength{\topmargin}{\dimexpr 8,8mm-1in\relax} 
+	\setlength{\oddsidemargin}{\dimexpr 22,5mm-1in\relax}
+	\setlength{\evensidemargin}{\dimexpr 22,5mm-1in\relax}
 	\setlength{\headheight}{4,6mm}
 	\setlength{\headsep}{4,6mm}
 	\setlength{\textheight}{572pt}
@@ -43,11 +43,11 @@
 \providecommand{\UU@setafourpaper}{
 	\setlength{\paperheight}{297mm} 
 	\setlength{\paperwidth}{210mm}
-	\setlength{\hoffset}{-1in}
-	\setlength{\voffset}{-1in}
-	\setlength{\topmargin}{13,8mm} 
-	\setlength{\oddsidemargin}{30mm}
-	\setlength{\evensidemargin}{30mm}
+	\setlength{\hoffset}{0pt}
+	\setlength{\voffset}{0pt}
+	\setlength{\topmargin}{\dimexpr 13,8mm-1in\relax} 
+	\setlength{\oddsidemargin}{\dimexpr 30mm-1in\relax}
+	\setlength{\evensidemargin}{\dimexpr 30mm-1in\relax}
 	\setlength{\headheight}{4,6mm}
 	\setlength{\headsep}{4,6mm}
 	\setlength{\textheight}{242mm}
@@ -62,11 +62,11 @@
 \providecommand{\UU@setafivepaper}{
 	\setlength{\paperheight}{210mm} 
 	\setlength{\paperwidth}{148mm}
-	\setlength{\hoffset}{-1in}
-	\setlength{\voffset}{-1in}
-	\setlength{\topmargin}{8,8mm} 
-	\setlength{\oddsidemargin}{20mm}
-	\setlength{\evensidemargin}{20mm}
+	\setlength{\hoffset}{0pt}
+	\setlength{\voffset}{0pt}
+	\setlength{\topmargin}{\dimexpr 8,8mm-1in\relax} 
+	\setlength{\oddsidemargin}{\dimexpr 20mm-1in\relax}
+	\setlength{\evensidemargin}{\dimexpr 20mm-1in\relax}
 	\setlength{\headheight}{4,6mm}
 	\setlength{\headsep}{4,6mm}
 	\setlength{\textheight}{172mm}
@@ -80,11 +80,11 @@
 \providecommand{\UU@setbfivepaper}{
 	\setlength{\paperheight}{250mm} 
 	\setlength{\paperwidth}{176mm}
-	\setlength{\hoffset}{-1in}
-	\setlength{\voffset}{-1in}
-	\setlength{\topmargin}{8,8mm} 
-	\setlength{\oddsidemargin}{22,5mm}
-	\setlength{\evensidemargin}{22,5mm}
+	\setlength{\hoffset}{0pt}
+	\setlength{\voffset}{0pt}
+	\setlength{\topmargin}{\dimexpr 8,8mm-1in\relax} 
+	\setlength{\oddsidemargin}{\dimexpr 22,5mm-1in\relax}
+	\setlength{\evensidemargin}{\dimexpr 22,5mm-1in\relax}
 	\setlength{\headheight}{4,6mm}
 	\setlength{\headsep}{4,6mm}
 	\setlength{\textheight}{210mm}

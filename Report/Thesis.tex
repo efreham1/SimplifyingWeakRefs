@@ -146,6 +146,7 @@
 % URL handling
 \usepackage{url}
 \urlstyle{same}
+\usepackage{pdfpages}
 
 
 % Tables
@@ -232,7 +233,7 @@
 
 	The results show that combining the specialised clear path with the dynamic array is the most effective pipeline configuration. In the single-object benchmark, this combination reduces median non-strong reference-processing time by 81\,\% and median major-collection time by 8\,\%. In the multi-object benchmark, the non-strong subphase reduction is 57\,\%, while the end-to-end major-collection gain is 1.1\,\%. Dynamic-array variants incur substantially higher auxiliary \ac{GCr} memory than the linked-list baseline. The combination of all three optimisations together, skip-enqueue separation, dynamic array, and specialised clear path, offers the best balance: it matches the same 81\,\% reduction in non-strong processing time whilst consuming approximately 30\,\% less auxiliary \ac{GCr} memory than the clear-path-plus-array pair alone.
 
-	The weak-field mechanism achieves substantially lower major-collection times than all \texttt{WeakReference} pipeline variants, with reductions of 41\,\% in the single-object benchmark and 28\,\% in the multi-object benchmark relative to the baseline. Its advantage is structural: by eliminating \texttt{WeakReference} wrapper objects from the heap entirely, it reduces the total volume of GC work across all phases of the collection cycle, not only during reference processing. This comes at a significant implementation cost: the weak-field prototype spans 27 files across the compiler, class-file parser, interpreter, JIT compilers, JVMTI, and GCr subsystems.
+	The weak-field mechanism achieves substantially lower major-collection times than all \texttt{WeakReference} pipeline variants, with reductions of 41\,\% in the single-object benchmark and 28\,\% in the multi-object benchmark relative to the baseline. Its advantage is structural: by eliminating \texttt{WeakReference} wrapper objects from the heap entirely, it reduces the total volume of GC work across all phases of the collection cycle, not only during reference processing. This comes at a significant implementation cost: the weak-field prototype spans 27 files across the compiler, class-file parser, interpreter, JIT compilers, JVMTI, and \ac{GCr} subsystems.
 
 	Together, the results suggest that, within the evaluation setting of queue-less synthetic workloads on a single hardware platform, the choice of how weak semantics is represented in the language has a larger impact on total GC cost than pipeline-level optimisations. These findings indicate that meaningful improvements in workloads of this kind may require reconsidering how weak semantics is encoded in the language rather than only refining the processing pipeline, though how this conclusion generalises to production workloads with diverse reference patterns and multiple hardware platforms remains an open question.
     \end{abstract}
@@ -257,11 +258,10 @@
 
 \begin{document}
 \frontmatter
-    % Creates the front matter (title page(s), abstract, list of papers)
-    % frontmatterCS = Comprehensive Summary (no half-title, good for Master's)
-    % frontmatterMonograph = Monograph (includes half-title, typically for PhD)
-    \frontmatterCS
-    \setcounter{page}{1}  % Start Roman numbering at i after the title/abstract
+	% Use supplied pages for cover + English abstract + Swedish summary.
+	\includepdf[scale=1.0, pages=-]{Frontpage+abstracts.pdf}
+	% Start Roman numbering at iii after the supplied front pages.
+	\setcounter{page}{3}
     \pagestyle{plain}     % Show Roman numerals from Acknowledgements onward
     
     % Dedication (optional)
