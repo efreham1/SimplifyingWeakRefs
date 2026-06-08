@@ -3,6 +3,86 @@
 
 The motivation and trade-offs for each technique are established in \cref{subsec:bg-refproc-tradeoffs}; this chapter describes their design and implementation. Three optimisations target \ac{ZGC}'s processing of \texttt{WeakReference} objects without a \texttt{ReferenceQueue}: skip-enqueue separation (\cref{sec:di-sep}), the dynamic array (\cref{sec:di-dyn}), and the specialised clear path (\cref{sec:di-clear}). In addition, an exploratory weak-field implementation (\cref{sec:di-wf}) was developed to evaluate an alternative way of expressing weak semantics that avoids the overhead of \texttt{WeakReference} objects entirely.
 
+\Cref{tab:mechanism-summary} provides a compact overview of how the four mechanisms differ across the key design dimensions, meanwhile \Cref{tab:mechanism-cost-benefit} summarises the expected costs and benefits of each mechanism.
+
+\begin{table}[t]
+\centering
+\caption[Summary comparison of the four mechanisms]{Comparison of the four mechanisms along key design dimensions. The representation column describes how weak semantics are expressed. The discovery structure column describes the data structure used during the concurrent mark phase to record discovered references. The enqueue path column describes whether discovered references are enqueued to the pending list for the \texttt{ReferenceHandler} thread. The clear path column describes the operations performed to clear the referent field of an unreachable reference during processing.}
+\label{tab:mechanism-summary}
+\small
+\begin{tabularx}{\textwidth}{@{}>{\hsize=1.0\hsize\raggedright\arraybackslash}X
+                              >{\hsize=1.0\hsize\raggedright\arraybackslash}X
+                              >{\hsize=1.0\hsize\raggedright\arraybackslash}X
+                              >{\hsize=1.0\hsize\raggedright\arraybackslash}X
+                              >{\hsize=1.0\hsize\raggedright\arraybackslash}X@{}}
+\toprule
+\textbf{Mechanism} & \textbf{Representation} & \textbf{Discovery structure} & \textbf{Enqueue path} & \textbf{Clear path} \\
+\midrule
+Baseline (\texttt{none})
+  & Independent objects
+  & Intrusive linked list
+  & Pending list
+  & Load barrier + virtual call + \ac{CAS} \\
+\addlinespace
+Skip-enqueue sep. (\texttt{sep})
+  & Independent objects
+  & Separate linked lists per list type
+  & Queue-less refs bypass pending list
+  & Load barrier + virtual call + \ac{CAS} \\
+\addlinespace
+Dynamic array (\texttt{dyn})
+  & Independent objects
+  & Contiguous array
+  & Pending list
+  & Load barrier + virtual call + \ac{CAS} \\
+\addlinespace
+Clear path (\texttt{clear\_path})
+  & Independent objects
+  & Intrusive linked list
+  & Pending list
+  & Pre-loaded data + direct call + plain store \\
+\addlinespace
+Weak fields (\texttt{weak\_fields})
+  & Annotated object fields
+  & Contiguous array per \ac{GC} worker
+  & No pending list
+  & Pre-loaded data + direct call + \ac{CAS}\\
+\bottomrule
+\end{tabularx}
+\normalsize
+\end{table}
+
+\begin{table}[t]
+\centering
+\caption[Cost and benefit comparison of the four mechanisms]{Comparison of the expected costs and benefits of the four mechanisms. The discovery structure column describes the data structure used during the concurrent mark phase to record discovered references. ``Clear path'' describes how the referent field is cleared once the reference is found to be unreachable.}
+\label{tab:mechanism-cost-benefit}
+\small
+\begin{tabularx}{\textwidth}{@{}>{\hsize=1.0\hsize\raggedright\arraybackslash}X
+                              >{\hsize=1.0\hsize\raggedright\arraybackslash}X
+                              >{\hsize=1.0\hsize\raggedright\arraybackslash}X@{}}
+\toprule
+\textbf{Mechanism} & \textbf{Expected benefit} & \textbf{Expected cost} \\
+\midrule
+Skip-enqueue sep. (\texttt{sep})
+  & Shorter reference-processing time and less work for the \texttt{ReferenceHandler} thread for queue-less weak references
+  & Increased code complexity and slightly larger code objects\\
+\addlinespace
+Dynamic array (\texttt{dyn})
+  & Shorter reference-processing time due to better cache locality and pre-loaded field data
+  & Higher memory footprint and longer discovery time due to dynamic array management\\
+\addlinespace
+Clear path (\texttt{clear\_path})
+  & Shorter reference-processing time due to fewer and simpler operations for clearing the referent field
+  & Increased code complexity and potential for subtle bugs in future development\\
+\addlinespace
+Weak fields (\texttt{weak\_fields})
+  & Shorter total \ac{GC} cycle time and lower memory footprint due to avoiding \texttt{WeakReference} objects entirely
+  & Immensely increased code complexity and an API-level separation between weak semantics with and without callbacks\\
+\bottomrule
+\end{tabularx}
+\normalsize
+\end{table}
+
 \section{Skipping Enqueue Path}
 \label{sec:di-sep}
 As established in \cref{subsec:bg-refproc-tradeoffs}, skip-enqueue separation eliminates pending-list work for queue-less weak references by routing them to a separate discovered list that bypasses the enqueue stage entirely.
@@ -16,19 +96,19 @@ The discovered lists are separated rather than handled through conditional branc
 \begin{listing}[t]
 \begin{lstlisting}[language=C++]
 bool discover_reference(oop ref_obj, ReferenceType type) {
-    zaddress ref = to_zaddress(ref_obj), // convert to ZGC-coloured pointer
+    zaddress ref = to_zaddress(ref_obj), // ZGC-coloured pointer
 
-    if (!should_discover(ref, type)) {   // skip already-discovered or ineligible refs
+    if (!should_discover(ref, type)) {   // skip if already discovered or ineligible
         return false,
     }
 
     if (type == REF_WEAK && !has_reference_queue(ref)) {
-        // Queue-less weak ref: goes to the no-enqueue list, bypasses
-        // pending-list hand-off and ReferenceHandler thread entirely
+        // Queue-less weak ref: bypasses pending list and
+        // ReferenceHandler thread entirely
         weak_no_queue_list_per_worker.append(ref),
     } else {
-        // All other reference types (and queue-backed weak refs) follow
-        // the standard discovered list and enqueue pipeline
+        // All other types (and queue-backed weak refs) follow
+        // the standard discovered-list and enqueue pipeline
         discovered_list_per_worker.append(ref),
     }
 
@@ -60,24 +140,24 @@ See \cref{lst:dynamic-array-processing} for a pseudocode summary and \cref{app:s
 void discover_reference(oop ref_obj, ReferenceType type) {
     //...
     ZWeakRefData data,
-    data.set_from_ref(ref),       // pre-load referent field address and value
-    worker_array.append(data),    // O(1) amortised, array grows on the C heap if needed
+    data.set_from_ref(ref),    // pre-load referent address and value
+    worker_array.append(data), // O(1) amortised; array grows if needed
     //...
 }
 
-void process_worker_discovered_weak_refs_without_queue(ZWeakRefArray& arr) {
+void process_queue_less_weak_refs(ZWeakRefArray& arr) {
     size_t dropped = 0,
     for (size_t i = 0, i < arr.length(), i++) {
-        const ZWeakRefData& data = arr.at(i), // index-based: contiguous, cache-friendly
-        data.mark_not_discovered(),            // clear discovered field before liveness check
+        const ZWeakRefData& data = arr.at(i), // sequential: cache-friendly
+        data.mark_not_discovered(),            // clear discovered field first
 
-        if (try_make_inactive(data)) { // clear referent if no longer strongly reachable
+        if (try_make_inactive(data)) { // clear referent if unreachable
             cleared_weak_no_queue_count++,
         } else {
-            dropped++, // reference stayed active, slot kept for next GC cycle
+            dropped++, // reference still active; keep slot
         }
     }
-    arr.clear_and_reserve(dropped), // retain capacity to avoid reallocation next cycle
+    arr.clear_and_reserve(dropped), // retain capacity for next cycle
 }
 \end{lstlisting}
 \caption[Dynamic-array weak processing]{Pseudocode for the \texttt{ZWeakRefArray}-backed queue-less weak-reference path. Discovery appends pre-loaded fields and processing scans the array sequentially (see \cref{app:source-dyn,app:source-refproc}).}
@@ -159,7 +239,7 @@ As established in \cref{subsec:bg-refproc-tradeoffs}, replacing \texttt{WeakRefe
 \subsection{Implementation of Weak Fields}
 \label{subsec:di-wf-impl}
 
-The implementation includes changes in three layers of the \ac{JVM}: a Java-level annotation, \ac{GC}-side field discovery and processing, and compiler/interpreter support for the annotation metadata.
+The implementation includes changes in three layers of the \ac{JVM}: a Java-level annotation, \ac{GCr}-side field discovery and processing, and compiler/interpreter support for the annotation metadata.
 
 \subsubsection{Annotation}
 
@@ -208,10 +288,10 @@ bool discover_weak_field(oop* field) {
         return false, // no clearing needed: already null or strongly reachable
     }
 
-    // Record field address and current pointer value for the processing phase
+    // Record field address and current pointer value for processing
     discovered_weak_fields_count++,
     ZWeakFieldData data(field),
-    worker_weak_field_array.append(data), // per-worker array avoids contention
+    worker_weak_field_array.append(data), // per-worker; avoids contention
     return true,
 }
 \end{lstlisting}
@@ -225,20 +305,20 @@ During the reference-processing phase, each \ac{GC} worker iterates through its 
 
 \begin{listing}[t]
 \begin{lstlisting}[language=C++]
-void process_worker_discovered_weak_fields(ZWeakFieldArray& weak_fields) {
+void process_worker_discovered_weak_fields(ZWeakFieldArray& arr) {
     size_t dropped = 0,
-    for (size_t i = 0, i < weak_fields.length(), i++) {
-        const ZWeakFieldData& data = weak_fields.at(i), // sequential: cache-friendly
-        if (try_make_inactive_fast(data)) { // clear dead referent or recolour live one
+    for (size_t i = 0, i < arr.length(), i++) {
+        const ZWeakFieldData& data = arr.at(i), // sequential scan
+        if (try_make_inactive_fast(data)) { // clear dead or recolour live
             cleared_weak_fields_count++,
         } else {
-            dropped++, // field stayed active, reserve space for next GC cycle
+            dropped++, // field still active; keep slot for next cycle
         }
     }
-    weak_fields.clear_and_reserve(dropped), // avoid reallocation if count is stable
+    arr.clear_and_reserve(dropped), // retain capacity for next cycle
 }
 \end{lstlisting}
-\caption[Weak-field processing]{Pseudocode for weak-field processing. Each entry is passed to the clean barrier, which clears dead referents and recolours live ones (see \cref{app:source-wf-refproc}).}
+\caption[Weak-field processing]{Pseudocode for weak-field processing. Each entry is passed to the clear barrier, which clears dead referents and recolours live ones (see \cref{app:source-wf-refproc}).}
 \label{lst:weak-field-processing}
 \end{listing}
 

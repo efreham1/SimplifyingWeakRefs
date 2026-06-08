@@ -5,6 +5,7 @@ Outputs:
 1. Composite GC plots (violin + median-diff histogram) for each metric.
 2. LaTeX table with percentage differences of median and mean vs baseline.
 3. Memory plots: max-per-variant violin and median-diff histograms.
+4. Ratio metrics and plots for Non-Strong / Major Collection.
 """
 
 from __future__ import annotations
@@ -95,8 +96,8 @@ LATEX_VARIANT_NAMES: dict[str, str] = {
 MEMORY_METRICS = {
     "aux": {
         "column": "gc_committed_kb",
-        "title": "Auxiliary GC Memory",
-        "short": "Auxiliary GC memory summary statistics",
+        "title": "Auxiliary GCr Memory",
+        "short": "Auxiliary GCr memory summary statistics",
         "unit": "MB",
     },
     "java_heap": {
@@ -264,6 +265,144 @@ def metric_samples(
                 units = str(variants_metrics[variant][metric_name].get("units", ""))
 
     return labels, data, units
+
+
+def add_ratio_metrics(variants_metrics: dict[str, dict[str, dict[str, list[float] | str]]]) -> None:
+    """Calculate ratio of Concurrent Process Non-Strong to Major Collection."""
+    num_metric = "Old Phase: Concurrent Process Non-Strong"
+    den_metric = "Major Collection: Major Collection"
+    ratio_metric = "Ratio: Non-Strong / Major Collection"
+
+    for variant in ["none", "all"]:
+        if variant not in variants_metrics:
+            continue
+        metrics = variants_metrics[variant]
+        if num_metric in metrics and den_metric in metrics:
+            nums = metrics[num_metric]["values"]
+            dens = metrics[den_metric]["values"]
+            ratios: list[float] = []
+            
+            # Perform element-wise division mapping matching iterations to each other
+            for n, d in zip(nums, dens):
+                val_d = float(d)
+                if val_d != 0.0:
+                    ratios.append(float(n) / val_d)
+            
+            if ratios:
+                metrics[ratio_metric] = {
+                    "values": ratios,
+                    "units": "Ratio"
+                }
+
+
+def plot_ratio_violin(
+    variants_metrics: dict[str, dict[str, dict[str, list[float] | str]]],
+    benchmark_name: str,
+    run_label: str,
+    output_dir: Path,
+) -> None:
+    """Creates a standalone Violin plot for the calculated Ratio metric."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    ratio_metric = "Ratio: Non-Strong / Major Collection"
+    
+    labels = []
+    data = []
+    for variant in ["none", "all"]:
+        vals = list(variants_metrics.get(variant, {}).get(ratio_metric, {}).get("values", []))
+        if vals:
+            labels.append(DISPLAY_NAMES.get(variant, variant))
+            data.append(vals)
+            
+    if not data:
+        return
+        
+    fig, ax = plt.subplots(figsize=(6, PANEL_H), constrained_layout=True)
+    violin = ax.violinplot(data, showmeans=True, showmedians=True, widths=0.5)
+    
+    for i, body in enumerate(violin["bodies"]):
+        body.set_facecolor(plt.cm.tab10(i))
+        body.set_edgecolor("black")
+        body.set_alpha(0.75)
+        
+    for key in ["cbars", "cmins", "cmaxes"]:
+        if key in violin:
+            violin[key].set_color("black")
+            violin[key].set_linewidth(1.0)
+    if "cmedians" in violin:
+        violin["cmedians"].set_color("black")
+        violin["cmedians"].set_linewidth(2.0)
+        violin["cmedians"].set_linestyle("-")
+    if "cmeans" in violin:
+        violin["cmeans"].set_color("black")
+        violin["cmeans"].set_linewidth(1.5)
+        violin["cmeans"].set_linestyle("--")
+
+    ax.set_xticks(range(1, len(labels) + 1))
+    ax.set_xticklabels(labels)
+    _add_yaxis_break(ax)
+    ax.set_ylabel("Ratio")
+    ax.grid(True, axis="y", alpha=0.3)
+    
+    benchmark_label = "Single-Object Benchmark" if benchmark_name == "single" else "Multi-Object Benchmark"
+    ax.set_title(f"Non-Strong / Major Collection Ratio — {benchmark_label}", fontsize=12, fontweight="bold")
+    
+    legend_handles = [
+        Line2D([0], [0], color="black", linewidth=2.0, linestyle="-", label="Median"),
+        Line2D([0], [0], color="black", linewidth=1.5, linestyle="--", label="Mean"),
+    ]
+    ax.legend(handles=legend_handles, loc="upper right", framealpha=0.8)
+
+    out_file = output_dir / f"ratio_violin_{run_label}.pdf"
+    plt.savefig(out_file, bbox_inches="tight")
+    plt.close(fig)
+    print(f"Wrote {out_file}")
+
+
+def write_ratio_table(
+    single_vm: dict[str, dict[str, dict[str, list[float] | str]]],
+    multi_vm: dict[str, dict[str, dict[str, list[float] | str]]],
+    run_prefix: str,
+) -> None:
+    """Writes mean, median and IQR summary statistics of ratio metric to a LaTeX table."""
+    TABLES_DIR.mkdir(parents=True, exist_ok=True)
+    ratio_metric = "Ratio: Non-Strong / Major Collection"
+    
+    lines = []
+    lines.append(r"\begin{table}[ht]")
+    lines.append(r"\centering")
+    lines.append(r"\caption{Ratio of Concurrent Process Non-Strong to Major Collection for \texttt{none} and \texttt{all} variants.}")
+    lines.append(rf"\label{{tab:stats-ratio-{run_prefix}}}")
+    lines.append(r"\begin{tabular}{l rrr rrr}")
+    lines.append(r"\toprule")
+    lines.append(r" & \multicolumn{3}{c}{Single} & \multicolumn{3}{c}{Multi} \\")
+    lines.append(r"\cmidrule(lr){2-4}\cmidrule(lr){5-7}")
+    lines.append(r"Variant & Median & Mean & IQR & Median & Mean & IQR \\")
+    lines.append(r"\midrule")
+    
+    for variant in ["none", "all"]:
+        s_vals = list(single_vm.get(variant, {}).get(ratio_metric, {}).get("values", []))
+        m_vals = list(multi_vm.get(variant, {}).get(ratio_metric, {}).get("values", []))
+        
+        if not s_vals and not m_vals:
+            continue
+            
+        s_med, s_mn, s_iqr = _gc_stats(s_vals)
+        m_med, m_mn, m_iqr = _gc_stats(m_vals)
+        
+        vname = LATEX_VARIANT_NAMES.get(variant, variant)
+        lines.append(
+            f"{vname} & "
+            f"{(s_med*100):.1f}\,\% & {(s_mn*100):.1f}\,\% & {(s_iqr*100):.1f}\,\% & "
+            f"{(m_med*100):.1f}\,\% & {(m_mn*100):.1f}\,\% & {(m_iqr*100):.1f}\,\% \\\\"
+        )
+        
+    lines.append(r"\bottomrule")
+    lines.append(r"\end{tabular}")
+    lines.append(r"\end{table}")
+    
+    out = TABLES_DIR / f"stats_ratio_{run_prefix}.tex"
+    out.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print(f"Wrote {out}")
 
 
 def plot_composite_gc(
@@ -1177,6 +1316,8 @@ def generate_for_benchmark(
     if not variants_metrics:
         print(f"Warning: no '{benchmark_name}' benchmark rows found in {gc_csv_path}")
         return 0, {}, {}, [], ""
+        
+    add_ratio_metrics(variants_metrics)
 
     present = [v for v in VARIANTS_ORDERED if v in variants_metrics]
     if baseline_variant not in present:
@@ -1191,6 +1332,9 @@ def generate_for_benchmark(
 
     print(f"Generating composite GC plots for '{benchmark_name}'...")
     plot_composite_gc(variants_metrics, present, metrics_to_plot, run_label, output_dir, baseline_variant, benchmark_name)
+
+    print(f"Generating Ratio violin plots for '{benchmark_name}'...")
+    plot_ratio_violin(variants_metrics, benchmark_name, run_label, output_dir)
 
     print(f"Generating LaTeX percentage-difference table for '{benchmark_name}'...")
     write_latex_percentage_table(variants_metrics, present, metrics_to_plot, run_label, baseline_variant)
@@ -1289,6 +1433,13 @@ def main() -> int:
             run_prefix,
             collected["single"]["traces"],
             collected["multi"]["traces"],
+        )
+        
+        print("Generating ratio statistics table...")
+        write_ratio_table(
+            collected["single"]["variants_metrics"],
+            collected["multi"]["variants_metrics"],
+            run_prefix
         )
 
     return exit_code

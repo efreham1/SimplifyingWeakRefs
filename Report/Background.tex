@@ -3,7 +3,7 @@
 
 To answer the research questions posed in \cref{sec:intro-rqs}, it is necessary to understand key concepts of the \ac{JVM} and its HotSpot implementation, \ac{GC} mechanisms, the Java reference types, the design and implementation of \ac{ZGC}, and the reference-processing pipeline within \ac{ZGC}.
 
-\section{The \ac{JVM} and HotSpot}
+\section{The JVM and HotSpot}
 \label{sec:bg-jvm-hotspot}
 
 The \ac{JVM} is a language-independent abstract computing machine that provides a managed execution environment for programs compiled to Java bytecode~\cite{oracle-gc-implementation}. Rather than targeting a specific physical processor, Java source code is compiled to bytecode -- a compact, platform-neutral instruction set -- which the \ac{JVM} then executes on the host machine. This separation allows the same bytecode to run without modification on any platform for which a \ac{JVM} implementation exists. The \ac{JVM} is responsible for loading class files, verifying bytecode, managing memory (including automatic \ac{GC}), and providing the runtime services (threading, synchronisation, reflection) that Java programs rely on.
@@ -14,7 +14,7 @@ HotSpot's internal architecture spans the garbage collectors (Serial, Parallel, 
 
 All implementation details discussed in this thesis -- the execution tiers, the barrier mechanism, the object representation, and the reference-processing pipeline -- are specific to HotSpot. Other \ac{JVM} implementations may differ substantially in their internal organisation, even if they conform to the same \ac{JVM} specification.
 
-\section{\ac{GC} in the \ac{JVM}}
+\section{GC in the JVM}
 \label{sec:bg-gc}
 
 The \ac{JVM} provides automatic memory management through \ac{GC}. Rather than requiring the programmer to explicitly allocate and free memory as in languages such as C or C++, the \ac{JVM} tracks which objects are reachable from the application's root set and reclaims the memory of objects that are no longer reachable. The root set consists of all data that is directly accessible to the application, such as local variables on the stack, static fields, and active threads.
@@ -30,7 +30,7 @@ HotSpot ships with several \ac{GCr} implementations, each designed with differen
 
 This thesis focuses on \ac{ZGC}, as its low-latency design and concurrent reference processing pipeline can particularly benefit from optimisations that reduce the amount of work done during reference processing.
 
-\subsection{\ac{GC} Phases}
+\subsection{GC Phases}
 \label{subsec:bg-gc-phases}
 
 \ac{GC} generally occurs multiple times (cycles) during the lifetime of a Java application. Each cycle consists of several distinct phases, each with specific responsibilities. The exact phases and their order can vary between collectors, but a common structure is as follows:
@@ -47,7 +47,7 @@ This thesis focuses on \ac{ZGC}, as its low-latency design and concurrent refere
 
 The order and concurrency model of these phases varies significantly between collectors. Serial and Parallel \ac{GCr} typically perform all phases in \ac{STW} pauses~\cite{oracle-gc-collectors}. G1 performs marking concurrently with the application, which reduces \ac{STW} pause times, though evacuation (copying) of live objects is still performed during \ac{STW} pauses~\cite{oracle-gc-collectors}. \ac{ZGC} performs marking, reference processing, and relocation concurrently, using barriers to maintain consistency with concurrent application threads~\cite{jep333-zgc,jep439-genzgc}.
 
-\subsection{\ac{GC} Barriers}
+\subsection{GC Barriers}
 \label{subsec:bg-gc-barriers}
 
 In \ac{JVM} \ac{GCr}s, a \emph{barrier} is a small piece of code inserted around memory accesses so that the collector can maintain correctness while the application is running~\cite{oracle-gc-implementation}. The term is slightly misleading: barriers are not global locks and do not stop threads. Instead, they are local checks or bookkeeping actions attached to individual loads and stores of object references~\cite{oracle-gc-implementation,jep333-zgc,openjdk-zbarrier-cpp}.
@@ -180,10 +180,10 @@ In tiered compilation, methods move through these tiers as their execution frequ
 \paragraph{Relevance to \ac{GC} barriers.} Because a read barrier must intercept every load from the heap, and such loads occur in all three tiers, each tier requires its own barrier implementation. \ac{ZGC} therefore ships three separate barrier components: \texttt{ZBarrierSetAssembler} generates barrier stubs embedded in the interpreter's dispatch table, \texttt{ZBarrierSetC1} inserts barrier nodes during C1 intermediate representation construction, and \texttt{ZBarrierSetC2} integrates barriers into the C2 sea-of-nodes graph~\cite{openjdk-zbarrier-cpp}. All three components obey the same decorator-driven barrier selection logic described in \cref{subsec:bg-zgc-decorators}.
 
 
-\section{The \ac{ZGC}}
+\section{The ZGC}
 \label{sec:bg-zgc}
 
-\ac{ZGC} is a concurrent, region-based, compacting \ac{GCr} included in the \ac{JDK} since \ac{JDK}~11 (experimental)~\cite{jep333-zgc} and production-ready since \ac{JDK}~15~\cite{jep377-zgc-prod}. Starting with \ac{JDK}~21, \ac{ZGC} supports generational collection, which is now the default mode~\cite{jep439-genzgc}. The collector targets sub-millisecond pause times that remain bounded regardless of heap size, and supports heaps ranging from a few hundred megabytes to several terabytes~\cite{jep333-zgc,jep439-genzgc,osterlund23-genzgc-beyond}. Achieving these goals while performing the bulk of \ac{GC} work concurrently is partly realised by two closely related design decisions: encoding \ac{GC} state directly in heap pointers, and using barriers to act on that state at every pointer access.
+\ac{ZGC} is a concurrent, region-based, compacting \ac{GCr} included in the \ac{JDK} since \ac{JDK}~11 (experimental)~\cite{jep333-zgc} and production-ready since \ac{JDK}~15~\cite{jep377-zgc-prod}. Starting with \ac{JDK}~21, \ac{ZGC} supports generational collection, which is now the default mode~\cite{jep439-genzgc}. The collector targets sub-millisecond pause times that remain bounded regardless of heap size, and supports heaps ranging from a few hundred megabytes to several terabytes~\cite{jep333-zgc,jep439-genzgc,osterlund23-genzgc-beyond}. Achieving these goals while performing the bulk of \ac{GC} work concurrently is partly realised by two closely related design decisions: encoding \ac{GCr} state directly in heap pointers, and using barriers to act on that state at every pointer access.
 
 \subsection{Coloured Pointers and Barriers}
 \label{subsec:bg-zgc-pointers}
@@ -197,7 +197,7 @@ Store barriers serve a complementary role: before overwriting a heap field, the 
 \subsection{Concurrent Phases and Parallel Workers}
 \label{subsec:bg-zgc-phases}
 
-A \ac{ZGC} collection cycle interleaves short \ac{STW} pauses, used for root scanning and phase synchronisation, with longer concurrent phases in which marking, reference processing, and relocation proceed alongside running application threads~\cite{jep333-zgc,openjdk-zreferenceprocessor-cpp}. The load and store barriers described above are the mechanism that keeps the heap consistent during these concurrent phases: application threads that load a stale pointer automatically fix it up, and stores that would break the marking invariant are recorded for \ac{GC} consumption.
+A \ac{ZGC} collection cycle interleaves short \ac{STW} pauses, used for root scanning and phase synchronisation, with longer concurrent phases in which marking, reference processing, and relocation proceed alongside running application threads~\cite{jep333-zgc,openjdk-zreferenceprocessor-cpp}. The load and store barriers described above are the mechanism that keeps the heap consistent during these concurrent phases: application threads that load a stale pointer automatically fix it up, and stores that would break the marking invariant are recorded for \ac{GCr} consumption.
 
 Within each phase, \ac{ZGC} distributes its work across multiple \ac{GC} worker threads. To minimise contention, workers maintain their own thread-local data structures -- such as per-worker discovered lists during reference discovery -- and merge results into shared state only at well-defined synchronisation points~\cite{openjdk-zworkers-cpp,openjdk-zreferenceprocessor-cpp}. This design avoids the \ac{CAS} contention that would arise from multiple threads updating a single shared resource.
 
@@ -213,7 +213,7 @@ The decorator flags are grouped by concern:
 
     \item \textbf{Access location} bits indicate whether the access targets a heap object field or an off-heap native data structure. Some barrier actions are conditioned on \texttt{IN\_HEAP}.
 
-    \item \textbf{Barrier strength} bits control how strong barriers should be applied. \texttt{AS\_RAW} bypasses \ac{GC} barriers entirely and reads the raw memory value, which is necessary in certain internal \ac{GC} paths. \texttt{AS\_NO\_KEEPALIVE} performs a correctly remapped access without keeping any objects alive, used in \ac{GC}-internal scanning paths. \texttt{AS\_NORMAL} (the default) invokes the full barrier.
+    \item \textbf{Barrier strength} bits control how strong barriers should be applied. \texttt{AS\_RAW} bypasses \ac{GC} barriers entirely and reads the raw memory value, which is necessary in certain internal \ac{GCr} paths. \texttt{AS\_NO\_KEEPALIVE} performs a correctly remapped access without keeping any objects alive, used in \ac{GCr}-internal scanning paths. \texttt{AS\_NORMAL} (the default) invokes the full barrier.
 
     \item \textbf{Memory ordering} bits map to C++ memory-order semantics for the underlying atomic or plain load or store.
 \end{itemize}
@@ -241,7 +241,7 @@ Reference processing is the mechanism by which the \ac{GCr} handles \texttt{Refe
 \node[box, below=of disc] (proc) {Processing (concurrent)};
 \node[data, right=14mm of proc] (plist) {Per-worker pending lists};
 \node[box, below=of proc] (enqueue) {Enqueue (single-threaded)};
-\node[data, right=14mm of enqueue] (vmp) {\ac{GC} local pending list and\\ Global VM pending list};
+\node[data, right=14mm of enqueue] (vmp) {\ac{GCr} local pending list and\\ Global VM pending list};
 
 \draw[edge] (disc) -- node[above] {uses} (dlist);
 \draw[edge] (disc) -- (proc);
@@ -329,7 +329,7 @@ This handoff reveals an inefficiency: references created without a \texttt{Refer
 \subsection{Trade-offs of the Three Pipeline Optimisations}
 \label{subsec:bg-refproc-tradeoffs}
 
-The three optimisations investigated in this thesis each address a specific inefficiency in the pipeline described above. Understanding the strengths and limitations of each is necessary to interpret the results and to assess whether they merit integration. Each optimisation is analysed below.
+The three optimisations investigated in this thesis each address a specific inefficiency in the pipeline described above. This section surveys the expected benefits and limitations of each, providing the conceptual groundwork for the design decisions documented in \cref{chap:design-and-implementation}. Understanding these trade-offs is necessary to interpret the experimental results and to assess whether the optimisations merit integration. Each optimisation is analysed below.
 
 \paragraph{Skip-enqueue separation.}
 
@@ -341,7 +341,7 @@ The three optimisations investigated in this thesis each address a specific inef
 
 \emph{Benefits.} The intrusive linked list used in the baseline stores each reference's successor address in the reference object's \texttt{discovered} field. Successive references in the discovered list may be separated by large heap distances, causing each traversal step to generate a cache miss~\cite{drepper07-memory}. Storing discovered references in a contiguous dynamic array eliminates this pointer-chasing pattern: sequential iteration accesses memory in a predictable, stride-1 pattern that is friendly to hardware prefetchers and allows multiple references to share a single cache line~\cite{drepper07-memory,jones11-gc-handbook}. The array also enables pre-loading field addresses and values during discovery and storing them inline in each entry, so the processing loop reads only the contiguous array rather than issuing additional heap loads.
 
-\emph{Limitations.} The intrusive linked list is essentially free in terms of auxiliary memory: it reuses the \texttt{discovered} field already allocated as part of each \texttt{Reference} object~\cite{openjdk-reference-java}. The dynamic array requires a separately allocated contiguous buffer on the C heap, proportional to the number of discovered references. For variants that pre-load field data, each entry is larger still, increasing the buffer footprint further. This auxiliary memory overhead may represent a significant fraction of \ac{GC}-committed memory in workloads with large reference populations (see \cref{sec:analysis-memory}). The array also introduces management overhead: capacity must be tracked and the array must grow when a new cycle discovers more references than the previous reservation~\cite{openjdk-zreferenceprocessor-cpp}. An additional trade-off exists in the choice of whether to return the array memory to the system after each \ac{GC} cycle or to retain it for the next: returning the memory reduces peak footprint between cycles but reintroduces allocation costs on the next discovery phase, while retaining it amortises allocation across cycles at the expense of sustained elevated memory usage.
+\emph{Limitations.} The intrusive linked list is essentially free in terms of auxiliary \ac{GCr} memory: it reuses the \texttt{discovered} field already allocated as part of each \texttt{Reference} object~\cite{openjdk-reference-java}. The dynamic array requires a separately allocated contiguous buffer on the C heap, proportional to the number of discovered references. For variants that pre-load field data, each entry is larger still, increasing the buffer footprint further. This auxiliary \ac{GCr} memory overhead may represent a significant fraction of \ac{GCr}-committed memory in workloads with large reference populations (see \cref{sec:analysis-memory}). The array also introduces management overhead: capacity must be tracked and the array must grow when a new cycle discovers more references than the previous reservation~\cite{openjdk-zreferenceprocessor-cpp}. An additional trade-off exists in the choice of whether to return the array memory to the system after each \ac{GC} cycle or to retain it for the next: returning the memory reduces peak footprint between cycles but reintroduces allocation costs on the next discovery phase, while retaining it amortises allocation across cycles at the expense of sustained elevated memory usage.
 
 \paragraph{Specialised clear path.}
 
@@ -353,4 +353,4 @@ The three optimisations investigated in this thesis each address a specific inef
 
 \emph{Benefits.} The fundamental overhead of \texttt{WeakReference} objects is structural: each weak-reference relationship requires a separate \texttt{WeakReference} heap object, which must be allocated, discovered by the \ac{GCr}, processed through the clearing pipeline, and eventually collected~\cite{openjdk-weakreference-java,openjdk-zreferenceprocessor-cpp}. In applications that use weak references purely for liveness probing -- without a \texttt{ReferenceQueue} -- all of this object-level machinery exists solely to carry the weak semantics of a single field pointer. Expressing those semantics directly on a field annotation removes the \texttt{WeakReference} wrapper entirely: no object is allocated, no object appears in the discovered list, and the \ac{GCr} processes the field address directly. This should reduce per-\ac{GC}-cycle cost on two fronts. First, reference-processing overhead is reduced: the \ac{GCr} processes field addresses rather than \texttt{WeakReference} objects, avoiding the object-header indirection and the enqueue path entirely. Second, heap allocation pressure is reduced: fewer live objects mean shorter \ac{GC} pause times and a lower memory footprint, since \ac{GC} cost is broadly proportional to the number of live objects~\cite{oracle-gc-implementation}.
 
-\emph{Limitations.} The mechanism requires changes in multiple \ac{JVM} layers -- annotation parsing, class-file metadata, compiler and interpreter barrier emission, and the \ac{GC}-side marking closure -- making it substantially more intrusive than the three pipeline optimisations. The current implementation supports only old-generation fields, weak fields in young-generation objects fall back to strong-reference treatment. There is no \texttt{ReferenceQueue} integration: applications that need post-clear notification must continue to use \texttt{WeakReference} objects. The annotation is non-standard and not part of any Java specification, which limits its applicability to HotSpot deployments. Finally, the standard \texttt{Reference} \ac{API} (\texttt{get()}, \texttt{clear()}, \texttt{isEnqueued()}) is unavailable for weak fields, callers check for null directly on the field.
+\emph{Limitations.} The mechanism requires changes in multiple \ac{JVM} layers -- annotation parsing, class-file metadata, compiler and interpreter barrier emission, and the \ac{GCr}-side marking closure -- making it substantially more intrusive than the three pipeline optimisations. The current implementation supports only old-generation fields, weak fields in young-generation objects fall back to strong-reference treatment. There is no \texttt{ReferenceQueue} integration: applications that need post-clear notification must continue to use \texttt{WeakReference} objects. The annotation is non-standard and not part of any Java specification, which limits its applicability to HotSpot deployments. Finally, the standard \texttt{Reference} \ac{API} (\texttt{get()}, \texttt{clear()}, \texttt{isEnqueued()}) is unavailable for weak fields, callers check for null directly on the field.

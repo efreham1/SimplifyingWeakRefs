@@ -1,7 +1,9 @@
 \chapter{Related Work}
 \label{chap:related-work}
 
-Published work directly addressing the optimisation of \ac{ZGC}'s weak-reference pipeline is limited; the closest relevant material is therefore a combination of runtime documentation, implementation sources, and cross-language designs for weak semantics. This chapter positions the thesis against those adjacent designs.
+The preceding chapters have established that, in the evaluated setting, the structural choice of whether to represent weak references through dedicated wrapper objects or through annotated fields has a larger impact on \ac{GC} cost than pipeline-level optimisations. This chapter situates that finding within a broader design space by surveying how other language runtimes approach the same problem: providing weak reachability without preventing collection. The survey reveals recurrent design patterns, including a near-universal separation of weak reachability from cleanup notification, and a preference for probe-based semantics over callback-based notification in most mainstream systems. These cross-language comparisons provide context for understanding why Java's coupled \texttt{WeakReference} model is comparatively expensive for probe-only workloads, and for assessing where the weak-field mechanism explored in this thesis sits within the space of known alternatives.
+
+Published work directly addressing the optimisation of \ac{ZGC}'s weak-reference pipeline is limited; the closest relevant material is therefore a combination of runtime documentation, implementation sources, and cross-language designs for weak semantics.
 
 \section{Java and the JVM}
 \label{sec:rw-java}
@@ -24,7 +26,7 @@ Go therefore presents weak semantics as an explicit, callback-less non-owning re
 \section{C++ and .NET}
 \label{sec:rw-cpp-dotnet}
 
-In C++, \texttt{std::weak\_ptr} represents non-owning reachability within the reference-counted \texttt{shared\_ptr}/\texttt{weak\_ptr} ownership model~\cite{cppreference-weak-ptr}. Its semantics differ from Java's \ac{GC}-integrated weak references, but the design illustrates an important contrast: weak semantics can be expressed without a queue-based callback mechanism. The caller invokes \texttt{.lock()} to obtain a temporary strong pointer and checks whether it is null. There is no notification on clearing, and cleanup of associated resources is handled entirely through separate mechanisms such as \ac{RAII} destructors.
+In C++, \texttt{std::weak\_ptr} represents non-owning reachability within the reference-counted \texttt{shared\_ptr}/\texttt{weak\_ptr} ownership model~\cite{cppreference-weak-ptr}. Its semantics differ from Java's \ac{GCr}-integrated weak references, but the design illustrates an important contrast: weak semantics can be expressed without a queue-based callback mechanism. The caller invokes \texttt{.lock()} to obtain a temporary strong pointer and checks whether it is null. There is no notification on clearing, and cleanup of associated resources is handled entirely through separate mechanisms such as \ac{RAII} destructors.
 
 .NET exposes a \texttt{WeakReference<T>} \ac{API}~\cite{dotnet-weakreference}. Like C++, \texttt{WeakReference<T>} is probe-based: callers use \texttt{TryGetTarget()} to check liveness, there is no notification callback when the referent is cleared.
 

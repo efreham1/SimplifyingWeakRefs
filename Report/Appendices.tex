@@ -1,7 +1,7 @@
-\chapter{Usage of \ac{GenAI} Tools}
+\chapter{Usage of GenAI Tools}
 \label{app:ai-usage}
 
-The generative artificial intelligence (\ac{GenAI}) tool GitHub Copilot was used as support during this thesis. It was used under a student licence via Uppsala University. The tool was used to accelerate practical work and improve writing quality. All final technical decisions, implementation choices, and evaluations remained under the author's control.
+The \ac{GenAI} tool GitHub Copilot was used as support during this thesis. It was used under a student licence via Uppsala University. The tool was used to accelerate practical work and improve writing quality. All final technical decisions, implementation choices, and evaluations remained under the author's control.
 
 \section{Use During Implementation}
 \label{app:ai-usage-implementation}
@@ -77,7 +77,7 @@ This appendix provides numerical summary statistics (median, mean, and interquar
 
 \input{../tables/stats_markfollow_slurm-5118807_combined_gc.tex}
 
-\section{Auxiliary \ac{GC} Memory}
+\section{auxiliary GCr memory}
 \label{app:stats-mem-aux}
 
 \input{../tables/stats_memory_aux_slurm-5118807_combined_gc.tex}
@@ -87,7 +87,7 @@ This appendix provides numerical summary statistics (median, mean, and interquar
 
 \input{../tables/stats_memory_java_heap_slurm-5118807_combined_gc.tex}
 
-\section{Total Process \ac{RSS}}
+\section{Total Process RSS}
 \label{app:stats-mem-rss}
 
 \input{../tables/stats_memory_rss_slurm-5118807_combined_gc.tex}
@@ -353,7 +353,7 @@ The following tables list every modified or added file in each patch variant, to
 
 This appendix contains the remaining \ac{GC} timing and memory plots from the benchmark evaluation. The metrics shown here (Old Phase: Concurrent Relocate, Young Phase: Concurrent Mark, and Young Phase: Concurrent Relocate) were not included in the main evaluation chapter as they are less central to the optimised reference processing pipeline. Memory maximum distributions are included here to complement the median percentage-difference histograms shown in the main chapter.
 
-Additional \ac{GC} timing plots are shown for Old Phase: Concurrent Relocate (\cref{fig:app-gc-single-old-relocate,fig:app-gc-multi-old-relocate}), Young Phase: Concurrent Mark (\cref{fig:app-gc-single-young-mark,fig:app-gc-multi-young-mark}), and Young Phase: Concurrent Relocate (\cref{fig:app-gc-single-young-relocate,fig:app-gc-multi-young-relocate}) for both benchmark families. Memory per-run maximum distributions are shown for auxiliary \ac{GC} memory, Java heap, and total process \ac{RSS} for both the single-object and multi-object benchmarks (\cref{fig:app-mem-single-max,fig:app-mem-multi-max}).
+Additional \ac{GC} timing plots are shown for Old Phase: Concurrent Relocate (\cref{fig:app-gc-single-old-relocate,fig:app-gc-multi-old-relocate}), Young Phase: Concurrent Mark (\cref{fig:app-gc-single-young-mark,fig:app-gc-multi-young-mark}), and Young Phase: Concurrent Relocate (\cref{fig:app-gc-single-young-relocate,fig:app-gc-multi-young-relocate}) for both benchmark families. Memory per-run maximum distributions are shown for auxiliary \ac{GCr} memory, Java heap, and total process \ac{RSS} for both the single-object and multi-object benchmarks (\cref{fig:app-mem-single-max,fig:app-mem-multi-max}).
 
 % ---------- Old Phase: Concurrent Relocate – single ----------
 \begin{figure}[t]
@@ -407,7 +407,7 @@ Additional \ac{GC} timing plots are shown for Old Phase: Concurrent Relocate (\c
 \begin{figure}[t]
 	\centering
 	\includegraphics[width=\textwidth]{memory_max_slurm-5118807_combined_gc_single.pdf}
-	\caption[Memory per-run maximum distributions (single-object)]{Distribution of per-run maximum memory across variants, \textbf{single-object benchmark}. Top to bottom: auxiliary \ac{GC} memory, Java heap, total process \ac{RSS}.}
+	\caption[Memory per-run maximum distributions (single-object)]{Distribution of per-run maximum memory across variants, \textbf{single-object benchmark}. Top to bottom: auxiliary \ac{GCr} memory, Java heap, total process \ac{RSS}.}
 	\label{fig:app-mem-single-max}
 \end{figure}
 
@@ -415,9 +415,26 @@ Additional \ac{GC} timing plots are shown for Old Phase: Concurrent Relocate (\c
 \begin{figure}[t]
 	\centering
 	\includegraphics[width=\textwidth]{memory_max_slurm-5118807_combined_gc_multi.pdf}
-	\caption[Memory per-run maximum distributions (multi-object)]{Distribution of per-run maximum memory across variants, \textbf{multi-object benchmark}. Top to bottom: auxiliary \ac{GC} memory, Java heap, total process \ac{RSS}.}
+	\caption[Memory per-run maximum distributions (multi-object)]{Distribution of per-run maximum memory across variants, \textbf{multi-object benchmark}. Top to bottom: auxiliary \ac{GCr} memory, Java heap, total process \ac{RSS}.}
 	\label{fig:app-mem-multi-max}
 \end{figure}
+
+% ---------- Ratio of non-strong processing time to total major collection time – single ----------
+\begin{figure}[t]
+	\centering
+	\includegraphics[width=\textwidth]{ratio_violin_slurm-5118807_combined_gc_multi.pdf}
+	\caption[Ratio of non-strong processing time to total major collection time]{Ratio of non-strong processing time to total major collection time, \textbf{multi-object benchmark} (per-run averages). Distribution across variants.}
+	\label{fig:app-ratio-nonstrong-multi}
+\end{figure}
+
+% ---------- Ratio of non-strong processing time to total major collection time – multi ----------
+\begin{figure}[t]
+	\centering
+	\includegraphics[width=\textwidth]{ratio_violin_slurm-5118807_combined_gc_single.pdf}
+	\caption[Ratio of non-strong processing time to total major collection time]{Ratio of non-strong processing time to total major collection time, \textbf{single-object benchmark} (per-run maxima). Distribution across variants.}
+	\label{fig:app-ratio-nonstrong-single}
+\end{figure}
+
 \chapter{Source Code}
 \label{app:source}
 
@@ -429,6 +446,8 @@ This appendix provides the key source code for the implemented optimisations. Th
 \label{app:source-dyn}
 \refstepcounter{listing}
 \addcontentsline{lol}{listing}{\protect\numberline{\thelisting}\texttt{zWeakRefArray.hpp}: Dynamic-array data structure}
+
+The \texttt{ZWeakRefArray} template is the central data structure for the dynamic-array optimisation. It stores discovered weak references contiguously on the C heap, enabling sequential traversal without pointer chasing. Each entry in the extended variant (\texttt{ZWeakRefDataExt}) pre-loads the referent field address and value during discovery so that the clear path can operate without additional heap loads. Note in particular the \texttt{clear\_and\_reserve} method, which retains capacity between \ac{GC} cycles to avoid repeated reallocation when the reference population is stable.
 
 \noindent\textbf{File:} \texttt{zWeakRefArray.hpp}
 
@@ -444,6 +463,8 @@ This appendix provides the key source code for the implemented optimisations. Th
 \label{app:source-refproc-iface}
 \refstepcounter{listing}
 \addcontentsline{lol}{listing}{\protect\numberline{\thelisting}\texttt{zReferenceProcessor.hpp}: Reference processor interface (\texttt{all} variant)}
+
+The header file shows the per-worker state added by the \texttt{all} variant: a \texttt{ZWeakRefArray} for queue-less discovered references (bypassing the pending list), a separate \texttt{ZWeakRefArray} used by the standard pipeline, and a counter for cleared weak references without a queue. The key type change to notice is \texttt{ZWeakRefDataExt} in the queue-less path -- this is the extended entry type that pre-loads the referent for the barrier-free clear path.
 
 \noindent\textbf{File:} \texttt{zReferenceProcessor.hpp}
 
@@ -504,6 +525,8 @@ The following excerpts from \texttt{zReferenceProcessor.cpp} show the constructo
 \refstepcounter{listing}
 \addcontentsline{lol}{listing}{\protect\numberline{\thelisting}\texttt{weak.java}: Weak-field annotation}
 
+The \texttt{@weak} annotation is the user-facing entry point for the weak-field mechanism. It is intentionally minimal -- a marker annotation with \texttt{@Target(ElementType.FIELD)} and \texttt{@Retention(RetentionPolicy.RUNTIME)}. The runtime retention is required because the class-file parser must be able to detect the annotation on field descriptors when loading the class; it is not consumed by the JIT compilers, which instead query the resolved field entry.
+
 \noindent\textbf{File:} \texttt{java/lang/ref/weak.java}
 
 \lstinputlisting[
@@ -516,6 +539,8 @@ The following excerpts from \texttt{zReferenceProcessor.cpp} show the constructo
 \refstepcounter{listing}
 \addcontentsline{lol}{listing}{\protect\numberline{\thelisting}\texttt{zWeakFieldArray.hpp}: Weak-field data structure}
 
+The \texttt{ZWeakFieldArray} is the weak-fields counterpart of \texttt{ZWeakRefArray}. The key structural difference is that each entry records the \emph{field address} (a pointer into the containing object's fields) rather than the address of a \texttt{WeakReference} wrapper object. This is the detail that allows the \ac{GC} worker to clear the field in-place without involving the reference pipeline at all. The entry size is smaller than \texttt{ZWeakRefDataExt} because there is no queue or discovered field to track.
+
 \noindent\textbf{File:} \texttt{zWeakFieldArray.hpp}
 
 \lstinputlisting[
@@ -527,6 +552,8 @@ The following excerpts from \texttt{zReferenceProcessor.cpp} show the constructo
 \label{app:source-wf-refproc}
 \refstepcounter{listing}
 \addcontentsline{lol}{listing}{\protect\numberline{\thelisting}\texttt{zReferenceProcessor.hpp} and excerpts (\texttt{weak\_fields} variant)}
+
+The weak-fields variant of the reference processor header shows the additional per-worker \texttt{ZWeakFieldArray} alongside the standard weak-reference discovered lists. The implementation excerpts below illustrate the three key changes: how the discovery filtering recognises weak fields and diverts them away from the standard reference pipeline; how fields are appended to the per-worker array; and how the processing function iterates the array and clears each field entry.
 
 \noindent\textbf{File:} \texttt{zReferenceProcessor.hpp}
 
